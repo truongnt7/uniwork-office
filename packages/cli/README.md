@@ -1,6 +1,6 @@
 # @genoffice/cli
 
-`genoffice` is the GenOffice command line. It exposes the suite's document engines
+`genoffice` is the UniWork Office command line. It exposes the suite's document engines
 to scripts and AI agents without opening a window: the packaged app runs the
 bundled CLI on its own Node runtime (`ELECTRON_RUN_AS_NODE`), so nothing extra
 has to be installed.

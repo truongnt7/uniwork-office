@@ -507,7 +507,7 @@ async function createStandaloneDocument(
   if (request.type === 'docx') {
     return {
       ok: false,
-      error: 'Creating DOCX files requires the GenOffice shell or Docs app.',
+      error: 'Creating DOCX files requires the UniWork Office shell or Docs app.',
     }
   }
   const title = sanitizeGeneratedDocumentTitle(request.title)

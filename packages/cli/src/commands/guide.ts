@@ -123,7 +123,7 @@ const SHEETS_GUIDE = [
   '  add_sheet {name}   delete_sheet {sheet}   rename_sheet {sheet, name}   duplicate_sheet {sheet, name?}',
   '  move_sheet {sheet, position}   set_sheet_hidden {sheet, hidden}',
   '',
-  'Not available headless (use the GenOffice app): pivots (add_pivot, refresh_pivot), sparklines, edits to tables or',
+  'Not available headless (use the UniWork Office app): pivots (add_pivot, refresh_pivot), sparklines, edits to tables or',
   'shapes created in an editor session (add/delete_table_row/column, delete_table, edit_shape, delete_visual), convert_to_values.',
   'Adding a conditional format or data validation to a sheet that already has rules is refused (the CLI cannot carry the',
   'existing rules over): clear_conditional_formats first, or use the app. set_filter_criteria needs a filter without criteria.',

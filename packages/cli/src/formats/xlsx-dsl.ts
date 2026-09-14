@@ -380,7 +380,7 @@ function normalizeOp(
     throw new CliError(
       EXIT.usage,
       reason
-        ? `ops[${index}]: "${op.op}" is not available headless (${reason}); use the GenOffice app`
+        ? `ops[${index}]: "${op.op}" is not available headless (${reason}); use the UniWork Office app`
         : `ops[${index}]: unknown op "${op.op}"`,
       { supported: [...SUPPORTED_DSL_OPS], not_available: Object.keys(REFUSED_DSL_OPS) },
     )

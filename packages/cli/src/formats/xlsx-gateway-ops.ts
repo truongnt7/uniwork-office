@@ -181,7 +181,7 @@ export interface GatewayBuildInput {
   ctx: PathContext | undefined
 }
 
-const NOTE_AUTHOR = 'GenOffice'
+const NOTE_AUTHOR = 'UniWork Office'
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024
 
 type FilterDraft = { range: RangeBounds; columns: Map<number, string[]>; cleared: boolean }
@@ -356,7 +356,7 @@ export async function buildGatewayPayloads(input: GatewayBuildInput): Promise<Ga
             reject(
               i,
               op.op,
-              `${sheet}'s filter already has criteria the CLI cannot re-save; run set_filter on the range first (it clears them) or use the GenOffice app`,
+              `${sheet}'s filter already has criteria the CLI cannot re-save; run set_filter on the range first (it clears them) or use the UniWork Office app`,
             )
           }
           draft = { range: existing!.range, columns: new Map(), cleared: false }
@@ -377,7 +377,7 @@ export async function buildGatewayPayloads(input: GatewayBuildInput): Promise<Ga
           reject(
             i,
             op.op,
-            `${sheet} already has ${fileState(sheet).conditionalFormats} conditional format(s) the CLI cannot carry over; run clear_conditional_formats on the sheet first or use the GenOffice app`,
+            `${sheet} already has ${fileState(sheet).conditionalFormats} conditional format(s) the CLI cannot carry over; run clear_conditional_formats on the sheet first or use the UniWork Office app`,
           )
         }
         state.rules.push(cfWireRule(op.rule, parseRange(op.range)))
@@ -393,7 +393,7 @@ export async function buildGatewayPayloads(input: GatewayBuildInput): Promise<Ga
           reject(
             i,
             op.op,
-            `${sheet} already has ${fileState(sheet).dataValidations} data validation rule(s) the CLI cannot carry over; use the GenOffice app`,
+            `${sheet} already has ${fileState(sheet).dataValidations} data validation rule(s) the CLI cannot carry over; use the UniWork Office app`,
           )
         }
         const bounds = parseRange(op.range)
@@ -437,7 +437,7 @@ export async function buildGatewayPayloads(input: GatewayBuildInput): Promise<Ga
           )
         }
         if (op.seriesData !== undefined) {
-          reject(i, op.op, 'seriesData (repointing a series at new cells) needs the GenOffice app')
+          reject(i, op.op, 'seriesData (repointing a series at new cells) needs the UniWork Office app')
         }
         const edit: Record<string, unknown> = { chartPath: op.chartPath }
         for (const k of [

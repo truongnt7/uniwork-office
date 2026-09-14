@@ -39,7 +39,7 @@ export async function exportViaApp(
   const env = opts.env ?? process.env
   const launch = appLaunch(env)
   if (!launch) {
-    throw new CliError(EXIT.app, 'GenOffice app not found (needed for this conversion)', {
+    throw new CliError(EXIT.app, 'UniWork Office app not found (needed for this conversion)', {
       hint: 'install GenOffice, or set GENOFFICE_APP_BIN to its executable',
     })
   }

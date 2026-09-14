@@ -106,16 +106,18 @@ function installedAppBinaries(env: NodeJS.ProcessEnv): string[] {
   switch (process.platform) {
     case 'darwin':
       return [
-        '/Applications/GenOffice.app/Contents/MacOS/GenOffice',
-        join(homedir(), 'Applications/GenOffice.app/Contents/MacOS/GenOffice'),
+        '/Applications/UniWork Office.app/Contents/MacOS/UniWork Office',
+        join(homedir(), 'Applications/UniWork Office.app/Contents/MacOS/UniWork Office'),
       ]
     case 'win32':
       return [
-        env.LOCALAPPDATA ? join(env.LOCALAPPDATA, 'Programs', 'GenOffice', 'GenOffice.exe') : '',
-        env.ProgramFiles ? join(env.ProgramFiles, 'GenOffice', 'GenOffice.exe') : '',
+        env.LOCALAPPDATA
+          ? join(env.LOCALAPPDATA, 'Programs', 'UniWork Office', 'UniWork Office.exe')
+          : '',
+        env.ProgramFiles ? join(env.ProgramFiles, 'UniWork Office', 'UniWork Office.exe') : '',
       ].filter(Boolean)
     default:
-      return ['/opt/GenOffice/genoffice', '/usr/bin/genoffice']
+      return ['/opt/UniWork Office/uniwork-office', '/usr/bin/uniwork-office']
   }
 }
 

@@ -182,7 +182,7 @@ function globalHelp(registry: CommandRegistry): string {
   const defs = registry.list()
   const width = Math.max(...defs.map((d) => d.name.length))
   return [
-    `genoffice ${VERSION} — GenOffice command line`,
+    `genoffice ${VERSION} — UniWork Office command line`,
     '',
     'Usage: genoffice <command> [options]',
     '',

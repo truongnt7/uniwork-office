@@ -8,7 +8,7 @@ import { CliError, EXIT } from '../result'
 export const renderCommand: CommandDef = {
   name: 'render',
   summary:
-    'One PNG per page of a document, as the GenOffice renderer lays it out: the picture an agent looks at to check a Word document, a workbook or a page it just made.',
+    'One PNG per page of a document, as the UniWork Office renderer lays it out: the picture an agent looks at to check a Word document, a workbook or a page it just made.',
   usage: 'render <file> --out <dir> [--page n] [--scale n]',
   options: [
     { name: 'out', value: 'dir', description: 'directory for the PNGs (<stem>-NN.png; required)' },

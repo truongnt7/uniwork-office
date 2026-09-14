@@ -5608,8 +5608,8 @@ body.vib .slide-list {
   color: var(--color-brand-secondary);
 }
 
-/* the brand mark uses currentColor and keeps the button's ink, not the blue */
-.stage-ai-btn svg.genspark-mark {
+/* the AI badge uses currentColor and keeps the button's ink, not the blue */
+.stage-ai-btn svg.ai-mark {
   color: var(--slides-stagebar-ink);
 }
 

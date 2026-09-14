@@ -13,7 +13,7 @@ export function genofficeUserDataDir(env: NodeJS.ProcessEnv): string {
       : process.platform === 'win32'
         ? env.APPDATA || join(homedir(), 'AppData', 'Roaming')
         : env.XDG_CONFIG_HOME || join(homedir(), '.config')
-  return join(base, 'GenOffice')
+  return join(base, 'UniWork Office')
 }
 
 export interface GuiOpenDocuments {
@@ -22,7 +22,7 @@ export interface GuiOpenDocuments {
 }
 
 /**
- * Files the running GenOffice shell has open, from the registry it publishes
+ * Files the running UniWork Office shell has open, from the registry it publishes
  * on every tab change (apps/shell/src/main/open-documents.ts). Null when no
  * shell is running: a registry whose pid is gone is a crash leftover.
  */
@@ -61,8 +61,8 @@ export function assertNotOpenInGui(abs: string, env: NodeJS.ProcessEnv): void {
   if (!open || open.paths.length === 0) return
   const target = realizedPath(abs)
   if (!open.paths.some((p) => realizedPath(p) === target)) return
-  throw new CliError(EXIT.file, `GenOffice has this file open: ${abs}`, {
-    hint: 'close the tab in GenOffice first, or pass --force to write anyway (the editor may overwrite your change on its next save)',
+  throw new CliError(EXIT.file, `UniWork Office has this file open: ${abs}`, {
+    hint: 'close the tab in UniWork Office first, or pass --force to write anyway (the editor may overwrite your change on its next save)',
     gui_pid: open.pid,
   })
 }

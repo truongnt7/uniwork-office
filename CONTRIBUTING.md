@@ -1,4 +1,14 @@
-# Contributing to GenOffice
+# Contributing to UniWork Office
+
+This repository is a UniWork-controlled fork of GenOffice. Product display
+names are UniWork Office; internal packages remain `@genoffice/*`. See
+[`docs/upstream/UPSTREAM_SYNC.md`](docs/upstream/UPSTREAM_SYNC.md) before
+merging upstream.
+
+The rest of this file is the inherited GenOffice contributor guide (Node 22,
+npm 10, Rust sidecar, CI gates).
+
+# Contributing to GenOffice (upstream guide)
 
 Thanks for your interest in contributing. This document covers the local
 setup, the checks a change must pass, and the conventions used in this

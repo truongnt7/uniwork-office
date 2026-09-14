@@ -56,7 +56,7 @@ export const slidesCommand: CommandDef = {
     {
       name: 'force',
       description:
-        'apply: overwrite an existing --out file, or write while GenOffice has the file open',
+        'apply: overwrite an existing --out file, or write while UniWork Office has the file open',
     },
     {
       name: 'scale',

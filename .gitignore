@@ -7,7 +7,12 @@ release/
 .refs/
 .env
 .env.*
+!.env.example
 electron-builder.env
+*.pem
+*.p12
+*.pfx
+*credentials*.json
 ~$*
 
 # Local ad-hoc e2e driver scripts (not pushed); the folder and README are tracked, the scripts are not

@@ -1,20 +1,23 @@
-# GenOffice Privacy
+# UniWork Office Privacy
 
-Last updated: August 26, 2026
+Last updated: 14 September 2026
 
-GenOffice opens, edits, and saves documents locally. Document editing does not
-upload files to GenOffice. AI features require a network connection and send
+UniWork Office opens, edits, and saves documents locally. Document editing does not
+upload files to UniWork. Inherited AI features require a network connection and send
 requests only when you use them.
+
+UniWork GO-1 packages do not inject analytics credentials. Source builds and this
+fork send no usage analytics unless someone later injects `GENOFFICE_GA4_*` at
+pack time.
 
 ## Usage analytics
 
-Usage analytics is enabled by default in packaged official builds, including
-the initial app launch before the onboarding notice is shown. Onboarding
-explains what is collected and where to turn it off.
+Upstream official GenOffice builds enabled GA4 by default when credentials were
+injected at package time. That path still exists in code. UniWork GO-1 does not
+inject those secrets, so the tracker is a no-op.
 
 You can disable reporting at any time under **Settings → General → Send
-anonymous usage statistics**. An explicit opt-out is remembered and stops all
-subsequent analytics events.
+anonymous usage statistics**. An explicit opt-out is remembered.
 
 ### Events and parameters
 

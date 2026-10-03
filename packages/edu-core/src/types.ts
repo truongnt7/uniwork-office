@@ -1,9 +1,11 @@
+import type { EduMaterialRole } from './materials.js'
+
 /** Local education lesson-pack metadata (stored as projects/<id>/edu/meta.json). */
 
-export const EDU_META_VERSION = 1 as const
+export const EDU_META_VERSION = 2 as const
 
 export interface EduMeta {
-  version: typeof EDU_META_VERSION
+  version: 1 | typeof EDU_META_VERSION
   kind: 'education'
   /** Subject name, e.g. Toán */
   subject: string
@@ -17,6 +19,12 @@ export interface EduMeta {
   durationMinutes?: number
   /** Learning objectives / chuẩn đầu ra */
   objectives: string[]
+  /** Knowledge-library tags (e.g. đại-số, hình-học) */
+  tags?: string[]
+  /** Free-form teacher notes */
+  notes?: string
+  /** Absolute file path → material role (Học liệu) */
+  materials?: Partial<Record<string, EduMaterialRole>>
   createdAt: string
   updatedAt: string
 }
@@ -60,4 +68,6 @@ export interface CreateEduMetaInput {
   lessonTitle: string
   durationMinutes?: number
   objectives?: string[]
+  tags?: string[]
+  notes?: string
 }

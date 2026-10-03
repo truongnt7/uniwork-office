@@ -1,24 +1,49 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactElement } from 'react'
 import {
+  EDU_GRADES,
   EDU_LESSON_CHAIN_TEMPLATES,
+  EDU_MATERIAL_ROLES,
+  EDU_SKILLS,
+  EDU_SUBJECTS,
   EDU_TEMPLATES,
   EDU_WORKFLOWS,
+  eduMatchesFilter,
+  eduMaterialSeedHtml,
+  eduMaterialSeedTitle,
+  eduSkillCategoryLabel,
+  eduSkillPrompt,
   eduTemplateHtml,
   eduTemplateTitle,
   eduWorkflowPrompt,
+  inferMaterialRole,
+  materialRoleLabel,
+  uniqueGrades,
+  uniqueSubjects,
+  uniqueTags,
+  type EduKnowledgeItem,
+  type EduMaterialRole,
   type EduMeta,
+  type EduSkillId,
   type EduTemplateId,
   type EduWorkflowId,
 } from '@uniwork/edu-core'
+import {
+  getPractice,
+  isWorkbenchModuleId,
+  listPractices,
+  type PracticeId,
+} from '@uniwork/practice-core'
 import type { CreateEducationProjectArgs, ProjectSummaryEntry } from '../../shared/home-api'
 import { useI18n } from './locale'
+import { WorkbenchModulePane } from './WorkbenchModulePanes'
+import { WorkbenchTabs } from './WorkbenchTabs'
 
 function toEduMeta(entry: ProjectSummaryEntry): EduMeta | null {
   const e = entry.edu
   if (!e) return null
   return {
-    version: 1,
+    version: e.version === 2 ? 2 : 1,
     kind: 'education',
     subject: e.subject,
     grade: e.grade,
@@ -26,21 +51,35 @@ function toEduMeta(entry: ProjectSummaryEntry): EduMeta | null {
     lessonTitle: e.lessonTitle,
     ...(typeof e.durationMinutes === 'number' ? { durationMinutes: e.durationMinutes } : {}),
     objectives: e.objectives ?? [],
+    ...(e.tags?.length ? { tags: e.tags } : {}),
+    ...(e.notes ? { notes: e.notes } : {}),
+    ...(e.materials ? { materials: e.materials } : {}),
     createdAt: e.createdAt,
     updatedAt: e.updatedAt,
   }
 }
 
-async function openDocsTemplate(
+function toKnowledgeItem(entry: ProjectSummaryEntry): EduKnowledgeItem | null {
+  const edu = toEduMeta(entry)
+  if (!edu) return null
+  return {
+    id: entry.id,
+    name: entry.name,
+    fileCount: entry.fileCount,
+    lastActiveAt: entry.lastActiveAt,
+    edu,
+  }
+}
+
+async function openDocsSeed(
   projectId: string,
-  templateId: EduTemplateId,
-  meta: EduMeta,
+  title: string,
+  html: string | null,
   aiPreset?: { text: string; autoRun?: boolean; displayText?: string },
 ): Promise<void> {
-  const html = eduTemplateHtml(templateId, meta)
   await window.aiOffice.newDoc({
     projectId,
-    ...(html ? { aiContent: { title: eduTemplateTitle(templateId, meta), html } } : {}),
+    ...(html ? { aiContent: { title, html } } : {}),
     ...(aiPreset ? { aiPreset } : {}),
   })
 }
@@ -53,6 +92,21 @@ interface TeacherHomeProps {
   onSelectPack: (id: string | null) => void
   onOpenPackFiles: (id: string) => void
   onRefresh: () => void
+  onSwitchPractice?: (id: PracticeId) => void
+}
+
+const TEACHER_UI_LANG_KEY = 'uniwork.teacherUiLang'
+
+type TeacherUiLang = 'vi' | 'en'
+
+function readTeacherUiLang(): TeacherUiLang {
+  try {
+    const saved = localStorage.getItem(TEACHER_UI_LANG_KEY)
+    if (saved === 'vi' || saved === 'en') return saved
+  } catch {
+    /* ignore */
+  }
+  return 'vi'
 }
 
 export function TeacherHome({
@@ -61,33 +115,56 @@ export function TeacherHome({
   onSelectPack,
   onOpenPackFiles,
   onRefresh,
+  onSwitchPractice,
 }: TeacherHomeProps): ReactElement {
-  const { lang } = useI18n()
-  const vi = lang !== 'en'
-  const packs = useMemo(
-    () =>
-      projects
-        .filter((p) => p.kind === 'education' || !!p.edu)
-        .sort((a, b) => (b.lastActiveAt > a.lastActiveAt ? 1 : -1)),
-    [projects],
-  )
-  const selected = packs.find((p) => p.id === selectedId) ?? null
-  const meta = selected ? toEduMeta(selected) : null
+  const { setLang } = useI18n()
+  const [uiLang, setUiLang] = useState<TeacherUiLang>(() => readTeacherUiLang())
+  const vi = uiLang === 'vi'
+  const label = (viText: string, enText: string) => (vi ? viText : enText)
+
+  const changeUiLang = (next: TeacherUiLang) => {
+    setUiLang(next)
+    try {
+      localStorage.setItem(TEACHER_UI_LANG_KEY, next)
+    } catch {
+      /* ignore */
+    }
+    // Align shell chrome when teacher picks English; keep app locale otherwise.
+    if (next === 'en') setLang('en')
+  }
+
+  const [tab, setTab] = useState<string>('desk')
+  const teacherPractice = getPractice('teacher')!
+  const [qSubject, setQSubject] = useState('')
+  const [qGrade, setQGrade] = useState('')
+  const [qQuery, setQQuery] = useState('')
+  const [qTag, setQTag] = useState('')
 
   const [form, setForm] = useState<CreateEducationProjectArgs>({
-    subject: '',
-    grade: '',
+    subject: EDU_SUBJECTS[0],
+    grade: EDU_GRADES[0],
     week: '',
     lessonTitle: '',
     durationMinutes: 45,
     objectives: [],
+    tags: [],
   })
   const [objectiveText, setObjectiveText] = useState('')
+  const [tagsText, setTagsText] = useState('')
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
-  const [confirmAi, setConfirmAi] = useState<EduWorkflowId | null>(null)
+  const [confirmAi, setConfirmAi] = useState<
+    { kind: 'workflow'; id: EduWorkflowId } | { kind: 'skill'; id: EduSkillId } | null
+  >(null)
   const [exportMsg, setExportMsg] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const [noteDraft, setNoteDraft] = useState('')
+  const [tagDraft, setTagDraft] = useState('')
+  const [packFiles, setPackFiles] = useState<string[]>([])
+  const [addRole, setAddRole] = useState<EduMaterialRole>('phieu-hoc-tap')
+  const [showHub, setShowHub] = useState(false)
 
   const [hubBaseUrl, setHubBaseUrl] = useState('')
   const [hubToken, setHubToken] = useState('')
@@ -96,7 +173,52 @@ export function TeacherHome({
   const [hubOk, setHubOk] = useState<boolean | null>(null)
   const [hubSaving, setHubSaving] = useState(false)
 
-  const label = (viText: string, enText: string) => (vi ? viText : enText)
+  const knowledge = useMemo(
+    () =>
+      projects
+        .filter((p) => p.kind === 'education' || !!p.edu)
+        .map(toKnowledgeItem)
+        .filter((x): x is EduKnowledgeItem => !!x)
+        .sort((a, b) => (b.lastActiveAt > a.lastActiveAt ? 1 : -1)),
+    [projects],
+  )
+
+  const filtered = useMemo(
+    () =>
+      knowledge.filter((item) =>
+        eduMatchesFilter(item, {
+          subject: qSubject || undefined,
+          grade: qGrade || undefined,
+          query: qQuery || undefined,
+          tag: qTag || undefined,
+        }),
+      ),
+    [knowledge, qSubject, qGrade, qQuery, qTag],
+  )
+
+  const selected = projects.find((p) => p.id === selectedId) ?? null
+  const meta = selected ? toEduMeta(selected) : null
+  const filterSubjects = useMemo(() => uniqueSubjects(knowledge), [knowledge])
+  const filterGrades = useMemo(() => uniqueGrades(knowledge), [knowledge])
+  const filterTags = useMemo(() => uniqueTags(knowledge), [knowledge])
+
+  useEffect(() => {
+    if (!selected?.edu) {
+      setNoteDraft('')
+      setTagDraft('')
+      return
+    }
+    setNoteDraft(selected.edu.notes ?? '')
+    setTagDraft((selected.edu.tags ?? []).join(', '))
+  }, [selected?.id, selected?.edu?.notes, selected?.edu?.tags])
+
+  useEffect(() => {
+    if (!selectedId || !window.aiOfficeProject) {
+      setPackFiles([])
+      return
+    }
+    void window.aiOfficeProject.listFiles(selectedId).then(setPackFiles).catch(() => setPackFiles([]))
+  }, [selectedId, selected?.fileCount, selected?.updatedAt])
 
   useEffect(() => {
     void window.aiOffice.getAiSettings?.().then((s) => {
@@ -112,6 +234,26 @@ export function TeacherHome({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const materialRows = useMemo(() => {
+    const roleMap = meta?.materials ?? selected?.edu?.materials ?? {}
+    const fromFiles = packFiles.map((filePath) => {
+      const base = filePath.split(/[/\\]/).pop() || filePath
+      const stored = roleMap[filePath] as EduMaterialRole | undefined
+      const role = stored ?? inferMaterialRole(base)
+      return { key: filePath, title: base, role, kind: 'file' as const }
+    })
+    const coveredRoles = new Set(fromFiles.map((r) => r.role))
+    const pending = Object.entries(roleMap)
+      .filter(([key, role]) => key.startsWith('role:') && !coveredRoles.has(role as EduMaterialRole))
+      .map(([key, role]) => ({
+        key,
+        title: materialRoleLabel(role as EduMaterialRole, vi),
+        role: role as EduMaterialRole,
+        kind: 'pending' as const,
+      }))
+    return [...fromFiles, ...pending]
+  }, [packFiles, meta?.materials, selected?.edu?.materials, vi])
+
   const saveHub = async () => {
     setHubSaving(true)
     setHubStatus(null)
@@ -125,9 +267,9 @@ export function TeacherHome({
         setHubStatus(label('Cần Base URL và Token.', 'Base URL and token are required.'))
         return
       }
-      const next = {
+      await window.aiOffice.setAiSettings({
         ...current,
-        provider: 'custom' as const,
+        provider: 'custom',
         providers: {
           ...current.providers,
           custom: {
@@ -137,8 +279,7 @@ export function TeacherHome({
             model: model || current.providers.custom.model || 'gpt-4o',
           },
         },
-      }
-      await window.aiOffice.setAiSettings(next)
+      })
       const probe = await window.aiOffice.probeAiHub({ baseUrl, apiKey })
       setHubOk(probe.ok)
       setHubStatus(
@@ -182,6 +323,10 @@ export function TeacherHome({
         .split('\n')
         .map((l) => l.trim())
         .filter(Boolean)
+      const tags = tagsText
+        .split(/[,;]/)
+        .map((t) => t.trim())
+        .filter(Boolean)
       const created = await window.aiOfficeProject!.createEducationProject({
         subject,
         grade,
@@ -189,27 +334,70 @@ export function TeacherHome({
         lessonTitle,
         durationMinutes: form.durationMinutes,
         objectives,
+        tags,
       })
       onRefresh()
       onSelectPack(created.id)
       const createdMeta = toEduMeta(created)
       if (createdMeta) {
-        await openDocsTemplate(created.id, 'giao-an', createdMeta)
+        await openDocsSeed(
+          created.id,
+          eduTemplateTitle('giao-an', createdMeta),
+          eduTemplateHtml('giao-an', createdMeta),
+        )
+        await window.aiOfficeProject!.patchEduMeta({
+          projectId: created.id,
+          patch: { materials: { ...(created.edu?.materials ?? {}), 'role:giao-an': 'giao-an' } },
+        })
+        onRefresh()
       }
       setForm({
-        subject: '',
-        grade: '',
+        subject: EDU_SUBJECTS[0],
+        grade: EDU_GRADES[0],
         week: '',
         lessonTitle: '',
         durationMinutes: 45,
         objectives: [],
+        tags: [],
       })
       setObjectiveText('')
+      setTagsText('')
+      setTab('materials')
+      setNotice(label('Đã tạo bài trong Tri thức.', 'Lesson pack added to Knowledge.'))
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setCreating(false)
     }
+  }
+
+  const saveKnowledgeMeta = async () => {
+    if (!selected) return
+    setBusy('meta')
+    setError(null)
+    try {
+      const tags = tagDraft
+        .split(/[,;]/)
+        .map((t) => t.trim())
+        .filter(Boolean)
+      await window.aiOfficeProject!.patchEduMeta({
+        projectId: selected.id,
+        patch: { notes: noteDraft, tags },
+      })
+      onRefresh()
+      setNotice(label('Đã lưu ghi chú / thẻ.', 'Notes / tags saved.'))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const rememberRole = async (projectId: string, role: EduMaterialRole) => {
+    const current = await window.aiOfficeProject!.getEduMeta(projectId)
+    const materials = { ...(current?.materials ?? {}), [`role:${role}`]: role }
+    await window.aiOfficeProject!.patchEduMeta({ projectId, patch: { materials } })
+    onRefresh()
   }
 
   const openTemplate = async (templateId: EduTemplateId) => {
@@ -219,14 +407,38 @@ export function TeacherHome({
     setBusy(`tpl:${templateId}`)
     try {
       if (def.app === 'docs') {
-        await openDocsTemplate(selected.id, templateId, meta)
-        return
-      }
-      if (def.app === 'slides') {
+        await openDocsSeed(
+          selected.id,
+          eduTemplateTitle(templateId, meta),
+          eduTemplateHtml(templateId, meta),
+        )
+      } else if (def.app === 'slides') {
         await window.aiOffice.newSlide({ projectId: selected.id })
-        return
+      } else {
+        await window.aiOffice.newSheet({ projectId: selected.id })
       }
-      await window.aiOffice.newSheet({ projectId: selected.id })
+      await rememberRole(selected.id, templateId)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const addMaterial = async () => {
+    if (!selected || !meta) return
+    const roleDef = EDU_MATERIAL_ROLES.find((r) => r.id === addRole)
+    if (!roleDef) return
+    setBusy(`mat:${addRole}`)
+    try {
+      if (roleDef.app === 'slides') {
+        await window.aiOffice.newSlide({ projectId: selected.id })
+      } else if (roleDef.app === 'sheets') {
+        await window.aiOffice.newSheet({ projectId: selected.id })
+      } else {
+        const html = eduMaterialSeedHtml(addRole, meta)
+        await openDocsSeed(selected.id, eduMaterialSeedTitle(addRole, meta), html)
+      }
+      await rememberRole(selected.id, addRole)
+      setNotice(label(`Đã thêm: ${roleDef.labelVi}`, `Added: ${roleDef.labelEn}`))
     } finally {
       setBusy(null)
     }
@@ -239,10 +451,16 @@ export function TeacherHome({
       for (const id of EDU_LESSON_CHAIN_TEMPLATES) {
         const def = EDU_TEMPLATES.find((t) => t.id === id)
         if (!def) continue
-        if (def.app === 'docs') await openDocsTemplate(selected.id, id, meta)
-        else if (def.app === 'slides') await window.aiOffice.newSlide({ projectId: selected.id })
-        else await window.aiOffice.newSheet({ projectId: selected.id })
+        if (def.app === 'docs') {
+          await openDocsSeed(selected.id, eduTemplateTitle(id, meta), eduTemplateHtml(id, meta))
+        } else if (def.app === 'slides') {
+          await window.aiOffice.newSlide({ projectId: selected.id })
+        } else {
+          await window.aiOffice.newSheet({ projectId: selected.id })
+        }
+        await rememberRole(selected.id, id)
       }
+      setNotice(label('Đã mở chuỗi giáo án → slide → phiếu.', 'Opened plan → slides → worksheet.'))
     } finally {
       setBusy(null)
     }
@@ -257,13 +475,42 @@ export function TeacherHome({
     setBusy(`ai:${workflowId}`)
     setConfirmAi(null)
     try {
-      const projectId = selected.id
       const preset = { text: prompt, autoRun: true, displayText }
       if (wf.app === 'slides') {
-        await window.aiOffice.newSlide({ projectId, aiPreset: preset })
-        return
+        await window.aiOffice.newSlide({ projectId: selected.id, aiPreset: preset })
+      } else {
+        await openDocsSeed(
+          selected.id,
+          eduTemplateTitle(wf.seedTemplate, meta),
+          eduTemplateHtml(wf.seedTemplate, meta),
+          preset,
+        )
       }
-      await openDocsTemplate(projectId, wf.seedTemplate, meta, preset)
+      await rememberRole(selected.id, wf.seedTemplate)
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const runSkill = async (skillId: EduSkillId) => {
+    if (!selected || !meta) return
+    const skill = EDU_SKILLS.find((s) => s.id === skillId)
+    if (!skill) return
+    const prompt = eduSkillPrompt(skillId, meta)
+    const displayText = vi ? skill.labelVi : skill.labelEn
+    setBusy(`skill:${skillId}`)
+    setConfirmAi(null)
+    try {
+      const preset = { text: prompt, autoRun: true, displayText }
+      if (skill.app === 'slides') {
+        await window.aiOffice.newSlide({ projectId: selected.id, aiPreset: preset })
+      } else {
+        const role = skill.seedRole ?? 'giao-an'
+        const html = eduMaterialSeedHtml(role, meta)
+        await openDocsSeed(selected.id, eduMaterialSeedTitle(role, meta), html, preset)
+        await rememberRole(selected.id, role)
+      }
+      setNotice(label(`Đã chạy skill: ${skill.labelVi}`, `Ran skill: ${skill.labelEn}`))
     } finally {
       setBusy(null)
     }
@@ -280,9 +527,7 @@ export function TeacherHome({
         setExportMsg(r.error || label('Xuất thất bại.', 'Export failed.'))
         return
       }
-      setExportMsg(
-        label(`Đã xuất: ${r.path}`, `Exported: ${r.path}`),
-      )
+      setExportMsg(label(`Đã xuất: ${r.path}`, `Exported: ${r.path}`))
     } finally {
       setBusy(null)
     }
@@ -291,85 +536,464 @@ export function TeacherHome({
   return (
     <main className="content teacher-home">
       <section className="teacher-hero" aria-label={label('Giáo viên', 'Teacher')}>
-        <h1 className="teacher-title">{label('Chế độ Giáo viên', 'Teacher mode')}</h1>
-        <p className="teacher-subtitle">
-          {label(
-            'Cài trên máy · soạn và xuất gói bài miễn phí. Chỉ trừ Token AI khi bạn chủ động chạy workflow / chat AI.',
-            'Installed on your computer · draft and export for free. AI Tokens are charged only when you run AI workflows / chat.',
-          )}
-        </p>
-      </section>
-
-      <section className="teacher-hub" aria-label={label('Hub AI Token', 'Hub AI Token')}>
-        <h2>{label('Hub AI Token (thu phí khi dùng AI)', 'Hub AI Token (pay only when using AI)')}</h2>
-        <p className="teacher-hint">
-          {label(
-            'Gateway OpenAI-compatible của bạn. Mở mẫu / xuất zip không trừ Token.',
-            'Your OpenAI-compatible gateway. Opening templates / exporting zip does not charge Tokens.',
-          )}
-        </p>
-        <div className="teacher-form">
-          <label className="teacher-form-wide">
-            <span>Base URL</span>
-            <input
-              value={hubBaseUrl}
-              onChange={(e) => setHubBaseUrl(e.target.value)}
-              placeholder="https://your-hub.example/v1"
-            />
-          </label>
-          <label className="teacher-form-wide">
-            <span>API Token</span>
-            <input
-              type="password"
-              value={hubToken}
-              onChange={(e) => setHubToken(e.target.value)}
-              placeholder="sk-…"
-              autoComplete="off"
-            />
-          </label>
-          <label>
-            <span>{label('Model (tuỳ chọn)', 'Model (optional)')}</span>
-            <input
-              value={hubModel}
-              onChange={(e) => setHubModel(e.target.value)}
-              placeholder="gpt-4o"
-            />
-          </label>
-        </div>
-        {hubStatus && (
-          <p className={`teacher-hint${hubOk === false ? ' teacher-error-inline' : ''}`}>{hubStatus}</p>
-        )}
-        <div className="teacher-chip-row">
-          <button className="btn btn-secondary" disabled={hubSaving} onClick={() => void saveHub()}>
-            {hubSaving
-              ? label('Đang lưu…', 'Saving…')
-              : label('Lưu & kiểm tra Hub', 'Save & check Hub')}
-          </button>
-          <button className="btn btn-secondary" type="button" onClick={() => void probeHub()}>
-            {label('Kiểm tra lại', 'Re-check')}
-          </button>
+        <div className="teacher-hero-top">
+          <div>
+            <h1 className="teacher-title">{label('Bàn làm việc giáo viên', 'Teacher workbench')}</h1>
+            <p className="teacher-subtitle">
+              {label(
+                'Tri thức · Học liệu · Skills · Soạn mẫu. Desktop miễn phí; Token AI chỉ khi bạn chạy Skill/workflow.',
+                'Knowledge · Materials · Skills · Compose. Desktop is free; AI Tokens only when you run Skills/workflows.',
+              )}
+            </p>
+            <p className="teacher-hint">
+              {label(`${knowledge.length} bài trong thư viện`, `${knowledge.length} packs in library`)}
+            </p>
+          </div>
+          <div className="teacher-hero-controls">
+            {onSwitchPractice ? (
+              <label className="teacher-lang">
+                <span>{label('Vai trò', 'Role')}</span>
+                <select
+                  value="teacher"
+                  onChange={(e) => onSwitchPractice(e.target.value as PracticeId)}
+                  aria-label={label('Vai trò làm việc', 'Practice role')}
+                >
+                  {listPractices().map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {vi ? p.labelVi : p.labelEn}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            <label className="teacher-lang">
+              <span>{label('Ngôn ngữ', 'Language')}</span>
+              <select
+                value={uiLang}
+                onChange={(e) => changeUiLang(e.target.value as TeacherUiLang)}
+                aria-label={label('Ngôn ngữ bàn giáo viên', 'Teacher workbench language')}
+              >
+                <option value="vi">Tiếng Việt</option>
+                <option value="en">English</option>
+              </select>
+            </label>
+          </div>
         </div>
       </section>
 
-      <div className="teacher-layout">
-        <section className="teacher-create" aria-label={label('Tạo gói bài', 'New lesson pack')}>
-          <h2>{label('Gói bài mới', 'New lesson pack')}</h2>
-          <div className="teacher-form">
+      <WorkbenchTabs
+        practiceId="teacher"
+        pillars={teacherPractice.pillars}
+        active={tab}
+        onSelect={setTab}
+        vi={vi}
+        onPinsChange={(pins) => {
+          if (isWorkbenchModuleId(tab) && !pins.includes(tab)) setTab(pins.includes('desk') ? 'desk' : 'knowledge')
+        }}
+      />
+
+      {error && <p className="teacher-error">{error}</p>}
+      {notice && <p className="teacher-hint">{notice}</p>}
+
+      {isWorkbenchModuleId(tab) ? (
+        <WorkbenchModulePane
+          moduleId={tab}
+          practiceId="teacher"
+          vi={vi}
+          contextTitle={selected?.edu?.lessonTitle}
+          packId={selectedId}
+          onPackLinked={onRefresh}
+        />
+      ) : null}
+
+      {tab === 'knowledge' && (
+        <section className="teacher-panel" aria-label={label('Tri thức', 'Knowledge')}>
+          <div className="teacher-filters">
             <label>
               <span>{label('Môn', 'Subject')}</span>
-              <input
-                value={form.subject}
-                onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
-                placeholder={label('VD: Toán', 'e.g. Math')}
-              />
+              <select value={qSubject} onChange={(e) => setQSubject(e.target.value)}>
+                <option value="">{label('Tất cả', 'All')}</option>
+                {(filterSubjects.length ? filterSubjects : [...EDU_SUBJECTS]).map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
             </label>
             <label>
               <span>{label('Lớp', 'Grade')}</span>
+              <select value={qGrade} onChange={(e) => setQGrade(e.target.value)}>
+                <option value="">{label('Tất cả', 'All')}</option>
+                {(filterGrades.length ? filterGrades : [...EDU_GRADES]).map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="teacher-form-wide">
+              <span>{label('Tìm', 'Search')}</span>
               <input
-                value={form.grade}
-                onChange={(e) => setForm((f) => ({ ...f, grade: e.target.value }))}
-                placeholder={label('VD: Lớp 6', 'e.g. Grade 6')}
+                value={qQuery}
+                onChange={(e) => setQQuery(e.target.value)}
+                placeholder={label('Tên bài, tuần, ghi chú…', 'Title, week, notes…')}
               />
+            </label>
+            <label>
+              <span>{label('Thẻ', 'Tag')}</span>
+              <select value={qTag} onChange={(e) => setQTag(e.target.value)}>
+                <option value="">{label('Tất cả', 'All')}</option>
+                {filterTags.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="teacher-layout">
+            <section className="teacher-packs">
+              <h2>
+                {label('Thư viện bài', 'Lesson library')}
+                <span className="teacher-count">{filtered.length}</span>
+              </h2>
+              {filtered.length === 0 ? (
+                <p className="teacher-empty">
+                  {label(
+                    'Chưa có bài khớp. Tạo mới ở tab Soạn mới.',
+                    'No matching packs. Create one in Compose.',
+                  )}
+                </p>
+              ) : (
+                <ul className="teacher-pack-list">
+                  {filtered.map((item) => (
+                    <li key={item.id}>
+                      <button
+                        type="button"
+                        className={`teacher-pack-item${item.id === selectedId ? ' active' : ''}`}
+                        onClick={() => onSelectPack(item.id === selectedId ? null : item.id)}
+                        onDoubleClick={() => onOpenPackFiles(item.id)}
+                      >
+                        <strong>{item.edu.lessonTitle}</strong>
+                        <span>
+                          {[item.edu.subject, item.edu.grade, item.edu.week].filter(Boolean).join(' · ')}
+                        </span>
+                        <em>
+                          {item.fileCount} {label('tệp', 'files')}
+                          {(item.edu.tags ?? []).length > 0
+                            ? ` · ${(item.edu.tags ?? []).slice(0, 3).join(', ')}`
+                            : ''}
+                        </em>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <aside className="teacher-detail">
+              {selected && meta ? (
+                <>
+                  <header className="teacher-detail-header">
+                    <div>
+                      <h2>{meta.lessonTitle}</h2>
+                      <p>
+                        {[meta.subject, meta.grade, meta.week, meta.durationMinutes ? `${meta.durationMinutes}'` : null]
+                          .filter(Boolean)
+                          .join(' · ')}
+                      </p>
+                    </div>
+                  </header>
+                  <div className="teacher-chip-row">
+                    <button type="button" className="btn btn-secondary" onClick={() => setTab('materials')}>
+                      {label('Học liệu', 'Materials')}
+                    </button>
+                    <button type="button" className="btn btn-secondary" onClick={() => onOpenPackFiles(selected.id)}>
+                      {label('Xem file', 'View files')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={busy === 'export'}
+                      onClick={() => void exportPack()}
+                    >
+                      {busy === 'export' ? label('Đang xuất…', 'Exporting…') : label('Xuất ZIP', 'Export ZIP')}
+                    </button>
+                  </div>
+                  {exportMsg && <p className="teacher-hint">{exportMsg}</p>}
+                  <div className="teacher-form teacher-form-spaced">
+                    <label className="teacher-form-wide">
+                      <span>{label('Thẻ (phẩy tách)', 'Tags (comma-separated)')}</span>
+                      <input value={tagDraft} onChange={(e) => setTagDraft(e.target.value)} />
+                    </label>
+                    <label className="teacher-form-wide">
+                      <span>{label('Ghi chú tri thức', 'Knowledge notes')}</span>
+                      <textarea rows={4} value={noteDraft} onChange={(e) => setNoteDraft(e.target.value)} />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={busy === 'meta'}
+                    onClick={() => void saveKnowledgeMeta()}
+                  >
+                    {label('Lưu ghi chú / thẻ', 'Save notes / tags')}
+                  </button>
+                </>
+              ) : (
+                <p className="teacher-empty">
+                  {label('Chọn một bài để xem chi tiết.', 'Select a pack to see details.')}
+                </p>
+              )}
+            </aside>
+          </div>
+        </section>
+      )}
+
+      {tab === 'materials' && (
+        <section className="teacher-panel teacher-detail" aria-label={label('Học liệu', 'Materials')}>
+          {!selected || !meta ? (
+            <p className="teacher-empty">
+              {label('Chọn bài ở tab Tri thức trước.', 'Select a pack in Knowledge first.')}
+            </p>
+          ) : (
+            <>
+              <h2>
+                {label('Học liệu', 'Materials')} · {meta.lessonTitle}
+              </h2>
+              <p className="teacher-hint">
+                {label(
+                  'Mỗi file có vai trò: giáo án, KHDH, slide, phiếu, đề KT, tham khảo…',
+                  'Each file has a role: lesson plan, slides, worksheet, quiz, reference…',
+                )}
+              </p>
+              <ul className="teacher-material-list">
+                {materialRows.length === 0 ? (
+                  <li className="teacher-empty">{label('Chưa có học liệu — thêm bên dưới.', 'No materials yet — add below.')}</li>
+                ) : (
+                  materialRows.map((row) => (
+                    <li key={row.key} className="teacher-material-row">
+                      <div>
+                        <strong>{row.title}</strong>
+                        <span>{materialRoleLabel(row.role, vi)}</span>
+                      </div>
+                      {row.kind === 'file' ? (
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => void window.aiOffice.openPath(row.key)}
+                        >
+                          {label('Mở', 'Open')}
+                        </button>
+                      ) : (
+                        <em className="teacher-hint">{label('Đã seed', 'Seeded')}</em>
+                      )}
+                    </li>
+                  ))
+                )}
+              </ul>
+              <div className="teacher-add-row">
+                <label>
+                  <span>{label('Thêm học liệu', 'Add material')}</span>
+                  <select value={addRole} onChange={(e) => setAddRole(e.target.value as EduMaterialRole)}>
+                    {EDU_MATERIAL_ROLES.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {vi ? r.labelVi : r.labelEn}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={!!busy}
+                  onClick={() => void addMaterial()}
+                >
+                  {label('Thêm & mở', 'Add & open')}
+                </button>
+              </div>
+              <h3>{label('Mẫu nhanh (miễn phí)', 'Quick templates (free)')}</h3>
+              <div className="teacher-chip-row">
+                {EDU_TEMPLATES.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className="teacher-chip"
+                    disabled={busy === `tpl:${t.id}`}
+                    onClick={() => void openTemplate(t.id)}
+                  >
+                    {vi ? t.labelVi : t.labelEn}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  className="teacher-chip"
+                  disabled={busy === 'chain'}
+                  onClick={() => void openLessonChainFree()}
+                >
+                  {label('Chuỗi GA → Slide → Phiếu', 'Chain plan → slides → worksheet')}
+                </button>
+              </div>
+              <div className="teacher-chip-row teacher-chip-row-spaced">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  disabled={busy === 'export'}
+                  onClick={() => void exportPack()}
+                >
+                  {label('Xuất gói ZIP', 'Export ZIP')}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={() => onOpenPackFiles(selected.id)}>
+                  {label('Xem tất cả file', 'View all files')}
+                </button>
+              </div>
+              {exportMsg && <p className="teacher-hint">{exportMsg}</p>}
+            </>
+          )}
+        </section>
+      )}
+
+      {tab === 'skills' && (
+        <section className="teacher-panel teacher-detail" aria-label="Skills">
+          <h2>{label('Skills giáo viên (local)', 'Teacher Skills (local)')}</h2>
+          <p className="teacher-hint">
+            {label(
+              'Prompt tái sử dụng trên máy. Mỗi lần chạy hỏi xác nhận Token. Bộ cài Hub đầy đủ sẽ bổ sung sau.',
+              'Reusable on-device prompts. Each run asks to confirm Tokens. Full Hub installer comes later.',
+            )}
+          </p>
+          {!selected || !meta ? (
+            <p className="teacher-empty">
+              {label('Chọn bài ở Tri thức để gắn ngữ cảnh môn/lớp/bài.', 'Select a Knowledge pack for subject/grade context.')}
+            </p>
+          ) : (
+            <p>
+              {label('Ngữ cảnh:', 'Context:')}{' '}
+              <strong>
+                {meta.lessonTitle} ({meta.subject} · {meta.grade})
+              </strong>
+            </p>
+          )}
+          <ul className="teacher-skill-list">
+            {EDU_SKILLS.map((s) => (
+              <li key={s.id} className="teacher-skill-row">
+                <div>
+                  <strong>{vi ? s.labelVi : s.labelEn}</strong>
+                  <span>{vi ? s.descVi : s.descEn}</span>
+                  <em>
+                    {eduSkillCategoryLabel(s.category, vi)} · {label('Tốn Token', 'Uses Tokens')}
+                  </em>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  disabled={!!busy || !selected}
+                  onClick={() => setConfirmAi({ kind: 'skill', id: s.id })}
+                >
+                  {label('Chạy', 'Run')}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <h3>{label('Workflow nhanh', 'Quick workflows')}</h3>
+          <div className="teacher-chip-row">
+            {AI_WORKFLOWS.map((w) => (
+              <button
+                key={w.id}
+                type="button"
+                className="teacher-chip teacher-chip-ai"
+                disabled={!!busy || !selected}
+                onClick={() => setConfirmAi({ kind: 'workflow', id: w.id })}
+              >
+                {vi ? w.labelVi : w.labelEn}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            className="btn btn-secondary teacher-hub-toggle"
+            onClick={() => setShowHub((v) => !v)}
+          >
+            {showHub
+              ? label('Ẩn cấu hình Hub', 'Hide Hub settings')
+              : label('Hub Token (tuỳ chọn, anh làm sau)', 'Hub Token (optional, later)')}
+          </button>
+          {showHub && (
+            <div className="teacher-hub teacher-hub-nested">
+              <p className="teacher-hint">
+                {label(
+                  'Gateway OpenAI-compatible. Mở mẫu / xuất zip không trừ Token.',
+                  'OpenAI-compatible gateway. Templates / zip export do not charge Tokens.',
+                )}
+              </p>
+              <div className="teacher-form">
+                <label className="teacher-form-wide">
+                  <span>Base URL</span>
+                  <input
+                    value={hubBaseUrl}
+                    onChange={(e) => setHubBaseUrl(e.target.value)}
+                    placeholder="https://your-hub.example/v1"
+                  />
+                </label>
+                <label className="teacher-form-wide">
+                  <span>API Token</span>
+                  <input
+                    type="password"
+                    value={hubToken}
+                    onChange={(e) => setHubToken(e.target.value)}
+                    placeholder="sk-…"
+                    autoComplete="off"
+                  />
+                </label>
+                <label>
+                  <span>{label('Model (tuỳ chọn)', 'Model (optional)')}</span>
+                  <input value={hubModel} onChange={(e) => setHubModel(e.target.value)} placeholder="gpt-4o" />
+                </label>
+              </div>
+              {hubStatus && (
+                <p className={`teacher-hint${hubOk === false ? ' teacher-error-inline' : ''}`}>{hubStatus}</p>
+              )}
+              <div className="teacher-chip-row">
+                <button className="btn btn-secondary" disabled={hubSaving} onClick={() => void saveHub()}>
+                  {hubSaving ? label('Đang lưu…', 'Saving…') : label('Lưu & kiểm tra', 'Save & check')}
+                </button>
+                <button className="btn btn-secondary" type="button" onClick={() => void probeHub()}>
+                  {label('Kiểm tra lại', 'Re-check')}
+                </button>
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {tab === 'compose' && (
+        <section className="teacher-panel teacher-create" aria-label={label('Soạn mới', 'Compose')}>
+          <h2>{label('Soạn bài mới', 'New lesson pack')}</h2>
+          <div className="teacher-form">
+            <label>
+              <span>{label('Môn', 'Subject')}</span>
+              <select
+                value={form.subject}
+                onChange={(e) => setForm((f) => ({ ...f, subject: e.target.value }))}
+              >
+                {EDU_SUBJECTS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>{label('Lớp', 'Grade')}</span>
+              <select value={form.grade} onChange={(e) => setForm((f) => ({ ...f, grade: e.target.value }))}>
+                {EDU_GRADES.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </select>
             </label>
             <label>
               <span>{label('Tuần (tuỳ chọn)', 'Week (optional)')}</span>
@@ -400,148 +1024,29 @@ export function TeacherHome({
               />
             </label>
             <label className="teacher-form-wide">
+              <span>{label('Thẻ', 'Tags')}</span>
+              <input
+                value={tagsText}
+                onChange={(e) => setTagsText(e.target.value)}
+                placeholder={label('đại số, ôn tập,…', 'algebra, review,…')}
+              />
+            </label>
+            <label className="teacher-form-wide">
               <span>{label('Mục tiêu / CĐR (mỗi dòng một ý)', 'Objectives (one per line)')}</span>
               <textarea
                 rows={3}
                 value={objectiveText}
                 onChange={(e) => setObjectiveText(e.target.value)}
-                placeholder={label(
-                  'Nhận biết phân số\nSo sánh phân số',
-                  'Identify fractions\nCompare fractions',
-                )}
+                placeholder={label('Nhận biết phân số\nSo sánh phân số', 'Identify fractions\nCompare fractions')}
               />
             </label>
           </div>
-          {error && <p className="teacher-error">{error}</p>}
+          {error && tab === 'compose' && <p className="teacher-error">{error}</p>}
           <button className="btn btn-primary" disabled={creating} onClick={() => void submitCreate()}>
             {creating
               ? label('Đang tạo…', 'Creating…')
-              : label('Tạo gói + mở giáo án (miễn phí)', 'Create pack + open plan (free)')}
+              : label('Tạo bài vào Tri thức + mở giáo án', 'Create pack + open lesson plan')}
           </button>
-        </section>
-
-        <section className="teacher-packs" aria-label={label('Gói bài', 'Lesson packs')}>
-          <h2>
-            {label('Gói bài của bạn', 'Your lesson packs')}
-            <span className="teacher-count">{packs.length}</span>
-          </h2>
-          {packs.length === 0 ? (
-            <p className="teacher-empty">
-              {label(
-                'Chưa có gói bài nào. Tạo gói đầu tiên bên trái.',
-                'No packs yet. Create one on the left.',
-              )}
-            </p>
-          ) : (
-            <ul className="teacher-pack-list">
-              {packs.map((p) => (
-                <li key={p.id}>
-                  <button
-                    type="button"
-                    className={`teacher-pack-item${p.id === selectedId ? ' active' : ''}`}
-                    onClick={() => onSelectPack(p.id === selectedId ? null : p.id)}
-                  >
-                    <strong>{p.edu?.lessonTitle || p.name}</strong>
-                    <span>
-                      {[p.edu?.subject, p.edu?.grade, p.edu?.week].filter(Boolean).join(' · ')}
-                    </span>
-                    <em>
-                      {p.fileCount} {label('tệp', 'files')}
-                    </em>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
-
-      {selected && meta && (
-        <section className="teacher-detail" aria-label={selected.name}>
-          <header className="teacher-detail-header">
-            <div>
-              <h2>{meta.lessonTitle}</h2>
-              <p>
-                {[
-                  meta.subject,
-                  meta.grade,
-                  meta.week,
-                  meta.durationMinutes ? `${meta.durationMinutes}'` : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </p>
-            </div>
-            <div className="teacher-chip-row">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => onOpenPackFiles(selected.id)}
-              >
-                {label('Xem file', 'View files')}
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                disabled={busy === 'export'}
-                onClick={() => void exportPack()}
-              >
-                {busy === 'export'
-                  ? label('Đang xuất…', 'Exporting…')
-                  : label('Xuất gói ZIP', 'Export ZIP')}
-              </button>
-            </div>
-          </header>
-          {exportMsg && <p className="teacher-hint">{exportMsg}</p>}
-
-          <div className="teacher-actions">
-            <div>
-              <h3>{label('Mẫu (miễn phí, không trừ Token)', 'Templates (free, no Token)')}</h3>
-              <div className="teacher-chip-row">
-                {EDU_TEMPLATES.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    className="teacher-chip"
-                    disabled={busy === `tpl:${t.id}`}
-                    onClick={() => void openTemplate(t.id)}
-                  >
-                    {vi ? t.labelVi : t.labelEn}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className="teacher-chip"
-                  disabled={busy === 'chain'}
-                  onClick={() => void openLessonChainFree()}
-                >
-                  {label('Chuỗi tiết dạy (giáo án→slide→phiếu)', 'Lesson chain (plan→slides→worksheet)')}
-                </button>
-              </div>
-            </div>
-            <div>
-              <h3>{label('AI workflows (có trừ Token — cần xác nhận)', 'AI workflows (uses Tokens — confirm)')}</h3>
-              <div className="teacher-chip-row">
-                {AI_WORKFLOWS.map((w) => (
-                  <button
-                    key={w.id}
-                    type="button"
-                    className="teacher-chip teacher-chip-ai"
-                    disabled={!!busy}
-                    onClick={() => setConfirmAi(w.id)}
-                  >
-                    {vi ? w.labelVi : w.labelEn}
-                  </button>
-                ))}
-              </div>
-              <p className="teacher-hint">
-                {label(
-                  'Mỗi lần chạy sẽ mở mẫu và gửi prompt AI. Hết Token thì soạn tay / dùng mẫu vẫn được.',
-                  'Each run opens a seed and sends an AI prompt. If Tokens run out, templates still work offline.',
-                )}
-              </p>
-            </div>
-          </div>
         </section>
       )}
 
@@ -568,7 +1073,10 @@ export function TeacherHome({
               <button
                 className="btn btn-primary"
                 type="button"
-                onClick={() => void runAiWorkflow(confirmAi)}
+                onClick={() => {
+                  if (confirmAi.kind === 'skill') void runSkill(confirmAi.id)
+                  else void runAiWorkflow(confirmAi.id)
+                }}
               >
                 {label('Chạy AI', 'Run AI')}
               </button>

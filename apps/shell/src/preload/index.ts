@@ -388,6 +388,23 @@ const projectApi: ProjectHomeApi = {
     if (!result || typeof result !== 'object') return null
     return result as NonNullable<ProjectSummaryEntry['edu']>
   },
+  async patchEduMeta(args) {
+    const result: unknown = await ipcRenderer.invoke(PROJECT_CHANNELS.patchEduMeta, args)
+    return result as NonNullable<ProjectSummaryEntry['edu']>
+  },
+  async createPracticeProject(args) {
+    const result: unknown = await ipcRenderer.invoke(PROJECT_CHANNELS.createPractice, args)
+    return result as ProjectSummaryEntry
+  },
+  async getPracticeMeta(projectId) {
+    const result: unknown = await ipcRenderer.invoke(PROJECT_CHANNELS.getPracticeMeta, { projectId })
+    if (!result || typeof result !== 'object') return null
+    return result as NonNullable<ProjectSummaryEntry['practice']>
+  },
+  async patchPracticeMeta(args) {
+    const result: unknown = await ipcRenderer.invoke(PROJECT_CHANNELS.patchPracticeMeta, args)
+    return result as NonNullable<ProjectSummaryEntry['practice']>
+  },
   async renameProject(id, name) {
     await ipcRenderer.invoke(PROJECT_CHANNELS.rename, { id, name })
   },

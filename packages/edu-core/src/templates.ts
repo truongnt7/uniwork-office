@@ -121,6 +121,36 @@ export function eduTemplateHtml(templateId: EduTemplateId, meta: EduMeta): strin
   }
 }
 
+/** Extra HTML seeds for material roles not in EduTemplateId. */
+export function eduMaterialSeedHtml(role: string, meta: EduMeta): string | null {
+  if (role === 'de-kiem-tra') {
+    return `
+      <h1>ĐỀ KIỂM TRA / ĐÁNH GIÁ</h1>
+      ${metaBlock(meta)}
+      <p><strong>Thời gian:</strong> …… phút &nbsp;|&nbsp; <strong>Hình thức:</strong> ……</p>
+      <h2>I. Trắc nghiệm</h2>
+      <ol><li></li><li></li><li></li><li></li></ol>
+      <h2>II. Tự luận</h2>
+      <ol><li></li><li></li></ol>
+      <h2>Đáp án / biểu điểm (GV)</h2>
+      <p></p>
+    `.trim()
+  }
+  if (role === 'tai-lieu-tham-khao') {
+    return `
+      <h1>TÀI LIỆU THAM KHẢO / TÓM TẮT</h1>
+      ${metaBlock(meta)}
+      <h2>Ý chính</h2>
+      <ul><li></li><li></li></ul>
+      <h2>Từ khóa</h2>
+      <p></p>
+      <h2>Câu hỏi ôn</h2>
+      <ol><li></li><li></li><li></li></ol>
+    `.trim()
+  }
+  return eduTemplateHtml(role as EduTemplateId, meta)
+}
+
 export function eduTemplateTitle(templateId: EduTemplateId, meta: EduMeta): string {
   const map: Record<EduTemplateId, string> = {
     'giao-an': `Giáo án — ${meta.lessonTitle}`,
@@ -130,4 +160,15 @@ export function eduTemplateTitle(templateId: EduTemplateId, meta: EduMeta): stri
     ppct: `PPCT — ${meta.subject} ${meta.grade}`,
   }
   return map[templateId]
+}
+
+export function eduMaterialSeedTitle(role: string, meta: EduMeta): string {
+  if (role === 'de-kiem-tra') return `Đề KT — ${meta.lessonTitle}`
+  if (role === 'tai-lieu-tham-khao') return `Tham khảo — ${meta.lessonTitle}`
+  if (role === 'khac') return `Học liệu — ${meta.lessonTitle}`
+  const known: EduTemplateId[] = ['giao-an', 'khdh', 'slide', 'phieu-hoc-tap', 'ppct']
+  if (known.includes(role as EduTemplateId)) {
+    return eduTemplateTitle(role as EduTemplateId, meta)
+  }
+  return `Học liệu — ${meta.lessonTitle}`
 }

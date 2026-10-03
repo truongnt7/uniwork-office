@@ -934,4 +934,59 @@ describe('createEducationProject', () => {
     expect(summary?.kind).toBe('education')
     expect(summary?.edu?.subject).toBe('Toán')
   })
+
+  it('patches tags, notes, and material roles', () => {
+    const data = store.createEducationProject('Toán · Lớp 6 · Phân số', {
+      version: 2,
+      kind: 'education',
+      subject: 'Toán',
+      grade: 'Lớp 6',
+      lessonTitle: 'Phân số',
+      objectives: [],
+      materials: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+    const next = store.patchEduMeta(data.id, {
+      tags: ['đại-số'],
+      notes: 'ôn tập',
+      materials: { 'role:giao-an': 'giao-an' },
+    })
+    expect(next.version).toBe(2)
+    expect(next.tags).toEqual(['đại-số'])
+    expect(next.notes).toBe('ôn tập')
+    expect(next.materials?.['role:giao-an']).toBe('giao-an')
+  })
+})
+
+describe('createPracticeProject', () => {
+  let tmpDir: string
+  let store: ProjectStore
+
+  beforeEach(() => {
+    tmpDir = makeTempDir()
+    store = new ProjectStore(tmpDir)
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('writes practice/meta.json and surfaces kind+practice on summary', () => {
+    const data = store.createPracticeProject('Luật · ABC · HĐ thuê', {
+      version: 1,
+      kind: 'practice',
+      practiceId: 'legal',
+      title: 'HĐ thuê VP',
+      facets: { client: 'ABC', matterType: 'Hợp đồng' },
+      materials: {},
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
+    expect(data.kind).toBe('legal')
+    expect(store.getPracticeMeta(data.id)?.title).toBe('HĐ thuê VP')
+    const summary = store.listProjectsSummary().find((p) => p.id === data.id)
+    expect(summary?.kind).toBe('legal')
+    expect(summary?.practice?.facets.client).toBe('ABC')
+  })
 })

@@ -287,9 +287,19 @@ export interface RenameResult {
 
 // ── Project-related APIs (P1) ────────────────────────────────
 
+export type EduMaterialRoleEntry =
+  | 'giao-an'
+  | 'khdh'
+  | 'slide'
+  | 'phieu-hoc-tap'
+  | 'ppct'
+  | 'de-kiem-tra'
+  | 'tai-lieu-tham-khao'
+  | 'khac'
+
 /** Teacher lesson-pack metadata mirrored from project-store edu/meta.json */
 export interface EduProjectMetaEntry {
-  version: 1
+  version: 1 | 2
   kind: 'education'
   subject: string
   grade: string
@@ -297,6 +307,36 @@ export interface EduProjectMetaEntry {
   lessonTitle: string
   durationMinutes?: number
   objectives: string[]
+  tags?: string[]
+  notes?: string
+  materials?: Partial<Record<string, EduMaterialRoleEntry>>
+  createdAt: string
+  updatedAt: string
+}
+
+export type PracticeIdEntry =
+  | 'teacher'
+  | 'legal'
+  | 'construction'
+  | 'procurement'
+  | 'principal'
+
+export type ProjectKindEntry =
+  | 'education'
+  | 'legal'
+  | 'construction'
+  | 'procurement'
+  | 'principal'
+
+export interface PracticeProjectMetaEntry {
+  version: 1
+  kind: 'practice'
+  practiceId: PracticeIdEntry
+  title: string
+  facets: Record<string, string>
+  tags?: string[]
+  notes?: string
+  materials?: Partial<Record<string, string>>
   createdAt: string
   updatedAt: string
 }
@@ -309,8 +349,24 @@ export interface ProjectSummaryEntry {
   fileCount: number
   lastActiveAt: string
   isDefault: boolean
-  kind?: 'education'
+  kind?: ProjectKindEntry
   edu?: EduProjectMetaEntry
+  practice?: PracticeProjectMetaEntry
+}
+
+export interface CreatePracticeProjectArgs {
+  practiceId: Exclude<PracticeIdEntry, 'teacher'>
+  title: string
+  facets?: Record<string, string>
+  tags?: string[]
+  notes?: string
+}
+
+export interface PatchPracticeMetaArgs {
+  projectId: string
+  patch: Partial<
+    Pick<PracticeProjectMetaEntry, 'title' | 'facets' | 'tags' | 'notes' | 'materials'>
+  >
 }
 
 export interface CreateEducationProjectArgs {
@@ -320,6 +376,26 @@ export interface CreateEducationProjectArgs {
   lessonTitle: string
   durationMinutes?: number
   objectives?: string[]
+  tags?: string[]
+  notes?: string
+}
+
+export interface PatchEducationMetaArgs {
+  projectId: string
+  patch: Partial<
+    Pick<
+      EduProjectMetaEntry,
+      | 'subject'
+      | 'grade'
+      | 'week'
+      | 'lessonTitle'
+      | 'durationMinutes'
+      | 'objectives'
+      | 'tags'
+      | 'notes'
+      | 'materials'
+    >
+  >
 }
 
 export interface HomeAiPreset {
@@ -362,6 +438,14 @@ export interface ProjectHomeApi {
   createEducationProject(args: CreateEducationProjectArgs): Promise<ProjectSummaryEntry>
   /** read education metadata for a project */
   getEduMeta(projectId: string): Promise<EduProjectMetaEntry | null>
+  /** patch education metadata (tags, materials, notes, …) */
+  patchEduMeta(args: PatchEducationMetaArgs): Promise<EduProjectMetaEntry>
+  /** create a non-teacher practice pack with practice/meta.json */
+  createPracticeProject(args: CreatePracticeProjectArgs): Promise<ProjectSummaryEntry>
+  /** read practice metadata for a project */
+  getPracticeMeta(projectId: string): Promise<PracticeProjectMetaEntry | null>
+  /** patch practice metadata */
+  patchPracticeMeta(args: PatchPracticeMetaArgs): Promise<PracticeProjectMetaEntry>
   /** rename a project */
   renameProject(id: string, name: string): Promise<void>
   /** soft-delete a project */
@@ -432,6 +516,10 @@ export const PROJECT_CHANNELS = {
   create: 'project:create',
   createEducation: 'project:createEducation',
   getEduMeta: 'project:getEduMeta',
+  patchEduMeta: 'project:patchEduMeta',
+  createPractice: 'project:createPractice',
+  getPracticeMeta: 'project:getPracticeMeta',
+  patchPracticeMeta: 'project:patchPracticeMeta',
   rename: 'project:rename',
   delete: 'project:delete',
   moveFile: 'project:moveFile',

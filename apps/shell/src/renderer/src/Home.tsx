@@ -23,6 +23,8 @@ import { useI18n } from './locale'
 import type { I18n, StringKey } from './locale'
 import { SettingsModal } from './SettingsModal'
 import { skillUpdateDue } from './IntegrationsPane'
+import { getPractice, listPractices, type PracticeId } from '@uniwork/practice-core'
+import { PracticeHome } from './PracticeHome'
 import { TeacherHome } from './TeacherHome'
 
 declare global {
@@ -1163,9 +1165,35 @@ export function Home() {
   const [view, setView] = useState<'recent' | 'starred'>('recent')
   // Genspark web projects take over the content area (like a selected project)
   const [cloudMode, setCloudMode] = useState(false)
-  // Teacher lesson-pack gallery (education projects)
+  // Profession practice workbench (teacher / legal / …)
   const [eduMode, setEduMode] = useState(false)
   const [eduSelectedId, setEduSelectedId] = useState<string | null>(null)
+  const [activePracticeId, setActivePracticeId] = useState<PracticeId>(() => {
+    try {
+      const raw = localStorage.getItem('uniwork.activePracticeId')
+      if (
+        raw === 'teacher' ||
+        raw === 'legal' ||
+        raw === 'construction' ||
+        raw === 'procurement' ||
+        raw === 'principal'
+      ) {
+        return raw
+      }
+    } catch {
+      /* ignore */
+    }
+    return 'teacher'
+  })
+  const switchPractice = useCallback((id: PracticeId) => {
+    setActivePracticeId(id)
+    setEduSelectedId(null)
+    try {
+      localStorage.setItem('uniwork.activePracticeId', id)
+    } catch {
+      /* ignore */
+    }
+  }, [])
   const [filter, setFilter] = useState('all')
   // modified-column sort (WPS-style header popover), shared by the global and project tables
   const [fileSort, setFileSort] = useState<'recent' | 'oldest'>('recent')
@@ -2274,18 +2302,37 @@ export function Home() {
       {selectedProjectId ? (
         renderProjectContent()
       ) : eduMode ? (
-        <TeacherHome
-          projects={projects}
-          selectedId={eduSelectedId}
-          onSelectPack={setEduSelectedId}
-          onOpenPackFiles={(id) => {
-            setEduMode(false)
-            setSelectedProjectId(id)
-            setSelected(new Set())
-            setRowMenu(null)
-          }}
-          onRefresh={refresh}
-        />
+        activePracticeId === 'teacher' ? (
+          <TeacherHome
+            projects={projects}
+            selectedId={eduSelectedId}
+            onSelectPack={setEduSelectedId}
+            onOpenPackFiles={(id) => {
+              setEduMode(false)
+              setSelectedProjectId(id)
+              setSelected(new Set())
+              setRowMenu(null)
+            }}
+            onRefresh={refresh}
+            onSwitchPractice={switchPractice}
+          />
+        ) : (
+          <PracticeHome
+            practice={getPractice(activePracticeId) ?? listPractices()[1]!}
+            practices={listPractices()}
+            projects={projects}
+            selectedId={eduSelectedId}
+            onSelectPack={setEduSelectedId}
+            onOpenPackFiles={(id) => {
+              setEduMode(false)
+              setSelectedProjectId(id)
+              setSelected(new Set())
+              setRowMenu(null)
+            }}
+            onRefresh={refresh}
+            onSwitchPractice={switchPractice}
+          />
+        )
       ) : cloudMode ? (
         <CloudProjectsView />
       ) : (

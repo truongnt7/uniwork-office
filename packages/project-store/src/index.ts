@@ -4,6 +4,8 @@ export type {
   ChatMeta,
   ChatScope,
   EduProjectMeta,
+  PracticeId,
+  PracticeProjectMeta,
   ProjectData,
   ProjectIndex,
   ProjectInfo,

@@ -5,7 +5,7 @@ export const strings = {
     navRecent: '最近',
     navStarred: '收藏',
     navCloud: 'Genspark Projects',
-    navTeacher: '教师',
+    navTeacher: '专业工作台',
     cloudSubtitle: '在网页端用 Genspark AI 创建的项目。编辑在浏览器中继续——点击任意项目即可打开。',
     cloudSearchPlaceholder: '搜索 {n} 个项目…',
     cloudNoResults: '没有匹配的项目。',
@@ -300,7 +300,7 @@ export const strings = {
     navRecent: 'Recent',
     navStarred: 'Starred',
     navCloud: 'Genspark Projects',
-    navTeacher: 'Teacher',
+    navTeacher: 'Workbench',
     cloudSubtitle:
       'Projects created on the web with Genspark AI. Editing continues in your browser — click any project to open it.',
     cloudSearchPlaceholder: 'Search {n} projects…',

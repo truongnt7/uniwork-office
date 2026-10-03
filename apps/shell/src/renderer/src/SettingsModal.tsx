@@ -1122,6 +1122,18 @@ export function SettingsModal({
             {section === 'account' && (
               <>
                 <h3 className="set-pane-title">{t('setSecAccount')}</h3>
+                <div className="set-field">
+                  <div className="set-field-text">
+                    <label className="set-field-label">{t('language')}</label>
+                  </div>
+                  <Dropdown
+                    className="set-dd"
+                    value={lang}
+                    ariaLabel={t('language')}
+                    options={LANG_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
+                    onPick={(v) => setLang(v as typeof lang)}
+                  />
+                </div>
                 <Field label={t('setEmail')} value={loggedIn ? email : t('setNotLoggedIn')} />
                 {loggedIn && (
                   <Field

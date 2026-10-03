@@ -1,15 +1,22 @@
 import { describe, expect, it } from 'vitest'
 import {
   createEduMeta,
+  eduMatchesFilter,
+  eduMaterialSeedHtml,
   eduPackReadme,
+  eduSkillPrompt,
   eduTemplateHtml,
   eduWorkflowPrompt,
   extractHubBalanceHint,
+  getEduSkill,
   hubModelsUrl,
+  inferMaterialRole,
   isEduMeta,
   looksLikeAiCreditError,
+  materialRoleLabel,
   normalizeHubBaseUrl,
   packDisplayName,
+  EDU_SKILLS,
 } from '../src/index.js'
 
 describe('edu-core', () => {
@@ -60,5 +67,42 @@ describe('edu-core', () => {
     expect(hubModelsUrl('https://hub.example/v1')).toBe('https://hub.example/v1/models')
     expect(extractHubBalanceHint({ balance: 12.5 })).toBe('12.5')
     expect(looksLikeAiCreditError('Your credits have been exhausted')).toBe(true)
+  })
+
+  it('filters knowledge library by subject/tag/query', () => {
+    const meta = createEduMeta({
+      subject: 'Toán',
+      grade: 'Lớp 6',
+      lessonTitle: 'Phân số',
+      tags: ['đại-số'],
+      notes: 'ôn giữa kỳ',
+    })
+    const item = {
+      id: 'p1',
+      name: 'pack',
+      fileCount: 2,
+      lastActiveAt: meta.updatedAt,
+      edu: meta,
+    }
+    expect(eduMatchesFilter(item, { subject: 'Toán' })).toBe(true)
+    expect(eduMatchesFilter(item, { tag: 'đại-số' })).toBe(true)
+    expect(eduMatchesFilter(item, { query: 'giữa kỳ' })).toBe(true)
+    expect(eduMatchesFilter(item, { subject: 'Văn' })).toBe(false)
+  })
+
+  it('infers material roles and seeds extra HTML', () => {
+    expect(inferMaterialRole('giao-an.docx')).toBe('giao-an')
+    expect(inferMaterialRole('de-kiem-tra.docx')).toBe('de-kiem-tra')
+    expect(materialRoleLabel('phieu-hoc-tap', true)).toContain('Phiếu')
+    const meta = createEduMeta({ subject: 'Toán', grade: 'Lớp 6', lessonTitle: 'Phân số' })
+    expect(eduMaterialSeedHtml('de-kiem-tra', meta)).toContain('ĐỀ KIỂM TRA')
+  })
+
+  it('builds teacher skill prompts', () => {
+    expect(EDU_SKILLS.length).toBeGreaterThanOrEqual(6)
+    const skill = getEduSkill('sinh-phieu')
+    expect(skill?.seedRole).toBe('phieu-hoc-tap')
+    const meta = createEduMeta({ subject: 'Toán', grade: 'Lớp 6', lessonTitle: 'Phân số' })
+    expect(eduSkillPrompt('ngan-hang-cau-hoi', meta)).toContain('ngân hàng')
   })
 })

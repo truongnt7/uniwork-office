@@ -12,6 +12,7 @@ export function packDisplayName(input: CreateEduMetaInput): string {
 
 export function createEduMeta(input: CreateEduMetaInput): EduMeta {
   const ts = nowIso()
+  const tags = (input.tags ?? []).map((t) => t.trim()).filter(Boolean)
   return {
     version: EDU_META_VERSION,
     kind: 'education',
@@ -23,6 +24,9 @@ export function createEduMeta(input: CreateEduMetaInput): EduMeta {
       ? { durationMinutes: Math.max(1, Math.round(input.durationMinutes)) }
       : {}),
     objectives: (input.objectives ?? []).map((o) => o.trim()).filter(Boolean),
+    ...(tags.length > 0 ? { tags } : {}),
+    ...(input.notes?.trim() ? { notes: input.notes.trim() } : {}),
+    materials: {},
     createdAt: ts,
     updatedAt: ts,
   }
@@ -31,7 +35,9 @@ export function createEduMeta(input: CreateEduMetaInput): EduMeta {
 export function isEduMeta(value: unknown): value is EduMeta {
   if (!value || typeof value !== 'object') return false
   const v = value as Record<string, unknown>
+  const versionOk = v.version === 1 || v.version === 2 || v.version === undefined
   return (
+    versionOk &&
     v.kind === 'education' &&
     typeof v.subject === 'string' &&
     typeof v.grade === 'string' &&

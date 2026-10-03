@@ -1166,6 +1166,8 @@ export interface SlidesApi {
   /** The user font store changed (download/local install): re-sync private FontFaces */
   onFontsChanged: (handler: () => void) => () => void
   consumePendingOpen: (fitWidthPx: number) => Promise<OpenResult | null>
+  /** one-shot Teacher / Home AI preset for this slides tab */
+  consumeAiPreset: () => Promise<{ text: string; autoRun?: boolean; displayText?: string } | null>
   /** Headless export mode: the PDF path this hidden renderer must export to, null in normal use */
   consumeHeadlessExport: () => Promise<string | null>
   /** Headless export mode: report the export outcome so the main process can quit */

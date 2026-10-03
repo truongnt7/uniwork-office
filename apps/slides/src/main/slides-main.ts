@@ -286,6 +286,19 @@ export { registerAiIpc } from './ai-ipc'
 let pendingOpenPath: string | null = null
 /** tab mode: each view queues its own path; the renderer consumes it after mounting */
 const pendingByWc = new Map<number, string>()
+
+export interface SlidesAiPresetPayload {
+  text: string
+  autoRun?: boolean
+  displayText?: string
+}
+
+/** Teacher / Home AI preset waiting for a slides tab */
+const pendingAiPresets = new Map<number, SlidesAiPresetPayload>()
+
+export function queueSlidesAiPreset(wcId: number, preset: SlidesAiPresetPayload): void {
+  pendingAiPresets.set(wcId, preset)
+}
 /**
  * Renderer freeze watchdog: the freeze is sporadic and has never
  * reproduced under instrumentation, so when it does happen, capture the
@@ -1172,6 +1185,12 @@ export function registerSlidesIpc(): void {
     if (!path || !existsSync(path)) return null
     if (await rejectLegacyPpt(path)) return null
     return openAndBuild(e.sender, path, fitWidthPx)
+  })
+
+  ipcMain.handle('slides:consume-ai-preset', (e): SlidesAiPresetPayload | null => {
+    const preset = pendingAiPresets.get(e.sender.id) ?? null
+    pendingAiPresets.delete(e.sender.id)
+    return preset
   })
 
   ipcMain.handle('slides:consume-pending-open', async (e, fitWidthPx: number) => {

@@ -7,11 +7,12 @@ import {
   docsQueryDirty,
   markDocsNewBlank,
   queueDocsAiContent,
+  queueDocsAiPreset,
   requestDocsClose,
   setActiveDocsResolver,
   teardownDocsRenderer,
 } from '../../../docs/src/main/docs-main'
-import type { AiDocContent } from '../../../docs/src/shared/ipc'
+import type { AiDocContent, AiPresetPayload } from '../../../docs/src/shared/ipc'
 import {
   createMarkdownView,
   markdownIsDirty,
@@ -40,6 +41,8 @@ import {
 } from '../../../sheets/src/main/sheets-main'
 import {
   createSlidesView,
+  queueSlidesAiPreset,
+  type SlidesAiPresetPayload,
   requestSlidesClose,
   setActiveSlidesWebContents,
   slidesIsDirty,
@@ -203,12 +206,13 @@ export class TabManager {
 
   openDocsTab(
     openPath?: string,
-    options?: { newBlank?: boolean; aiContent?: AiDocContent },
+    options?: { newBlank?: boolean; aiContent?: AiDocContent; aiPreset?: AiPresetPayload },
   ): string {
     const view = createDocsView(openPath)
     const id = `t${this.nextId++}`
     if (options?.newBlank) markDocsNewBlank(view.webContents.id)
     if (options?.aiContent) queueDocsAiContent(view.webContents.id, options.aiContent)
+    if (options?.aiPreset) queueDocsAiPreset(view.webContents.id, options.aiPreset)
     this.shellWindow.contentView.addChildView(view)
     view.setVisible(false)
     this.trackHtmlFullScreen(id, view)
@@ -252,9 +256,10 @@ export class TabManager {
     return id
   }
 
-  openSlidesTab(openPath?: string): string {
+  openSlidesTab(openPath?: string, options?: { aiPreset?: SlidesAiPresetPayload }): string {
     const view = createSlidesView(openPath)
     const id = `t${this.nextId++}`
+    if (options?.aiPreset) queueSlidesAiPreset(view.webContents.id, options.aiPreset)
     this.shellWindow.contentView.addChildView(view)
     view.setVisible(false)
     this.trackHtmlFullScreen(id, view)

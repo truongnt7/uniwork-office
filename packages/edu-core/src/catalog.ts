@@ -60,4 +60,14 @@ export const EDU_WORKFLOWS: readonly EduWorkflowDef[] = [
     labelEn: 'Worksheet from plan',
     seedTemplate: 'phieu-hoc-tap',
   },
+  {
+    id: 'lesson-chain-templates',
+    app: 'docs',
+    labelVi: 'Chuỗi tiết dạy (mẫu, không AI)',
+    labelEn: 'Lesson chain (templates, no AI)',
+    seedTemplate: 'giao-an',
+  },
 ] as const
+
+/** Ordered free seeds for the personal-teacher lesson chain. */
+export const EDU_LESSON_CHAIN_TEMPLATES = ['giao-an', 'slide', 'phieu-hoc-tap'] as const

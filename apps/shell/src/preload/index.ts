@@ -90,6 +90,22 @@ const homeApi: HomeApi = {
   async browse() {
     await ipcRenderer.invoke(HOME_CHANNELS.browse)
   },
+  async probeAiHub(opts) {
+    return (await ipcRenderer.invoke(HOME_CHANNELS.probeAiHub, opts)) as {
+      ok: boolean
+      message: string
+      balanceText?: string
+      modelCount?: number
+    }
+  },
+  async exportLessonPack(projectId) {
+    return (await ipcRenderer.invoke(HOME_CHANNELS.exportLessonPack, projectId)) as {
+      ok: boolean
+      path?: string
+      error?: string
+      canceled?: boolean
+    }
+  },
   async newDoc(opts) {
     await ipcRenderer.invoke(HOME_CHANNELS.newDoc, opts)
   },

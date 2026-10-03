@@ -97,7 +97,21 @@ export interface HomeApi {
   /** open a sheets window */
   newSheet(opts?: { projectId?: string }): Promise<void>
   /** open a slides tab at its start screen (open-a-pptx) */
-  newSlide(opts?: { projectId?: string }): Promise<void>
+  newSlide(opts?: NewSlideOptions): Promise<void>
+  /** Probe OpenAI-compatible Hub (models + optional balance hints) */
+  probeAiHub(opts: { baseUrl: string; apiKey: string }): Promise<{
+    ok: boolean
+    message: string
+    balanceText?: string
+    modelCount?: number
+  }>
+  /** Zip an education lesson pack (files + README + meta.json) */
+  exportLessonPack(projectId: string): Promise<{
+    ok: boolean
+    path?: string
+    error?: string
+    canceled?: boolean
+  }>
   /** open a blank markdown editor tab */
   newMarkdown(opts?: { projectId?: string }): Promise<void>
   /** open a blank html editor tab */
@@ -308,10 +322,23 @@ export interface CreateEducationProjectArgs {
   objectives?: string[]
 }
 
+export interface HomeAiPreset {
+  text: string
+  autoRun?: boolean
+  displayText?: string
+}
+
 export interface NewDocOptions {
   projectId?: string
   /** Seed a blank Docs tab with HTML (education templates) */
   aiContent?: { title: string; html: string }
+  /** Queue an AI panel preset (Teacher workflows auto-run) */
+  aiPreset?: HomeAiPreset
+}
+
+export interface NewSlideOptions {
+  projectId?: string
+  aiPreset?: HomeAiPreset
 }
 
 export interface TimelineEntryItem {
@@ -395,6 +422,8 @@ export const HOME_CHANNELS = {
   cloudProjects: 'home:cloud-projects',
   cloudProjectsCached: 'home:cloud-projects-cached',
   openCloudProject: 'home:open-cloud-project',
+  probeAiHub: 'home:probe-ai-hub',
+  exportLessonPack: 'home:export-lesson-pack',
 } as const
 
 export const PROJECT_CHANNELS = {

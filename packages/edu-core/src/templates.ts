@@ -34,28 +34,43 @@ export function eduTemplateHtml(templateId: EduTemplateId, meta: EduMeta): strin
     case 'giao-an':
       return `
         <h1>GIÁO ÁN</h1>
+        <p><em>Theo định hướng Chương trình GDPT 2018 — khung soạn trên máy, không bắt buộc dùng AI.</em></p>
         ${metaBlock(meta)}
         <h2>I. Mục tiêu</h2>
-        <p>Kiến thức:</p>
-        <p>Năng lực:</p>
-        <p>Phẩm chất:</p>
-        <h2>II. Đồ dùng dạy học</h2>
-        <p></p>
+        <h3>1. Kiến thức</h3>
+        <ul><li></li><li></li></ul>
+        <h3>2. Năng lực</h3>
+        <ul><li>Năng lực chung:</li><li>Năng lực đặc thù:</li></ul>
+        <h3>3. Phẩm chất</h3>
+        <ul><li></li></ul>
+        <h2>II. Thiết bị / học liệu</h2>
+        <p>Giáo viên:</p>
+        <p>Học sinh:</p>
         <h2>III. Tiến trình dạy học</h2>
-        <h3>1. Khởi động</h3>
-        <p></p>
-        <h3>2. Hình thành kiến thức</h3>
-        <p></p>
+        <h3>1. Khởi động (≈ 5 phút)</h3>
+        <p><strong>Mục tiêu hoạt động:</strong></p>
+        <p><strong>Tổ chức:</strong></p>
+        <p><strong>Sản phẩm:</strong></p>
+        <h3>2. Hình thành kiến thức mới</h3>
+        <p><strong>Mục tiêu hoạt động:</strong></p>
+        <p><strong>Tổ chức:</strong></p>
+        <p><strong>Sản phẩm:</strong></p>
         <h3>3. Luyện tập</h3>
-        <p></p>
-        <h3>4. Vận dụng / củng cố</h3>
-        <p></p>
-        <h2>IV. Điều chỉnh / ghi chú sau tiết</h2>
-        <p></p>
+        <p><strong>Mục tiêu hoạt động:</strong></p>
+        <p><strong>Tổ chức:</strong></p>
+        <p><strong>Sản phẩm:</strong></p>
+        <h3>4. Vận dụng / củng cố / dặn dò</h3>
+        <p><strong>Mục tiêu hoạt động:</strong></p>
+        <p><strong>Tổ chức:</strong></p>
+        <p><strong>Sản phẩm:</strong></p>
+        <h2>IV. Điều chỉnh sau tiết</h2>
+        <p>Nội dung cần bổ sung:</p>
+        <p>Học sinh cần hỗ trợ thêm:</p>
       `.trim()
     case 'khdh':
       return `
         <h1>KẾ HOẠCH BÀI DẠY</h1>
+        <p><em>Khung hoạt động — có thể nộp / mang đi dạy trực tiếp.</em></p>
         ${metaBlock(meta)}
         <h2>1. Yêu cầu cần đạt</h2>
         <p></p>
@@ -65,10 +80,10 @@ export function eduTemplateHtml(templateId: EduTemplateId, meta: EduMeta): strin
         <table>
           <thead><tr><th>Hoạt động</th><th>Thời gian</th><th>Tổ chức</th><th>Sản phẩm</th></tr></thead>
           <tbody>
-            <tr><td>Khởi động</td><td></td><td></td><td></td></tr>
-            <tr><td>Khám phá</td><td></td><td></td><td></td></tr>
+            <tr><td>Khởi động</td><td>5'</td><td></td><td></td></tr>
+            <tr><td>Khám phá / hình thành KT</td><td></td><td></td><td></td></tr>
             <tr><td>Luyện tập</td><td></td><td></td><td></td></tr>
-            <tr><td>Vận dụng</td><td></td><td></td><td></td></tr>
+            <tr><td>Vận dụng / củng cố</td><td></td><td></td><td></td></tr>
           </tbody>
         </table>
         <h2>4. Điều chỉnh</h2>
@@ -78,6 +93,7 @@ export function eduTemplateHtml(templateId: EduTemplateId, meta: EduMeta): strin
       return `
         <h1>PHIẾU HỌC TẬP</h1>
         ${metaBlock(meta)}
+        <p><strong>Họ và tên:</strong> ........................ &nbsp;&nbsp; <strong>Lớp:</strong> ........</p>
         <h2>Phần A — Nhận biết / thông hiểu</h2>
         <ol>
           <li></li>
@@ -93,6 +109,11 @@ export function eduTemplateHtml(templateId: EduTemplateId, meta: EduMeta): strin
         <ol>
           <li></li>
         </ol>
+        <h2>Đáp án gợi ý (giáo viên)</h2>
+        <p><em>Phần này có thể ẩn khi in cho học sinh.</em></p>
+        <p>A:</p>
+        <p>B:</p>
+        <p>C:</p>
       `.trim()
     case 'slide':
     case 'ppct':

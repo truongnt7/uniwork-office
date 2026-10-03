@@ -45,6 +45,8 @@ export function eduWorkflowPrompt(workflowId: EduWorkflowId, meta: EduMeta): str
         'Thông tin bài:',
         ctx,
       ].join('\n')
+    case 'lesson-chain-templates':
+      return ''
   }
 }
 

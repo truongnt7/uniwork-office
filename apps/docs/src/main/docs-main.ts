@@ -106,6 +106,7 @@ import {
 } from '@genoffice/ai-search'
 import type {
   AiDocContent,
+  AiPresetPayload,
   AttachmentAddResult,
   AttachmentImageResult,
   AttachmentMeta,
@@ -2153,6 +2154,13 @@ export function queueDocsAiContent(wcId: number, content: AiDocContent): void {
   pendingAiDocContents.set(wcId, content)
 }
 
+/** Teacher / Home AI preset waiting for this docs tab */
+const pendingAiPresets = new Map<number, AiPresetPayload>()
+
+export function queueDocsAiPreset(wcId: number, preset: AiPresetPayload): void {
+  pendingAiPresets.set(wcId, preset)
+}
+
 /** the single real BrowserWindow hosting the tab strip, used as dialog parent in tab mode */
 let docsShellWindow: BrowserWindow | null = null
 export function setDocsShellWindow(win: BrowserWindow | null): void {
@@ -3406,6 +3414,12 @@ export function registerDocsIpc(): void {
     const content = pendingAiDocContents.get(event.sender.id) ?? null
     pendingAiDocContents.delete(event.sender.id)
     return content
+  })
+
+  ipcMain.handle('docs:consume-ai-preset', (event): AiPresetPayload | null => {
+    const preset = pendingAiPresets.get(event.sender.id) ?? null
+    pendingAiPresets.delete(event.sender.id)
+    return preset
   })
 
   // ---- headless export mode (--headless-export) ----

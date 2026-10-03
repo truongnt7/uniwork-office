@@ -566,9 +566,9 @@ export function App() {
   /** a phased open is still streaming the document tail: editor stays read-only */
   const [docLoading, setDocLoading] = useState(false)
   /** true until the pending-open / new-blank boot checks settle; the start screen stays hidden meanwhile */
-  const bootPendingRef = useRef<Promise<[OpenDocxResult, boolean, AiDocContent | null]> | null>(
-    null,
-  )
+  const bootPendingRef = useRef<Promise<
+    [OpenDocxResult, boolean, AiDocContent | null, { text: string; autoRun?: boolean } | null]
+  > | null>(null)
   const bootHandledRef = useRef(false)
   /** password prompt for an ECMA-376 encrypted docx; submit retries via openDocxDecrypt */
   const [docPwdPrompt, setDocPwdPrompt] = useState<{
@@ -1704,9 +1704,10 @@ export function App() {
       // Still consume the one-shot new-blank flag so it doesn't leak into the next open
       window.desktop.consumeNewBlankDoc(),
       window.desktop.consumeAiDocContent(),
+      window.desktop.consumeAiPreset(),
     ])
     void bootPendingRef.current
-      .then(async ([pending, , aiContent]) => {
+      .then(async ([pending, , aiContent, aiPresetQueued]) => {
         if (bootHandledRef.current) return
         bootHandledRef.current = true
         // A failed open (corrupt file etc.) falls back to a blank document —
@@ -1721,6 +1722,17 @@ export function App() {
             await new Promise((resolve) => setTimeout(resolve, 20))
           }
           await applyAiDocContentImpl(fileCtxRef.current, aiContent)
+        }
+        if (aiPresetQueued?.text) {
+          setShowAi(true)
+          localStorage.setItem('aidocs.showAi', '1')
+          // Let the seeded outline settle before the panel auto-sends
+          await new Promise((resolve) => setTimeout(resolve, 120))
+          setAiPreset({
+            text: aiPresetQueued.text,
+            nonce: Date.now(),
+            autoRun: aiPresetQueued.autoRun !== false,
+          })
         }
       })
       // Open failures also land on a blank document, or the tab stays at "Opening…" forever

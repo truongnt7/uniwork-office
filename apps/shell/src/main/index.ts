@@ -63,6 +63,7 @@ import { readAppSettings, writeAppSetting, writeAppSettings } from './app-settin
 import { OPEN_DOCUMENTS_FILE, clearOpenDocuments, publishOpenDocuments } from './open-documents'
 import { installCliLinkBestEffort } from './cli-link'
 import { registerIntegrationsIpc } from './integrations-ipc'
+import { exportLessonPackZip, probeAiHub } from './edu-commercial'
 import {
   ANALYTICS_ENABLED_KEY,
   analyticsEnabledFrom,
@@ -3025,16 +3026,57 @@ function registerHomeIpc(): void {
   })
 
   ipcMain.handle(
+    HOME_CHANNELS.probeAiHub,
+    (_event, opts?: { baseUrl?: string; apiKey?: string }) =>
+      probeAiHub(
+        typeof opts?.baseUrl === 'string' ? opts.baseUrl : '',
+        typeof opts?.apiKey === 'string' ? opts.apiKey : '',
+      ),
+  )
+
+  ipcMain.handle(HOME_CHANNELS.exportLessonPack, async (event, projectId: unknown) => {
+    if (typeof projectId !== 'string' || !projectId) {
+      return { ok: false, error: 'Invalid project id.' }
+    }
+    const win = BrowserWindow.fromWebContents(event.sender) ?? shellWindow
+    return exportLessonPackZip({
+      userDataPath: app.getPath('userData'),
+      projectId,
+      parent: win,
+    })
+  })
+
+  ipcMain.handle(
     HOME_CHANNELS.newDoc,
-    (_event, opts?: { projectId?: string; aiContent?: { title: string; html: string } }) => {
+    (
+      _event,
+      opts?: {
+        projectId?: string
+        aiContent?: { title: string; html: string }
+        aiPreset?: { text: string; autoRun?: boolean; displayText?: string }
+      },
+    ) => {
       if (opts?.projectId && opts.projectId !== 'default') {
         pendingNewFileProject.set('doc', opts.projectId)
       }
+      const preset =
+        opts?.aiPreset?.text
+          ? {
+              text: opts.aiPreset.text,
+              autoRun: opts.aiPreset.autoRun !== false,
+              ...(opts.aiPreset.displayText ? { displayText: opts.aiPreset.displayText } : {}),
+            }
+          : undefined
       if (opts?.aiContent?.title && opts.aiContent.html) {
         tabManager?.openDocsTab(undefined, {
           newBlank: true,
           aiContent: { title: opts.aiContent.title, html: opts.aiContent.html },
+          ...(preset ? { aiPreset: preset } : {}),
         })
+        return
+      }
+      if (preset) {
+        tabManager?.openDocsTab(undefined, { newBlank: true, aiPreset: preset })
         return
       }
       newDocTab()
@@ -3048,12 +3090,31 @@ function registerHomeIpc(): void {
     void newSheetTab()
   })
 
-  ipcMain.handle(HOME_CHANNELS.newSlide, (_event, opts?: { projectId?: string }) => {
-    if (opts?.projectId && opts.projectId !== 'default') {
-      pendingNewFileProject.set('slide', opts.projectId)
-    }
-    newSlideTab()
-  })
+  ipcMain.handle(
+    HOME_CHANNELS.newSlide,
+    (
+      _event,
+      opts?: {
+        projectId?: string
+        aiPreset?: { text: string; autoRun?: boolean; displayText?: string }
+      },
+    ) => {
+      if (opts?.projectId && opts.projectId !== 'default') {
+        pendingNewFileProject.set('slide', opts.projectId)
+      }
+      if (opts?.aiPreset?.text) {
+        tabManager?.openSlidesTab(undefined, {
+          aiPreset: {
+            text: opts.aiPreset.text,
+            autoRun: opts.aiPreset.autoRun !== false,
+            ...(opts.aiPreset.displayText ? { displayText: opts.aiPreset.displayText } : {}),
+          },
+        })
+        return
+      }
+      newSlideTab()
+    },
+  )
 
   ipcMain.handle(HOME_CHANNELS.newMarkdown, (_event, opts?: { projectId?: string }) => {
     if (opts?.projectId && opts.projectId !== 'default') {

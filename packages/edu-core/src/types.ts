@@ -28,7 +28,12 @@ export type EduTemplateId =
   | 'phieu-hoc-tap'
   | 'ppct'
 
-export type EduWorkflowId = 'draft-lesson-plan' | 'slides-from-plan' | 'worksheet-from-plan'
+export type EduWorkflowId =
+  | 'draft-lesson-plan'
+  | 'slides-from-plan'
+  | 'worksheet-from-plan'
+  /** Free (no AI): open giáo án + slide + phiếu seeds in order */
+  | 'lesson-chain-templates'
 
 export interface EduTemplateDef {
   id: EduTemplateId

@@ -1895,6 +1895,24 @@ body.vib .home {
   padding-bottom: 48px;
 }
 
+.teacher-hub {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 20px;
+}
+
+.teacher-hub h2 {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.teacher-hub .teacher-form {
+  margin-top: 12px;
+}
+
 .teacher-title {
   margin: 0 0 8px;
   font-size: 28px;
@@ -1985,6 +2003,10 @@ body.vib .home {
   color: var(--danger);
   margin: 0 0 10px;
   font-size: 13px;
+}
+
+.teacher-error-inline {
+  color: var(--danger);
 }
 
 .teacher-empty {

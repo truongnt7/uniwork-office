@@ -1150,11 +1150,25 @@ export function App() {
     const off = window.slidesApi.onOpened((r) => applyOpen(r))
     consumePendingRef.current ??= window.slidesApi.consumePendingOpen(FIT_WIDTH)
     void consumePendingRef.current
-      .then((r) => {
+      .then(async (r) => {
         if (bootHandledRef.current) return
         bootHandledRef.current = true
         if (r) applyOpen(r)
-        else void bootBlank()
+        else await bootBlank()
+        const preset = await window.slidesApi.consumeAiPreset()
+        if (preset?.text) {
+          setShowAi(() => {
+            localStorage.setItem('ai-slides-show-ai', '1')
+            return true
+          })
+          await new Promise((resolve) => setTimeout(resolve, 120))
+          setAiPreset({
+            text: preset.text,
+            nonce: Date.now(),
+            autoRun: preset.autoRun !== false,
+            ...(preset.displayText ? { displayText: preset.displayText } : {}),
+          })
+        }
       })
       // Open failures (corrupt file etc.) also land on a blank deck, or it stays at "Opening…" forever
       .catch(() => {

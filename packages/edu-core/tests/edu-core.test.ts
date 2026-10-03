@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   createEduMeta,
+  eduPackReadme,
   eduTemplateHtml,
   eduWorkflowPrompt,
+  extractHubBalanceHint,
+  hubModelsUrl,
   isEduMeta,
+  looksLikeAiCreditError,
+  normalizeHubBaseUrl,
   packDisplayName,
 } from '../src/index.js'
 
@@ -42,5 +47,18 @@ describe('edu-core', () => {
     expect(eduWorkflowPrompt('draft-lesson-plan', meta)).toContain('giáo án')
     expect(eduWorkflowPrompt('slides-from-plan', meta)).toContain('slide')
     expect(eduWorkflowPrompt('worksheet-from-plan', meta)).toContain('phiếu')
+  })
+
+  it('builds pack readme and hub helpers', () => {
+    const meta = createEduMeta({
+      subject: 'Toán',
+      grade: 'Lớp 6',
+      lessonTitle: 'Phân số',
+    })
+    expect(eduPackReadme(meta, ['giao-an.docx'])).toContain('Phân số')
+    expect(normalizeHubBaseUrl('https://hub.example')).toBe('https://hub.example/v1')
+    expect(hubModelsUrl('https://hub.example/v1')).toBe('https://hub.example/v1/models')
+    expect(extractHubBalanceHint({ balance: 12.5 })).toBe('12.5')
+    expect(looksLikeAiCreditError('Your credits have been exhausted')).toBe(true)
   })
 })

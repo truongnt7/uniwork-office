@@ -190,6 +190,14 @@ export interface AiDocContent {
   html: string
 }
 
+/** One-shot AI panel preset queued when opening a docs tab from Home / Teacher mode */
+export interface AiPresetPayload {
+  text: string
+  /** default true — send immediately once the panel mounts */
+  autoRun?: boolean
+  displayText?: string
+}
+
 export type ZoteroCommand =
   'addEditCitation' | 'addEditBibliography' | 'refresh' | 'setDocPrefs' | 'removeCodes'
 
@@ -260,6 +268,8 @@ export interface DesktopApi {
   consumeNewBlankDoc(): Promise<boolean>
   /** AI-authored content queued for this tab by create_document; one-shot, null when none */
   consumeAiDocContent(): Promise<AiDocContent | null>
+  /** one-shot Teacher / Home AI preset for this tab */
+  consumeAiPreset(): Promise<AiPresetPayload | null>
   /** Headless export mode: the path and format this hidden renderer must export, null in normal use */
   consumeHeadlessExport(): Promise<HeadlessExportTarget | null>
   /** Headless export mode: report the export outcome so the main process can quit */

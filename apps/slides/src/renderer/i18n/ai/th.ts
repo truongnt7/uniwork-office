@@ -18,7 +18,7 @@ export const th = {
   aiQcStopped: 'หยุดการตรวจสอบเลย์เอาต์แล้ว',
   aiQcCapped: 'อีก {count} หน้าไม่ได้ตรวจสอบ (ขีดจำกัดต่อครั้ง)',
   aiGskLoginBtn: 'ลงชื่อเข้าใช้ Genspark',
-  aiPanelTitle: 'AI',
+  aiPanelTitle: 'uniAI',
   aiOpenAssistant: 'เปิดผู้ช่วย AI',
   aiFactCheckBtn: 'ตรวจสอบข้อเท็จจริง AI',
   aiFactCheckPrompt:

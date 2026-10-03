@@ -616,12 +616,12 @@ export function AiPanel({
         onPointerDown={startResize}
         role="separator"
         aria-orientation="vertical"
-        aria-label="Genspark"
+        aria-label="uniAI"
       />
       <header className="ai-panel-header">
         <span className="ai-panel-title">
           <GensparkMark size={22} />
-          Genspark
+          uniAI
         </span>
         <div className="ai-panel-header-actions">
           {chat.length > 0 && (

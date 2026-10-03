@@ -363,6 +363,15 @@ const projectApi: ProjectHomeApi = {
     const result: unknown = await ipcRenderer.invoke(PROJECT_CHANNELS.create, { name })
     return result as ProjectSummaryEntry
   },
+  async createEducationProject(args) {
+    const result: unknown = await ipcRenderer.invoke(PROJECT_CHANNELS.createEducation, args)
+    return result as ProjectSummaryEntry
+  },
+  async getEduMeta(projectId) {
+    const result: unknown = await ipcRenderer.invoke(PROJECT_CHANNELS.getEduMeta, { projectId })
+    if (!result || typeof result !== 'object') return null
+    return result as NonNullable<ProjectSummaryEntry['edu']>
+  },
   async renameProject(id, name) {
     await ipcRenderer.invoke(PROJECT_CHANNELS.rename, { id, name })
   },

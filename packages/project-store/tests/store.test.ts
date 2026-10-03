@@ -897,3 +897,41 @@ function mkdirSyncHelper(p: string): void {
     /* ignore */
   }
 }
+
+// ────────────────────────────────────────────────────────────
+// Education lesson packs
+// ────────────────────────────────────────────────────────────
+
+describe('createEducationProject', () => {
+  let tmpDir: string
+  let store: ProjectStore
+
+  beforeEach(() => {
+    tmpDir = makeTempDir()
+    store = new ProjectStore(tmpDir)
+  })
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true })
+  })
+
+  it('writes edu/meta.json and surfaces kind+edu on summary', () => {
+    const meta = {
+      version: 1 as const,
+      kind: 'education' as const,
+      subject: 'Toán',
+      grade: 'Lớp 6',
+      week: 'Tuần 12',
+      lessonTitle: 'Phân số',
+      objectives: ['Nhận biết phân số'],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    }
+    const data = store.createEducationProject('Toán · Lớp 6 · Phân số', meta)
+    expect(data.kind).toBe('education')
+    expect(store.getEduMeta(data.id)?.lessonTitle).toBe('Phân số')
+    const summary = store.listProjectsSummary().find((p) => p.id === data.id)
+    expect(summary?.kind).toBe('education')
+    expect(summary?.edu?.subject).toBe('Toán')
+  })
+})

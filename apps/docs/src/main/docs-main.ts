@@ -3194,6 +3194,51 @@ export function registerProjectIpc(): void {
     return store.listProjectsSummary().find((s) => s.id === data.id) ?? data
   })
 
+  /** Create a teacher lesson pack */
+  ipcMain.handle(
+    'project:createEducation',
+    (
+      _event,
+      args: {
+        subject: string
+        grade: string
+        week?: string
+        lessonTitle: string
+        durationMinutes?: number
+        objectives?: string[]
+      },
+    ) => {
+      const store = getProjectStore()
+      const now = new Date().toISOString()
+      const subject = (args.subject ?? '').trim()
+      const grade = (args.grade ?? '').trim()
+      const lessonTitle = (args.lessonTitle ?? '').trim()
+      if (!subject || !grade || !lessonTitle) {
+        throw new Error('subject, grade, and lessonTitle are required')
+      }
+      const name = [subject, grade, lessonTitle].join(' · ')
+      const data = store.createEducationProject(name, {
+        version: 1,
+        kind: 'education',
+        subject,
+        grade,
+        ...(args.week?.trim() ? { week: args.week.trim() } : {}),
+        lessonTitle,
+        ...(typeof args.durationMinutes === 'number'
+          ? { durationMinutes: args.durationMinutes }
+          : {}),
+        objectives: (args.objectives ?? []).map((o) => o.trim()).filter(Boolean),
+        createdAt: now,
+        updatedAt: now,
+      })
+      return store.listProjectsSummary().find((s) => s.id === data.id) ?? data
+    },
+  )
+
+  ipcMain.handle('project:getEduMeta', (_event, args: { projectId: string }) => {
+    return getProjectStore().getEduMeta(args.projectId)
+  })
+
   /** Rename a project */
   ipcMain.handle('project:rename', (_event, args: { id: string; name: string }) => {
     getProjectStore().renameProject(args.id, args.name)

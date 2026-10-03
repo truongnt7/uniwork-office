@@ -31,6 +31,7 @@ import { basename, dirname, join } from 'node:path'
 import type {
   ChatMeta,
   ChatMessage,
+  EduProjectMeta,
   ProjectData,
   ProjectIndex,
   ProjectInfo,
@@ -111,6 +112,10 @@ export class ProjectStore {
 
   private chatPath(projectId: string, chatId: string): string {
     return join(this.chatsDir(projectId), `${chatId}.jsonl`)
+  }
+
+  private eduMetaPath(projectId: string): string {
+    return join(this.projectDir(projectId), 'edu', 'meta.json')
   }
 
   // ── seq counters (in-memory cache, initialized from JSONL line count on first read) ──
@@ -514,13 +519,40 @@ export class ProjectStore {
       for (const c of chats) {
         if (c.updatedAt > lastActiveAt) lastActiveAt = c.updatedAt
       }
+      const edu = this.getEduMeta(info.id) ?? undefined
+      const kind = info.kind ?? edu?.kind
       return {
         ...info,
+        ...(kind ? { kind } : {}),
         fileCount,
         lastActiveAt,
         isDefault: info.id === 'default',
+        ...(edu ? { edu } : {}),
       }
     })
+  }
+
+  getEduMeta(projectId: string): EduProjectMeta | null {
+    const raw = readJson<EduProjectMeta>(this.eduMetaPath(projectId))
+    if (!raw || raw.kind !== 'education') return null
+    return raw
+  }
+
+  setEduMeta(projectId: string, meta: EduProjectMeta): void {
+    const proj = this.readProject(projectId)
+    if (!proj) throw new Error(`Project does not exist: ${projectId}`)
+    writeJson(this.eduMetaPath(projectId), meta)
+    const now = nowIso()
+    const next: ProjectData = { ...proj, kind: 'education', updatedAt: now }
+    this.writeProject(next)
+    const index = this.readIndex()
+    const entry = index.projects.find((p) => p.id === projectId)
+    if (entry) {
+      entry.kind = 'education'
+      entry.updatedAt = now
+      entry.name = proj.name
+      this.writeIndex(index)
+    }
   }
 
   /**
@@ -562,6 +594,22 @@ export class ProjectStore {
     index.projects.push({ id, name: trimmed, createdAt: now, updatedAt: now })
     this.writeIndex(index)
     return data
+  }
+
+  /**
+   * Creates a teacher lesson pack: regular project + kind=education + edu/meta.json.
+   */
+  createEducationProject(name: string, meta: EduProjectMeta): ProjectData {
+    const data = this.createProject(name)
+    const stamped: EduProjectMeta = {
+      ...meta,
+      version: 1,
+      kind: 'education',
+      createdAt: meta.createdAt || data.createdAt,
+      updatedAt: data.updatedAt,
+    }
+    this.setEduMeta(data.id, stamped)
+    return this.readProject(data.id) ?? { ...data, kind: 'education' }
   }
 
   /**

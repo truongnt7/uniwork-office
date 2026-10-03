@@ -23,6 +23,7 @@ import { useI18n } from './locale'
 import type { I18n, StringKey } from './locale'
 import { SettingsModal } from './SettingsModal'
 import { skillUpdateDue } from './IntegrationsPane'
+import { TeacherHome } from './TeacherHome'
 
 declare global {
   interface Window {
@@ -1162,6 +1163,9 @@ export function Home() {
   const [view, setView] = useState<'recent' | 'starred'>('recent')
   // Genspark web projects take over the content area (like a selected project)
   const [cloudMode, setCloudMode] = useState(false)
+  // Teacher lesson-pack gallery (education projects)
+  const [eduMode, setEduMode] = useState(false)
+  const [eduSelectedId, setEduSelectedId] = useState<string | null>(null)
   const [filter, setFilter] = useState('all')
   // modified-column sort (WPS-style header popover), shared by the global and project tables
   const [fileSort, setFileSort] = useState<'recent' | 'oldest'>('recent')
@@ -2142,11 +2146,12 @@ export function Home() {
 
         <nav className="sidebar-nav">
           <button
-            className={`nav-item${view === 'recent' && !selectedProjectId && !cloudMode ? ' active' : ''}`}
+            className={`nav-item${view === 'recent' && !selectedProjectId && !cloudMode && !eduMode ? ' active' : ''}`}
             onClick={() => {
               changeView('recent')
               setSelectedProjectId(null)
               setCloudMode(false)
+              setEduMode(false)
             }}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -2162,11 +2167,12 @@ export function Home() {
             <span className="nav-count">{navCounts.recent}</span>
           </button>
           <button
-            className={`nav-item${view === 'starred' && !selectedProjectId && !cloudMode ? ' active' : ''}`}
+            className={`nav-item${view === 'starred' && !selectedProjectId && !cloudMode && !eduMode ? ' active' : ''}`}
             onClick={() => {
               changeView('starred')
               setSelectedProjectId(null)
               setCloudMode(false)
+              setEduMode(false)
             }}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -2180,11 +2186,34 @@ export function Home() {
             <span className="nav-label">{t('navStarred')}</span>
             <span className="nav-count">{navCounts.starred}</span>
           </button>
+          {projectMode && (
+            <button
+              className={`nav-item${eduMode && !selectedProjectId ? ' active' : ''}`}
+              onClick={() => {
+                setEduMode(true)
+                setCloudMode(false)
+                setSelectedProjectId(null)
+                setSelected(new Set())
+                setRowMenu(null)
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path
+                  d="M3 3.5h10v9H3zM6 3.5V12.5M3 7h10"
+                  stroke="currentColor"
+                  strokeWidth="1.3"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span className="nav-label">{t('navTeacher')}</span>
+            </button>
+          )}
           {loggedIn && (
             <button
-              className={`nav-item${cloudMode && !selectedProjectId ? ' active' : ''}`}
+              className={`nav-item${cloudMode && !selectedProjectId && !eduMode ? ' active' : ''}`}
               onClick={() => {
                 setCloudMode(true)
+                setEduMode(false)
                 setSelectedProjectId(null)
                 setSelected(new Set())
                 setRowMenu(null)
@@ -2228,6 +2257,7 @@ export function Home() {
               selectedId={selectedProjectId}
               onSelect={(id) => {
                 setSelectedProjectId(id)
+                setEduMode(false)
                 // reset list-selection state on any project switch (paths are
                 // shared between the plain view and project views)
                 setSelected(new Set())
@@ -2243,6 +2273,19 @@ export function Home() {
 
       {selectedProjectId ? (
         renderProjectContent()
+      ) : eduMode ? (
+        <TeacherHome
+          projects={projects}
+          selectedId={eduSelectedId}
+          onSelectPack={setEduSelectedId}
+          onOpenPackFiles={(id) => {
+            setEduMode(false)
+            setSelectedProjectId(id)
+            setSelected(new Set())
+            setRowMenu(null)
+          }}
+          onRefresh={refresh}
+        />
       ) : cloudMode ? (
         <CloudProjectsView />
       ) : (

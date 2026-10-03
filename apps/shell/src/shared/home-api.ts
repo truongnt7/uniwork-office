@@ -92,8 +92,8 @@ export interface HomeApi {
   openPath(path: string): Promise<void>
   /** file picker accepting every supported extension, then routes */
   browse(): Promise<void>
-  /** open a docs window at its start screen */
-  newDoc(opts?: { projectId?: string }): Promise<void>
+  /** open a docs window at its start screen (optional HTML seed for teacher templates) */
+  newDoc(opts?: NewDocOptions): Promise<void>
   /** open a sheets window */
   newSheet(opts?: { projectId?: string }): Promise<void>
   /** open a slides tab at its start screen (open-a-pptx) */
@@ -273,6 +273,20 @@ export interface RenameResult {
 
 // ── Project-related APIs (P1) ────────────────────────────────
 
+/** Teacher lesson-pack metadata mirrored from project-store edu/meta.json */
+export interface EduProjectMetaEntry {
+  version: 1
+  kind: 'education'
+  subject: string
+  grade: string
+  week?: string
+  lessonTitle: string
+  durationMinutes?: number
+  objectives: string[]
+  createdAt: string
+  updatedAt: string
+}
+
 export interface ProjectSummaryEntry {
   id: string
   name: string
@@ -281,6 +295,23 @@ export interface ProjectSummaryEntry {
   fileCount: number
   lastActiveAt: string
   isDefault: boolean
+  kind?: 'education'
+  edu?: EduProjectMetaEntry
+}
+
+export interface CreateEducationProjectArgs {
+  subject: string
+  grade: string
+  week?: string
+  lessonTitle: string
+  durationMinutes?: number
+  objectives?: string[]
+}
+
+export interface NewDocOptions {
+  projectId?: string
+  /** Seed a blank Docs tab with HTML (education templates) */
+  aiContent?: { title: string; html: string }
 }
 
 export interface TimelineEntryItem {
@@ -300,6 +331,10 @@ export interface ProjectHomeApi {
   listFiles(projectId: string): Promise<string[]>
   /** create a project */
   createProject(name: string): Promise<ProjectSummaryEntry>
+  /** create a teacher lesson pack with edu/meta.json */
+  createEducationProject(args: CreateEducationProjectArgs): Promise<ProjectSummaryEntry>
+  /** read education metadata for a project */
+  getEduMeta(projectId: string): Promise<EduProjectMetaEntry | null>
   /** rename a project */
   renameProject(id: string, name: string): Promise<void>
   /** soft-delete a project */
@@ -366,6 +401,8 @@ export const PROJECT_CHANNELS = {
   list: 'project:list',
   files: 'project:files',
   create: 'project:create',
+  createEducation: 'project:createEducation',
+  getEduMeta: 'project:getEduMeta',
   rename: 'project:rename',
   delete: 'project:delete',
   moveFile: 'project:moveFile',

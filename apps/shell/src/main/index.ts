@@ -3024,12 +3024,22 @@ function registerHomeIpc(): void {
     if (!result.canceled) for (const path of result.filePaths) openDocumentPath(path)
   })
 
-  ipcMain.handle(HOME_CHANNELS.newDoc, (_event, opts?: { projectId?: string }) => {
-    if (opts?.projectId && opts.projectId !== 'default') {
-      pendingNewFileProject.set('doc', opts.projectId)
-    }
-    newDocTab()
-  })
+  ipcMain.handle(
+    HOME_CHANNELS.newDoc,
+    (_event, opts?: { projectId?: string; aiContent?: { title: string; html: string } }) => {
+      if (opts?.projectId && opts.projectId !== 'default') {
+        pendingNewFileProject.set('doc', opts.projectId)
+      }
+      if (opts?.aiContent?.title && opts.aiContent.html) {
+        tabManager?.openDocsTab(undefined, {
+          newBlank: true,
+          aiContent: { title: opts.aiContent.title, html: opts.aiContent.html },
+        })
+        return
+      }
+      newDocTab()
+    },
+  )
 
   ipcMain.handle(HOME_CHANNELS.newSheet, (_event, opts?: { projectId?: string }) => {
     if (opts?.projectId && opts.projectId !== 'default') {

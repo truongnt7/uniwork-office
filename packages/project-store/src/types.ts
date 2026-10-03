@@ -62,11 +62,33 @@ export interface ChatScope {
 // Project & index structures
 // ────────────────────────────────────────────────────────────
 
+/** Optional project classification; omitted/undefined means a generic project. */
+export type ProjectKind = 'education'
+
+/**
+ * Education lesson-pack metadata (projects/<id>/edu/meta.json).
+ * Kept structurally aligned with @uniwork/edu-core EduMeta.
+ */
+export interface EduProjectMeta {
+  version: 1
+  kind: 'education'
+  subject: string
+  grade: string
+  week?: string
+  lessonTitle: string
+  durationMinutes?: number
+  objectives: string[]
+  createdAt: string
+  updatedAt: string
+}
+
 export interface ProjectInfo {
   id: string
   name: string
   createdAt: string
   updatedAt: string
+  /** Set for teacher lesson packs */
+  kind?: ProjectKind
 }
 
 export interface ProjectData extends ProjectInfo {
@@ -108,6 +130,8 @@ export interface ProjectSummary extends ProjectInfo {
   lastActiveAt: string
   /** Whether this is the default project (cannot be deleted/renamed) */
   isDefault: boolean
+  /** Present when kind === 'education' and edu/meta.json exists */
+  edu?: EduProjectMeta
 }
 
 /**

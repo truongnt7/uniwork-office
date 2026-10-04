@@ -1,21 +1,34 @@
+/** Canonical practice ids (profession workbenches on UniOffice). */
+export const PRACTICE_IDS = [
+  'teacher',
+  'legal',
+  'construction',
+  'procurement',
+  'principal',
+  'sales',
+  'customer-care',
+  'entrepreneur',
+  'freelancer',
+  'content-creator',
+  'marketing',
+  'hr',
+  'accounting',
+  'it',
+  'real-estate',
+] as const
+
 /** Stable practice identifiers (profession workbenches on UniOffice). */
-export type PracticeId =
-  | 'teacher'
-  | 'legal'
-  | 'construction'
-  | 'procurement'
-  | 'principal'
+export type PracticeId = (typeof PRACTICE_IDS)[number]
+
+export function isPracticeId(value: unknown): value is PracticeId {
+  return typeof value === 'string' && (PRACTICE_IDS as readonly string[]).includes(value)
+}
 
 /**
  * ProjectStore `kind` for a practice pack.
  * Teacher keeps legacy `education` for backward compatibility.
  */
-export type PracticeProjectKind =
-  | 'education'
-  | 'legal'
-  | 'construction'
-  | 'procurement'
-  | 'principal'
+export type PracticeProjectKind = 'education' | Exclude<PracticeId, 'teacher'>
 
 export type PracticePillarId = 'knowledge' | 'materials' | 'skills' | 'compose'
 

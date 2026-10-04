@@ -4,7 +4,7 @@
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
-  "description": "Multi-profession practice packs for UniWork Office (teacher, legal, construction, procurement, principal)",
+  "description": "Multi-profession practice packs for UniWork Office (education, legal, business, and more)",
   "exports": {
     ".": "./src/index.ts"
   },

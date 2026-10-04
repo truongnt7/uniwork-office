@@ -11,6 +11,7 @@ export type {
   PracticeSkillDef,
   PracticeTemplateDef,
 } from './types.js'
+export { PRACTICE_IDS, isPracticeId } from './types.js'
 export type { PracticeKnowledgeFilter, PracticeKnowledgeItem } from './knowledge.js'
 
 export {
@@ -23,7 +24,14 @@ export {
 export { practiceMatchesFilter } from './knowledge.js'
 export { DEFAULT_PILLARS } from './pillars.js'
 export { practiceMaterialSeedHtml, practiceSkillPrompt } from './seeds.js'
-export { getPractice, listPractices, PRACTICE_REGISTRY, requirePractice } from './registry.js'
+export {
+  getPractice,
+  listPracticeGroups,
+  listPractices,
+  PRACTICE_GROUPS,
+  PRACTICE_REGISTRY,
+  requirePractice,
+} from './registry.js'
 export {
   WORKBENCH_MODULES,
   defaultPinnedModules,

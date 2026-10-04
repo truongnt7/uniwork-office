@@ -345,6 +345,26 @@ const homeApi: HomeApi = {
       ? { ok: true }
       : { ok: false, error: typeof raw.error === 'string' ? raw.error : 'Connection failed' }
   },
+  async aiChat(input) {
+    const settings =
+      input.settings ?? ((await ipcRenderer.invoke('ai:get-settings')) as AiSettings)
+    const result: unknown = await ipcRenderer.invoke('ai:chat', {
+      settings,
+      system: input.system,
+      user: input.user,
+    })
+    const raw = (result ?? {}) as { ok?: unknown; content?: unknown; error?: unknown }
+    if (raw.ok === true) {
+      return {
+        ok: true,
+        ...(typeof raw.content === 'string' ? { content: raw.content } : {}),
+      }
+    }
+    return {
+      ok: false,
+      error: typeof raw.error === 'string' ? raw.error : 'AI request failed',
+    }
+  },
   getAiMediaProviders() {
     return AI_MEDIA_PROVIDERS
   },

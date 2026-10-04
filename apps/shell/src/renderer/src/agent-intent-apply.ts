@@ -13,7 +13,8 @@ import {
   readFinance,
   readGrowth,
   readHealth,
-  readNotes,
+  createEmailDraft,
+  createStickyNote,
   readPinnedModules,
   readTasks,
   writeCalendar,
@@ -21,7 +22,6 @@ import {
   writeFinance,
   writeGrowth,
   writeHealth,
-  writeNotes,
   writeTasks,
 } from './workbench-pins'
 import { pinSkillDomain, writeActiveSkillDomain } from './skill-domain-pins'
@@ -71,10 +71,12 @@ function addItem(
     return { vi: `Đã thêm việc: ${title}`, en: `Added task: ${title}` }
   }
   if (moduleId === 'notes') {
-    const prev = readNotes(practiceId)
-    const next = prev ? `${prev.trim()}\n\n${title}` : title
-    writeNotes(practiceId, next)
-    return { vi: 'Đã ghi vào Notes.', en: 'Appended to notes.' }
+    createStickyNote(practiceId, title)
+    return { vi: 'Đã ghim note mới.', en: 'Pinned a new sticky note.' }
+  }
+  if (moduleId === 'email') {
+    createEmailDraft(practiceId, { subject: title, body: '' })
+    return { vi: `Đã tạo nháp email: ${title}`, en: `Created email draft: ${title}` }
   }
   if (moduleId === 'calendar') {
     writeCalendar(practiceId, [

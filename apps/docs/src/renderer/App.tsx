@@ -914,6 +914,17 @@ export function App() {
   const [showFontDialog, setShowFontDialog] = useState(false)
   const [showParaDialog, setShowParaDialog] = useState(false)
   const [, forceRender] = useReducer((x: number) => x + 1, 0)
+  /** Coalesce ribbon/UI refresh to one rAF — TipTap fires update/selection every keystroke. */
+  const uiRefreshRafRef = useRef(0)
+  const scheduleUiRefresh = useCallback(() => {
+    if (uiRefreshRafRef.current) return
+    uiRefreshRafRef.current = requestAnimationFrame(() => {
+      uiRefreshRafRef.current = 0
+      forceRender()
+    })
+  }, [])
+  /** Last user typing / IME activity — used to idle-gate full pagination remeasure. */
+  const lastTypingAtRef = useRef(0)
   const dirtyRef = useRef(false)
   // serializes save(): overlapping saves (Cmd+S vs autosave timer vs blur) would
   // otherwise race on the write + reparse + setContent sequence
@@ -1168,12 +1179,12 @@ export function App() {
         return false
       },
     },
-    onSelectionUpdate: () => forceRender(),
+    onSelectionUpdate: () => scheduleUiRefresh(),
     // typing in the main document takes ribbon routing back from any textbox
     onFocus: () => setActiveSubEditor(null),
     onUpdate: () => {
       dirtyRef.current = true
-      forceRender()
+      scheduleUiRefresh()
     },
   })
 
@@ -1183,10 +1194,26 @@ export function App() {
     () =>
       subscribeSubEditorState((docChanged) => {
         if (docChanged) dirtyRef.current = true
-        forceRender()
+        scheduleUiRefresh()
       }),
-    [],
+    [scheduleUiRefresh],
   )
+
+  // Track typing/IME so pagination can wait for an idle gap instead of
+  // remeasuring the whole canvas ~300ms after every keystroke.
+  useEffect(() => {
+    const dom = editor?.view?.dom
+    if (!dom) return
+    const markTyping = () => {
+      lastTypingAtRef.current = performance.now()
+    }
+    dom.addEventListener('keydown', markTyping)
+    dom.addEventListener('compositionupdate', markTyping)
+    return () => {
+      dom.removeEventListener('keydown', markTyping)
+      dom.removeEventListener('compositionupdate', markTyping)
+    }
+  }, [editor])
 
   useEffect(() => {
     void window.desktop.getRecentFiles().then(setRecent)
@@ -3992,9 +4019,15 @@ export function App() {
       }
       locate()
     }
-    const onUpdate = () => {
+    // While typing: wait for an idle gap (~1s). Fonts/shrink/view changes keep
+    // the shorter 300ms path so layout still catches up promptly when idle.
+    const onUpdate = (opts?: { fromTyping?: boolean }) => {
       if (timer) window.clearTimeout(timer)
-      timer = window.setTimeout(remeasure, 300)
+      const composing = Boolean(editor?.view.composing)
+      const typedRecently = performance.now() - lastTypingAtRef.current < 900
+      const delay =
+        opts?.fromTyping || composing || typedRecently ? 1000 : 300
+      timer = window.setTimeout(remeasure, delay)
     }
     remeasure()
     // async @font-face loading triggers a full reflow (line-break points change); pagination
@@ -4019,7 +4052,7 @@ export function App() {
     scroller.addEventListener('scroll', locate, { passive: true })
     const onDocUpdate = () => {
       resetWidthPassHistory(colWidthPass)
-      onUpdate()
+      onUpdate({ fromTyping: true })
     }
     editor?.on('update', onDocUpdate)
     // justify-shrink re-decides via decoration-only transactions that move the
@@ -4963,11 +4996,18 @@ export function App() {
   const [histState, setHistState] = useState({ canUndo: false, canRedo: false })
   useEffect(() => {
     if (!editor) return
-    const refresh = () =>
-      setHistState({ canUndo: editor.can().undo(), canRedo: editor.can().redo() })
+    let raf = 0
+    const refresh = () => {
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        setHistState({ canUndo: editor.can().undo(), canRedo: editor.can().redo() })
+      })
+    }
     refresh()
     editor.on('transaction', refresh)
     return () => {
+      if (raf) cancelAnimationFrame(raf)
       editor.off('transaction', refresh)
     }
   }, [editor])

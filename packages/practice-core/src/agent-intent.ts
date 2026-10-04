@@ -96,6 +96,7 @@ const MODULE_KEYWORDS: readonly { id: WorkbenchModuleId; keys: readonly string[]
   { id: 'calendar', keys: ['lịch', 'calendar', 'hẹn', 'deadline', 'cuộc họp'] },
   { id: 'tasks', keys: ['công việc', 'tasks', 'todo', 'việc cần', 'to-do', 'task'] },
   { id: 'notes', keys: ['ghi chú', 'notes', 'note', 'nháp'] },
+  { id: 'email', keys: ['email', 'e-mail', 'thư', 'mail', 'hộp thư', 'inbox'] },
   { id: 'assistant', keys: ['trợ lý', 'assistant', 'ai assistant'] },
   { id: 'forms', keys: ['biểu mẫu', 'forms', 'form', 'mẫu giấy'] },
   { id: 'personal', keys: ['hồ sơ', 'personal', 'cá nhân profile'] },
@@ -263,6 +264,7 @@ export function moduleSupportsAddItem(id: WorkbenchModuleId): boolean {
   return (
     id === 'tasks' ||
     id === 'notes' ||
+    id === 'email' ||
     id === 'calendar' ||
     id === 'events' ||
     id === 'personal-finance' ||

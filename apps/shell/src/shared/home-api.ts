@@ -217,6 +217,8 @@ export interface HomeApi {
   getCodexModels(cliPath?: string): Promise<CodexModelCatalog>
   /** one-shot round trip against the given (possibly unsaved) settings — the settings-UI connection test */
   testAiSettings(settings: AiSettings): Promise<AiChatResponse>
+  /** one-shot non-streaming chat using saved (or provided) AI settings — Workbench helpers */
+  aiChat(input: { system: string; user: string; settings?: AiSettings }): Promise<AiChatResponse>
   /** image generation / media analysis provider catalog */
   getAiMediaProviders(): AiMediaProviderMeta[]
   /** credential check for a (possibly unsaved) media provider; genspark reports the gsk login state */
@@ -349,6 +351,16 @@ export type PracticeIdEntry =
   | 'construction'
   | 'procurement'
   | 'principal'
+  | 'sales'
+  | 'customer-care'
+  | 'entrepreneur'
+  | 'freelancer'
+  | 'content-creator'
+  | 'marketing'
+  | 'hr'
+  | 'accounting'
+  | 'it'
+  | 'real-estate'
 
 export type ProjectKindEntry =
   | 'education'
@@ -356,6 +368,16 @@ export type ProjectKindEntry =
   | 'construction'
   | 'procurement'
   | 'principal'
+  | 'sales'
+  | 'customer-care'
+  | 'entrepreneur'
+  | 'freelancer'
+  | 'content-creator'
+  | 'marketing'
+  | 'hr'
+  | 'accounting'
+  | 'it'
+  | 'real-estate'
 
 export interface PracticeProjectMetaEntry {
   version: 1

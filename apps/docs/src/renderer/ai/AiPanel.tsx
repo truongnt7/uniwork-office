@@ -868,18 +868,27 @@ export function AiPanel({
   }, [preset?.nonce])
 
   // keep the scope hint & quick actions in sync with the editor selection
+  // (skip while collapsed — dock stays mounted but must not re-render per keystroke)
   useEffect(() => {
+    if (!open) return
+    let raf = 0
     const bump = () => {
-      if (editor.state.selection.empty) setScopePreviewOpen(false)
-      setScopeTick((t) => t + 1)
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        if (editor.state.selection.empty) setScopePreviewOpen(false)
+        setScopeTick((t) => t + 1)
+      })
     }
+    bump()
     editor.on('selectionUpdate', bump)
     editor.on('update', bump)
     return () => {
+      if (raf) cancelAnimationFrame(raf)
       editor.off('selectionUpdate', bump)
       editor.off('update', bump)
     }
-  }, [editor])
+  }, [editor, open])
 
   // scope chip data, recomputed per render (the scope tick above keeps it fresh)
   const liveSelection = editor.state.selection

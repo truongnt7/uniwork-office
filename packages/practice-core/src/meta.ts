@@ -1,3 +1,4 @@
+import { isPracticeId } from './types.js'
 import type { CreatePracticeMetaInput, PracticeId, PracticeMeta, PracticeProjectKind } from './types.js'
 
 function nowIso(): string {
@@ -12,14 +13,7 @@ export function practiceProjectKind(practiceId: PracticeId): PracticeProjectKind
 export function practiceIdFromProjectKind(kind: string | undefined): PracticeId | null {
   if (!kind) return null
   if (kind === 'education') return 'teacher'
-  if (
-    kind === 'legal' ||
-    kind === 'construction' ||
-    kind === 'procurement' ||
-    kind === 'principal'
-  ) {
-    return kind
-  }
+  if (isPracticeId(kind) && kind !== 'teacher') return kind
   return null
 }
 

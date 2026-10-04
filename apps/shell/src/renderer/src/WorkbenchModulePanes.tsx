@@ -7,6 +7,8 @@ import { FamilyPane } from './FamilyPane'
 import { FinancePane } from './FinancePane'
 import { FriendsPane } from './FriendsPane'
 import { HealthPane } from './HealthPane'
+import { EmailPane } from './EmailPane'
+import { NotesPane } from './NotesPane'
 import { PetsPane } from './PetsPane'
 import { TasksPane } from './TasksPane'
 import {
@@ -17,7 +19,6 @@ import {
   readForms,
   readGrowth,
   readMatters,
-  readNotes,
   readPersonal,
   readTravel,
   writeClients,
@@ -26,7 +27,6 @@ import {
   writeForms,
   writeGrowth,
   writeMatters,
-  writeNotes,
   writePersonal,
   writeTravel,
   type WbClientItem,
@@ -68,7 +68,7 @@ export function WorkbenchModulePane({
     return <p className="teacher-empty">{label('Module không tồn tại.', 'Unknown module.')}</p>
   }
 
-  const hideChrome = moduleId === 'desk'
+  const hideChrome = moduleId === 'desk' || moduleId === 'notes' || moduleId === 'email'
 
   return (
     <section
@@ -88,6 +88,7 @@ export function WorkbenchModulePane({
       {moduleId === 'calendar' && <CalendarPane practiceId={practiceId} vi={vi} />}
       {moduleId === 'tasks' && <TasksPane practiceId={practiceId} vi={vi} />}
       {moduleId === 'notes' && <NotesPane practiceId={practiceId} vi={vi} />}
+      {moduleId === 'email' && <EmailPane practiceId={practiceId} vi={vi} />}
       {moduleId === 'assistant' && <AssistantPane vi={vi} packId={packId} />}
       {moduleId === 'forms' && (
         <FormsPane practiceId={practiceId} vi={vi} packId={packId} onPackLinked={onPackLinked} />
@@ -111,45 +112,6 @@ export function WorkbenchModulePane({
         <MattersPane practiceId={practiceId} vi={vi} packId={packId} onPackLinked={onPackLinked} />
       )}
     </section>
-  )
-}
-
-function NotesPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }): ReactElement {
-  const label = (a: string, b: string) => (vi ? a : b)
-  const [text, setText] = useState(() => readNotes(practiceId))
-  const [saved, setSaved] = useState(false)
-
-  useEffect(() => {
-    setText(readNotes(practiceId))
-    setSaved(false)
-  }, [practiceId])
-
-  return (
-    <>
-      <textarea
-        className="wb-notes"
-        rows={12}
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value)
-          setSaved(false)
-        }}
-        placeholder={label('Ghi chú nhanh — lưu trên máy…', 'Quick notes — stored on this device…')}
-      />
-      <div className="teacher-chip-row teacher-chip-row-spaced">
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={() => {
-            writeNotes(practiceId, text)
-            setSaved(true)
-          }}
-        >
-          {label('Lưu notes', 'Save notes')}
-        </button>
-        {saved ? <span className="teacher-hint">{label('Đã lưu.', 'Saved.')}</span> : null}
-      </div>
-    </>
   )
 }
 

@@ -87,6 +87,15 @@ const BADGE: Record<IconId, { bg: string; glyph: ReactElement }> = {
       </>
     ),
   },
+  email: {
+    bg: '#EA4335',
+    glyph: (
+      <>
+        <rect x="5.5" y="7" width="13" height="10" rx="1.6" stroke="#fff" strokeWidth="1.5" fill="none" />
+        <path d="M6.2 8.2 12 12.2 17.8 8.2" stroke="#fff" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round" />
+      </>
+    ),
+  },
   assistant: {
     bg: '#0F7FFF',
     glyph: (

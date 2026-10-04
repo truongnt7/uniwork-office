@@ -18,12 +18,33 @@ import {
 } from '../src/index.js'
 
 describe('practice-core', () => {
-  it('registers five profession practices including teacher', () => {
+  it('registers profession practices including teacher and business roles', () => {
     const ids = listPractices().map((p) => p.id)
-    expect(ids).toEqual(['teacher', 'legal', 'construction', 'procurement', 'principal'])
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        'teacher',
+        'legal',
+        'construction',
+        'procurement',
+        'principal',
+        'sales',
+        'customer-care',
+        'entrepreneur',
+        'freelancer',
+        'content-creator',
+        'marketing',
+        'hr',
+        'accounting',
+        'it',
+        'real-estate',
+      ]),
+    )
+    expect(ids).toHaveLength(15)
     expect(getPractice('teacher')?.projectKind).toBe('education')
     expect(practiceProjectKind('legal')).toBe('legal')
+    expect(practiceProjectKind('sales')).toBe('sales')
     expect(practiceIdFromProjectKind('education')).toBe('teacher')
+    expect(practiceIdFromProjectKind('content-creator')).toBe('content-creator')
   })
 
   it('creates and filters practice meta', () => {
@@ -63,6 +84,7 @@ describe('practice-core', () => {
         'calendar',
         'tasks',
         'notes',
+        'email',
         'assistant',
         'forms',
         'personal',

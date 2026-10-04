@@ -23,7 +23,7 @@ import { useI18n } from './locale'
 import type { I18n, StringKey } from './locale'
 import { SettingsModal, type SettingsSectionId } from './SettingsModal'
 import { skillUpdateDue } from './IntegrationsPane'
-import { getPractice, listPractices, type PracticeId } from '@uniwork/practice-core'
+import { getPractice, isPracticeId, listPractices, type PracticeId } from '@uniwork/practice-core'
 import { AgentIntentBanner } from './AgentIntentBanner'
 import { PracticeHome } from './PracticeHome'
 import { TeacherHome } from './TeacherHome'
@@ -1139,15 +1139,7 @@ export function Home() {
   const [activePracticeId, setActivePracticeId] = useState<PracticeId>(() => {
     try {
       const raw = localStorage.getItem('uniwork.activePracticeId')
-      if (
-        raw === 'teacher' ||
-        raw === 'legal' ||
-        raw === 'construction' ||
-        raw === 'procurement' ||
-        raw === 'principal'
-      ) {
-        return raw
-      }
+      if (isPracticeId(raw)) return raw
     } catch {
       /* ignore */
     }

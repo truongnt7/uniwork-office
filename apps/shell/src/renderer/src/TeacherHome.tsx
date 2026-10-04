@@ -34,6 +34,7 @@ import {
   getPractice,
   getSkillDomain,
   isWorkbenchModuleId,
+  listPracticeGroups,
   listPractices,
   skillsForDomain,
   type PracticeId,
@@ -620,10 +621,14 @@ export function TeacherHome({
                   onChange={(e) => onSwitchPractice(e.target.value as PracticeId)}
                   aria-label={label('Vai trò làm việc', 'Practice role')}
                 >
-                  {listPractices().map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {vi ? p.labelVi : p.labelEn}
-                    </option>
+                  {listPracticeGroups(vi).map((g) => (
+                    <optgroup key={g.label} label={g.label}>
+                      {g.practices.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {vi ? p.labelVi : p.labelEn}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
               </label>

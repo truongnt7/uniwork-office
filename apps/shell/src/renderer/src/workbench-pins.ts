@@ -280,20 +280,293 @@ export async function deleteTaskAttachmentBlob(id: string): Promise<void> {
   db.close()
 }
 
-export function readNotes(practiceId: PracticeId): string {
-  try {
-    return localStorage.getItem(`uniwork.wb.notes.${practiceId}`) ?? ''
-  } catch {
-    return ''
+export type WbStickyColor = 'yellow' | 'peach' | 'mint' | 'sky' | 'lilac' | 'rose'
+
+export const STICKY_COLORS: readonly WbStickyColor[] = [
+  'yellow',
+  'peach',
+  'mint',
+  'sky',
+  'lilac',
+  'rose',
+]
+
+export interface WbStickyNote {
+  id: string
+  body: string
+  color: WbStickyColor
+  /** Board position 0–100 (%) */
+  x: number
+  y: number
+  /** Slight tilt in degrees */
+  rotate: number
+  z: number
+  createdAt: string
+  updatedAt: string
+}
+
+function stickyKey(practiceId: PracticeId): string {
+  return `uniwork.wb.stickies.${practiceId}`
+}
+
+function legacyNotesKey(practiceId: PracticeId): string {
+  return `uniwork.wb.notes.${practiceId}`
+}
+
+function clampPct(n: number): number {
+  if (!Number.isFinite(n)) return 8
+  return Math.min(88, Math.max(2, n))
+}
+
+function isStickyColor(v: unknown): v is WbStickyColor {
+  return typeof v === 'string' && (STICKY_COLORS as readonly string[]).includes(v)
+}
+
+export function normalizeStickyNote(raw: Partial<WbStickyNote> & { id: string }): WbStickyNote {
+  const now = new Date().toISOString()
+  return {
+    id: raw.id,
+    body: typeof raw.body === 'string' ? raw.body : '',
+    color: isStickyColor(raw.color) ? raw.color : 'yellow',
+    x: clampPct(typeof raw.x === 'number' ? raw.x : 8),
+    y: clampPct(typeof raw.y === 'number' ? raw.y : 8),
+    rotate: typeof raw.rotate === 'number' && Number.isFinite(raw.rotate) ? Math.max(-8, Math.min(8, raw.rotate)) : 0,
+    z: typeof raw.z === 'number' && Number.isFinite(raw.z) ? raw.z : 1,
+    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : now,
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : now,
   }
 }
 
-export function writeNotes(practiceId: PracticeId, text: string): void {
+function migrateLegacyNotes(practiceId: PracticeId): WbStickyNote[] | null {
   try {
-    localStorage.setItem(`uniwork.wb.notes.${practiceId}`, text)
+    const legacy = localStorage.getItem(legacyNotesKey(practiceId))
+    if (legacy == null) return null
+    const text = legacy.trim()
+    localStorage.removeItem(legacyNotesKey(practiceId))
+    if (!text) return []
+    const now = new Date().toISOString()
+    return [
+      normalizeStickyNote({
+        id: `${Date.now().toString(36)}-legacy`,
+        body: text,
+        color: 'yellow',
+        x: 12,
+        y: 14,
+        rotate: -2,
+        z: 1,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    ]
   } catch {
-    /* ignore */
+    return null
   }
+}
+
+export function readStickyNotes(practiceId: PracticeId): WbStickyNote[] {
+  const key = stickyKey(practiceId)
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw == null) {
+      const migrated = migrateLegacyNotes(practiceId)
+      if (migrated) {
+        writeStickyNotes(practiceId, migrated)
+        return migrated
+      }
+      return []
+    }
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((n): n is Partial<WbStickyNote> & { id: string } =>
+        Boolean(n && typeof (n as { id?: unknown }).id === 'string'),
+      )
+      .map((n) => normalizeStickyNote(n))
+  } catch {
+    return []
+  }
+}
+
+export function writeStickyNotes(practiceId: PracticeId, items: WbStickyNote[]): void {
+  writeJson(
+    stickyKey(practiceId),
+    items.map((n) => normalizeStickyNote(n)),
+  )
+}
+
+export function createStickyNote(
+  practiceId: PracticeId,
+  body: string,
+  color?: WbStickyColor,
+): WbStickyNote {
+  const existing = readStickyNotes(practiceId)
+  const now = new Date().toISOString()
+  const idx = existing.length
+  const note = normalizeStickyNote({
+    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    body,
+    color: color ?? STICKY_COLORS[idx % STICKY_COLORS.length],
+    x: 8 + ((idx * 11) % 62),
+    y: 10 + ((idx * 13) % 48),
+    rotate: ((idx % 5) - 2) * 1.6,
+    z: (existing.reduce((m, n) => Math.max(m, n.z), 0) || 0) + 1,
+    createdAt: now,
+    updatedAt: now,
+  })
+  writeStickyNotes(practiceId, [note, ...existing])
+  return note
+}
+
+/** Plain-text join for AI context / legacy callers. */
+export function readNotes(practiceId: PracticeId): string {
+  return readStickyNotes(practiceId)
+    .map((n) => n.body.trim())
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+/** Append as a new sticky note (legacy write path). */
+export function writeNotes(practiceId: PracticeId, text: string): void {
+  const body = text.trim()
+  if (!body) return
+  const existing = readStickyNotes(practiceId)
+  const joined = existing.map((n) => n.body.trim()).filter(Boolean).join('\n\n')
+  if (joined === body) return
+  if (body.startsWith(joined) && joined) {
+    const appended = body.slice(joined.length).trim()
+    if (appended) createStickyNote(practiceId, appended)
+    return
+  }
+  createStickyNote(practiceId, body)
+}
+
+export type WbEmailFolder = 'inbox' | 'drafts' | 'sent' | 'archive'
+
+export interface WbEmailMessage {
+  id: string
+  folder: WbEmailFolder
+  from: string
+  to: string
+  cc?: string
+  subject: string
+  body: string
+  starred?: boolean
+  unread?: boolean
+  /** Sample rows until real mailbox sync ships */
+  demo?: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+function emailKey(practiceId: PracticeId): string {
+  return `uniwork.wb.email.${practiceId}`
+}
+
+function isEmailFolder(v: unknown): v is WbEmailFolder {
+  return v === 'inbox' || v === 'drafts' || v === 'sent' || v === 'archive'
+}
+
+export function normalizeEmailMessage(
+  raw: Partial<WbEmailMessage> & { id: string },
+): WbEmailMessage {
+  const now = new Date().toISOString()
+  return {
+    id: raw.id,
+    folder: isEmailFolder(raw.folder) ? raw.folder : 'drafts',
+    from: typeof raw.from === 'string' ? raw.from : '',
+    to: typeof raw.to === 'string' ? raw.to : '',
+    ...(typeof raw.cc === 'string' && raw.cc.trim() ? { cc: raw.cc.trim() } : {}),
+    subject: typeof raw.subject === 'string' ? raw.subject : '',
+    body: typeof raw.body === 'string' ? raw.body : '',
+    ...(raw.starred ? { starred: true } : {}),
+    ...(raw.unread ? { unread: true } : {}),
+    ...(raw.demo ? { demo: true } : {}),
+    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : now,
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : now,
+  }
+}
+
+function seedDemoEmails(practiceId: PracticeId): WbEmailMessage[] {
+  const now = Date.now()
+  const iso = (offsetMs: number) => new Date(now - offsetMs).toISOString()
+  return [
+    normalizeEmailMessage({
+      id: `${practiceId}-demo-1`,
+      folder: 'inbox',
+      from: 'team@uniwork.local',
+      to: 'me@local',
+      subject: 'Chào mừng bạn đến Tab Email (MVP)',
+      body:
+        'Đây là thư mẫu trên máy — chưa đồng bộ hộp thư thật.\n\nBạn có thể soạn nháp, dùng AI chỉnh giọng văn, và lưu Sent cục bộ. Kết nối Gmail/Outlook sẽ có ở bước sau.',
+      unread: true,
+      demo: true,
+      createdAt: iso(3600_000),
+      updatedAt: iso(3600_000),
+    }),
+    normalizeEmailMessage({
+      id: `${practiceId}-demo-2`,
+      folder: 'inbox',
+      from: 'notes@uniwork.local',
+      to: 'me@local',
+      subject: 'Gợi ý: biến email thành việc cần làm',
+      body:
+        'Mở một thư → “Tạo việc” để đẩy sang tab Công việc.\n\nMVP tập trung soạn thảo + AI; inbox thật sẽ đến khi kết nối tài khoản.',
+      unread: true,
+      starred: true,
+      demo: true,
+      createdAt: iso(7200_000),
+      updatedAt: iso(7200_000),
+    }),
+  ]
+}
+
+export function readEmails(practiceId: PracticeId): WbEmailMessage[] {
+  const key = emailKey(practiceId)
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw == null) {
+      const seeded = seedDemoEmails(practiceId)
+      writeEmails(practiceId, seeded)
+      return seeded
+    }
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed
+      .filter((m): m is Partial<WbEmailMessage> & { id: string } =>
+        Boolean(m && typeof (m as { id?: unknown }).id === 'string'),
+      )
+      .map((m) => normalizeEmailMessage(m))
+  } catch {
+    return []
+  }
+}
+
+export function writeEmails(practiceId: PracticeId, items: WbEmailMessage[]): void {
+  writeJson(
+    emailKey(practiceId),
+    items.map((m) => normalizeEmailMessage(m)),
+  )
+}
+
+export function createEmailDraft(
+  practiceId: PracticeId,
+  input?: Partial<Pick<WbEmailMessage, 'to' | 'cc' | 'subject' | 'body' | 'from'>>,
+): WbEmailMessage {
+  const existing = readEmails(practiceId)
+  const now = new Date().toISOString()
+  const draft = normalizeEmailMessage({
+    id: `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    folder: 'drafts',
+    from: input?.from ?? 'me@local',
+    to: input?.to ?? '',
+    cc: input?.cc,
+    subject: input?.subject ?? '',
+    body: input?.body ?? '',
+    createdAt: now,
+    updatedAt: now,
+  })
+  writeEmails(practiceId, [draft, ...existing])
+  return draft
 }
 
 export interface WbFormItem {

@@ -15,6 +15,7 @@ import {
   readCalendar,
   readEvents,
   readFinance,
+  readEmails,
   readNotes,
   readTasks,
 } from './workbench-pins'
@@ -80,10 +81,22 @@ function moduleContext(practiceId: PracticeId, moduleId: WorkbenchModuleId): Con
         : 'Calendar empty.',
     })
   } else if (moduleId === 'notes') {
+    const text = readNotes(practiceId)
     chunks.push({
       id: 'notes',
       source: 'local:notes',
-      text: clip(readNotes(practiceId) || 'Notes empty.', 1_500),
+      text: clip(text ? `Sticky notes:\n${text}` : 'Notes board empty.', 1_500),
+    })
+  } else if (moduleId === 'email') {
+    const mails = readEmails(practiceId).slice(0, MAX_LIST)
+    chunks.push({
+      id: 'email',
+      source: 'local:email',
+      text: mails.length
+        ? `Email (${mails.length}): ${mails
+            .map((m) => `[${m.folder}] ${m.subject || '(no subject)'} → ${m.to || m.from}`)
+            .join('; ')}`
+        : 'Email mailbox empty.',
     })
   } else if (moduleId === 'events') {
     const items = readEvents(practiceId).slice(0, MAX_LIST)

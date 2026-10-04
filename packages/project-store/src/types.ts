@@ -69,6 +69,16 @@ export type ProjectKind =
   | 'construction'
   | 'procurement'
   | 'principal'
+  | 'sales'
+  | 'customer-care'
+  | 'entrepreneur'
+  | 'freelancer'
+  | 'content-creator'
+  | 'marketing'
+  | 'hr'
+  | 'accounting'
+  | 'it'
+  | 'real-estate'
 
 /** Practice pack ids (teacher uses legacy education kind). */
 export type PracticeId =
@@ -77,6 +87,16 @@ export type PracticeId =
   | 'construction'
   | 'procurement'
   | 'principal'
+  | 'sales'
+  | 'customer-care'
+  | 'entrepreneur'
+  | 'freelancer'
+  | 'content-creator'
+  | 'marketing'
+  | 'hr'
+  | 'accounting'
+  | 'it'
+  | 'real-estate'
 
 /**
  * Generic practice pack metadata (projects/<id>/practice/meta.json).

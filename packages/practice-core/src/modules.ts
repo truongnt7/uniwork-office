@@ -10,6 +10,7 @@ export type WorkbenchModuleId =
   | 'calendar'
   | 'tasks'
   | 'notes'
+  | 'email'
   | 'assistant'
   | 'forms'
   | 'personal'
@@ -64,8 +65,16 @@ export const WORKBENCH_MODULES: readonly WorkbenchModuleDef[] = [
     id: 'notes',
     labelVi: 'Ghi chú',
     labelEn: 'Notes',
-    hintVi: 'Ghi chú nhanh tại máy',
-    hintEn: 'Quick on-device notes',
+    hintVi: 'Bảng ghim giấy note — kéo thả, đổi màu',
+    hintEn: 'Sticky pinboard — drag, recolor, pin notes',
+    available: true,
+  },
+  {
+    id: 'email',
+    labelVi: 'Email',
+    labelEn: 'Email',
+    hintVi: 'Soạn thư nháp + AI hỗ trợ — kết nối hộp thư ở bản sau',
+    hintEn: 'Draft mail + AI assist — mailbox sync comes next',
     available: true,
   },
   {

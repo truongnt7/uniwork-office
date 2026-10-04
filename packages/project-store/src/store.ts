@@ -45,15 +45,28 @@ import type {
 // Internal helpers
 // ────────────────────────────────────────────────────────────
 
+const PROJECT_KINDS: readonly ProjectKind[] = [
+  'education',
+  'legal',
+  'construction',
+  'procurement',
+  'principal',
+  'sales',
+  'customer-care',
+  'entrepreneur',
+  'freelancer',
+  'content-creator',
+  'marketing',
+  'hr',
+  'accounting',
+  'it',
+  'real-estate',
+]
+
 function practiceKindToProjectKind(practiceId: string): ProjectKind {
   if (practiceId === 'teacher') return 'education'
-  if (
-    practiceId === 'legal' ||
-    practiceId === 'construction' ||
-    practiceId === 'procurement' ||
-    practiceId === 'principal'
-  ) {
-    return practiceId
+  if ((PROJECT_KINDS as readonly string[]).includes(practiceId)) {
+    return practiceId as ProjectKind
   }
   return 'legal'
 }

@@ -29,13 +29,21 @@ import {
   type EduWorkflowId,
 } from '@uniwork/edu-core'
 import {
+  domainSkillPrompt,
+  getDomainSkill,
   getPractice,
+  getSkillDomain,
   isWorkbenchModuleId,
   listPractices,
+  skillsForDomain,
   type PracticeId,
+  type SkillDomainId,
 } from '@uniwork/practice-core'
 import type { CreateEducationProjectArgs, ProjectSummaryEntry } from '../../shared/home-api'
 import { useI18n } from './locale'
+import { SkillDomainTabs } from './SkillDomainTabs'
+import { readActiveSkillDomain, readPinnedSkillDomains } from './skill-domain-pins'
+import { onAgentIntentNavigate } from './agent-intent-bus'
 import { WorkbenchModulePane } from './WorkbenchModulePanes'
 import { WorkbenchTabs } from './WorkbenchTabs'
 
@@ -99,14 +107,12 @@ const TEACHER_UI_LANG_KEY = 'uniwork.teacherUiLang'
 
 type TeacherUiLang = 'vi' | 'en'
 
-function readTeacherUiLang(): TeacherUiLang {
+function persistTeacherUiLang(next: TeacherUiLang): void {
   try {
-    const saved = localStorage.getItem(TEACHER_UI_LANG_KEY)
-    if (saved === 'vi' || saved === 'en') return saved
+    localStorage.setItem(TEACHER_UI_LANG_KEY, next)
   } catch {
     /* ignore */
   }
-  return 'vi'
 }
 
 export function TeacherHome({
@@ -117,20 +123,14 @@ export function TeacherHome({
   onRefresh,
   onSwitchPractice,
 }: TeacherHomeProps): ReactElement {
-  const { setLang } = useI18n()
-  const [uiLang, setUiLang] = useState<TeacherUiLang>(() => readTeacherUiLang())
-  const vi = uiLang === 'vi'
+  const { lang, setLang } = useI18n()
+  const vi = lang === 'vi'
+  const uiLang: TeacherUiLang = vi ? 'vi' : 'en'
   const label = (viText: string, enText: string) => (vi ? viText : enText)
 
   const changeUiLang = (next: TeacherUiLang) => {
-    setUiLang(next)
-    try {
-      localStorage.setItem(TEACHER_UI_LANG_KEY, next)
-    } catch {
-      /* ignore */
-    }
-    // Align shell chrome when teacher picks English; keep app locale otherwise.
-    if (next === 'en') setLang('en')
+    persistTeacherUiLang(next)
+    setLang(next)
   }
 
   const [tab, setTab] = useState<string>('desk')
@@ -155,8 +155,16 @@ export function TeacherHome({
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [confirmAi, setConfirmAi] = useState<
-    { kind: 'workflow'; id: EduWorkflowId } | { kind: 'skill'; id: EduSkillId } | null
+    | { kind: 'workflow'; id: EduWorkflowId }
+    | { kind: 'skill'; id: EduSkillId }
+    | { kind: 'domain-skill'; id: string }
+    | null
   >(null)
+  const [skillDomain, setSkillDomain] = useState<SkillDomainId>(() =>
+    readActiveSkillDomain(readPinnedSkillDomains()),
+  )
+  const domainSkills = useMemo(() => skillsForDomain(skillDomain), [skillDomain])
+  const skillDomainDef = getSkillDomain(skillDomain)
   const [exportMsg, setExportMsg] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
@@ -172,6 +180,16 @@ export function TeacherHome({
   const [hubStatus, setHubStatus] = useState<string | null>(null)
   const [hubOk, setHubOk] = useState<boolean | null>(null)
   const [hubSaving, setHubSaving] = useState(false)
+
+  useEffect(() => {
+    return onAgentIntentNavigate((tabId, intent) => {
+      setTab(tabId)
+      if (intent.target.kind === 'skill-domain') {
+        setSkillDomain(intent.target.id)
+      }
+      setNotice(label('Đã áp dụng lệnh AI trên máy.', 'Applied AI intent on device.'))
+    })
+  }, [vi])
 
   const knowledge = useMemo(
     () =>
@@ -510,7 +528,51 @@ export function TeacherHome({
         await openDocsSeed(selected.id, eduMaterialSeedTitle(role, meta), html, preset)
         await rememberRole(selected.id, role)
       }
-      setNotice(label(`Đã chạy skill: ${skill.labelVi}`, `Ran skill: ${skill.labelEn}`))
+      setNotice(label(`Đã chạy kỹ năng: ${skill.labelVi}`, `Ran skill: ${skill.labelEn}`))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const runDomainSkill = async (skillId: string) => {
+    if (!selected || !meta) return
+    const skill = getDomainSkill(skillId)
+    if (!skill) return
+    const domain = getSkillDomain(skill.domainId)
+    setBusy(`skill:${skillId}`)
+    setConfirmAi(null)
+    try {
+      const ctx = [
+        `Bài: ${meta.lessonTitle}`,
+        `Môn: ${meta.subject}`,
+        `Lớp: ${meta.grade}`,
+        meta.week ? `Tuần: ${meta.week}` : '',
+      ]
+      const prompt = domainSkillPrompt(
+        vi ? skill.labelVi : skill.labelEn,
+        vi ? skill.descVi : skill.descEn,
+        vi ? (domain?.labelVi ?? skill.domainId) : (domain?.labelEn ?? skill.domainId),
+        ctx,
+      )
+      const preset = {
+        text: prompt,
+        autoRun: true,
+        displayText: vi ? skill.labelVi : skill.labelEn,
+      }
+      if (skill.app === 'slides') {
+        await window.aiOffice.newSlide({ projectId: selected.id, aiPreset: preset })
+      } else {
+        const role: EduMaterialRole = 'phieu-hoc-tap'
+        const html = eduMaterialSeedHtml(role, meta)
+        await openDocsSeed(
+          selected.id,
+          `${skill.labelVi} — ${meta.lessonTitle}`,
+          html,
+          preset,
+        )
+        await rememberRole(selected.id, role)
+      }
+      setNotice(label(`Đã chạy kỹ năng: ${skill.labelVi}`, `Ran skill: ${skill.labelEn}`))
     } finally {
       setBusy(null)
     }
@@ -541,7 +603,7 @@ export function TeacherHome({
             <h1 className="teacher-title">{label('Bàn làm việc giáo viên', 'Teacher workbench')}</h1>
             <p className="teacher-subtitle">
               {label(
-                'Tri thức · Học liệu · Skills · Soạn mẫu. Desktop miễn phí; Token AI chỉ khi bạn chạy Skill/workflow.',
+                'Tri thức · Học liệu · Kỹ năng · Soạn mẫu. Desktop miễn phí; Token AI chỉ khi bạn chạy kỹ năng/workflow.',
                 'Knowledge · Materials · Skills · Compose. Desktop is free; AI Tokens only when you run Skills/workflows.',
               )}
             </p>
@@ -571,7 +633,7 @@ export function TeacherHome({
               <select
                 value={uiLang}
                 onChange={(e) => changeUiLang(e.target.value as TeacherUiLang)}
-                aria-label={label('Ngôn ngữ bàn giáo viên', 'Teacher workbench language')}
+                aria-label={label('Ngôn ngữ bàn làm việc', 'Workbench language')}
               >
                 <option value="vi">Tiếng Việt</option>
                 <option value="en">English</option>
@@ -855,60 +917,102 @@ export function TeacherHome({
       )}
 
       {tab === 'skills' && (
-        <section className="teacher-panel teacher-detail" aria-label="Skills">
-          <h2>{label('Skills giáo viên (local)', 'Teacher Skills (local)')}</h2>
+        <section className="teacher-panel teacher-detail" aria-label={label('Kỹ năng', 'Skills')}>
+          <h2>{label('Kỹ năng chuyên môn', 'Specialized Skills')}</h2>
           <p className="teacher-hint">
             {label(
-              'Prompt tái sử dụng trên máy. Mỗi lần chạy hỏi xác nhận Token. Bộ cài Hub đầy đủ sẽ bổ sung sau.',
-              'Reusable on-device prompts. Each run asks to confirm Tokens. Full Hub installer comes later.',
+              'Thêm tab lĩnh vực bằng +. Giáo dục giữ bộ kỹ năng giáo viên đầy đủ; lĩnh vực khác dùng kỹ năng chuyên biệt.',
+              'Add domain tabs with +. Education keeps the full teacher set; other domains use specialized skills.',
             )}
           </p>
-          {!selected || !meta ? (
-            <p className="teacher-empty">
-              {label('Chọn bài ở Tri thức để gắn ngữ cảnh môn/lớp/bài.', 'Select a Knowledge pack for subject/grade context.')}
+          <SkillDomainTabs vi={vi} active={skillDomain} onSelect={setSkillDomain} />
+          <div className="skill-domain-panel">
+            <h3>
+              {skillDomainDef
+                ? vi
+                  ? skillDomainDef.labelVi
+                  : skillDomainDef.labelEn
+                : label('Kỹ năng', 'Skills')}
+            </h3>
+            <p className="teacher-hint">
+              {skillDomainDef ? (vi ? skillDomainDef.hintVi : skillDomainDef.hintEn) : ''}
             </p>
-          ) : (
-            <p>
-              {label('Ngữ cảnh:', 'Context:')}{' '}
-              <strong>
-                {meta.lessonTitle} ({meta.subject} · {meta.grade})
-              </strong>
-            </p>
-          )}
-          <ul className="teacher-skill-list">
-            {EDU_SKILLS.map((s) => (
-              <li key={s.id} className="teacher-skill-row">
-                <div>
-                  <strong>{vi ? s.labelVi : s.labelEn}</strong>
-                  <span>{vi ? s.descVi : s.descEn}</span>
-                  <em>
-                    {eduSkillCategoryLabel(s.category, vi)} · {label('Tốn Token', 'Uses Tokens')}
-                  </em>
+            {!selected || !meta ? (
+              <p className="teacher-empty">
+                {label(
+                  'Chọn bài ở Tri thức để gắn ngữ cảnh môn/lớp/bài.',
+                  'Select a Knowledge pack for subject/grade context.',
+                )}
+              </p>
+            ) : (
+              <p>
+                {label('Ngữ cảnh:', 'Context:')}{' '}
+                <strong>
+                  {meta.lessonTitle} ({meta.subject} · {meta.grade})
+                </strong>
+              </p>
+            )}
+            {skillDomain === 'education' ? (
+              <>
+                <ul className="teacher-skill-list">
+                  {EDU_SKILLS.map((s) => (
+                    <li key={s.id} className="teacher-skill-row">
+                      <div>
+                        <strong>{vi ? s.labelVi : s.labelEn}</strong>
+                        <span>{vi ? s.descVi : s.descEn}</span>
+                        <em>
+                          {eduSkillCategoryLabel(s.category, vi)} · {label('Tốn Token', 'Uses Tokens')}
+                        </em>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        disabled={!!busy || !selected}
+                        onClick={() => setConfirmAi({ kind: 'skill', id: s.id })}
+                      >
+                        {label('Chạy', 'Run')}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <h3>{label('Workflow nhanh', 'Quick workflows')}</h3>
+                <div className="teacher-chip-row">
+                  {AI_WORKFLOWS.map((w) => (
+                    <button
+                      key={w.id}
+                      type="button"
+                      className="teacher-chip teacher-chip-ai"
+                      disabled={!!busy || !selected}
+                      onClick={() => setConfirmAi({ kind: 'workflow', id: w.id })}
+                    >
+                      {vi ? w.labelVi : w.labelEn}
+                    </button>
+                  ))}
                 </div>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={!!busy || !selected}
-                  onClick={() => setConfirmAi({ kind: 'skill', id: s.id })}
-                >
-                  {label('Chạy', 'Run')}
-                </button>
-              </li>
-            ))}
-          </ul>
-          <h3>{label('Workflow nhanh', 'Quick workflows')}</h3>
-          <div className="teacher-chip-row">
-            {AI_WORKFLOWS.map((w) => (
-              <button
-                key={w.id}
-                type="button"
-                className="teacher-chip teacher-chip-ai"
-                disabled={!!busy || !selected}
-                onClick={() => setConfirmAi({ kind: 'workflow', id: w.id })}
-              >
-                {vi ? w.labelVi : w.labelEn}
-              </button>
-            ))}
+              </>
+            ) : (
+              <ul className="teacher-skill-list">
+                {domainSkills.map((s) => (
+                  <li key={s.id} className="teacher-skill-row">
+                    <div>
+                      <strong>{vi ? s.labelVi : s.labelEn}</strong>
+                      <span>{vi ? s.descVi : s.descEn}</span>
+                      <em>
+                        {s.category} · {label('Tốn Token', 'Uses Tokens')}
+                      </em>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={!!busy || !selected}
+                      onClick={() => setConfirmAi({ kind: 'domain-skill', id: s.id })}
+                    >
+                      {label('Chạy', 'Run')}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <button
@@ -1075,6 +1179,7 @@ export function TeacherHome({
                 type="button"
                 onClick={() => {
                   if (confirmAi.kind === 'skill') void runSkill(confirmAi.id)
+                  else if (confirmAi.kind === 'domain-skill') void runDomainSkill(confirmAi.id)
                   else void runAiWorkflow(confirmAi.id)
                 }}
               >

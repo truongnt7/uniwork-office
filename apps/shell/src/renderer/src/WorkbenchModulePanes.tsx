@@ -1,46 +1,39 @@
 import { useEffect, useState } from 'react'
 import type { ReactElement } from 'react'
 import { getWorkbenchModule, type PracticeId, type WorkbenchModuleId } from '@uniwork/practice-core'
+import { CalendarPane } from './CalendarPane'
 import { DeskPane } from './DeskPane'
+import { FamilyPane } from './FamilyPane'
+import { FinancePane } from './FinancePane'
+import { FriendsPane } from './FriendsPane'
+import { HealthPane } from './HealthPane'
 import {
-  readCalendar,
   readClients,
   readContracts,
   readEvents,
   defaultTravelChecklist,
-  readFamily,
-  readFinance,
   readForms,
   readGrowth,
-  readHealth,
   readMatters,
   readNotes,
   readPersonal,
   readTasks,
   readTravel,
-  writeCalendar,
   writeClients,
   writeContracts,
   writeEvents,
-  writeFamily,
-  writeFinance,
   writeForms,
   writeGrowth,
-  writeHealth,
   writeMatters,
   writeNotes,
   writePersonal,
   writeTasks,
   writeTravel,
-  type WbCalendarItem,
   type WbClientItem,
   type WbContractItem,
   type WbEventItem,
-  type WbFamilyMember,
-  type WbFinanceItem,
   type WbFormItem,
   type WbGrowthItem,
-  type WbHealthItem,
   type WbMatterItem,
   type WbPersonalProfile,
   type WbTaskItem,
@@ -76,13 +69,22 @@ export function WorkbenchModulePane({
     return <p className="teacher-empty">{label('Module không tồn tại.', 'Unknown module.')}</p>
   }
 
+  const hideChrome = moduleId === 'desk'
+
   return (
-    <section className="teacher-panel teacher-detail" aria-label={vi ? mod.labelVi : mod.labelEn}>
-      <h2>{vi ? mod.labelVi : mod.labelEn}</h2>
-      <p className="teacher-hint">
-        {vi ? mod.hintVi : mod.hintEn}
-        {contextTitle ? ` · ${contextTitle}` : ''}
-      </p>
+    <section
+      className={`teacher-panel teacher-detail${hideChrome ? ' is-immersive' : ''}`}
+      aria-label={vi ? mod.labelVi : mod.labelEn}
+    >
+      {!hideChrome && (
+        <>
+          <h2>{vi ? mod.labelVi : mod.labelEn}</h2>
+          <p className="teacher-hint">
+            {vi ? mod.hintVi : mod.hintEn}
+            {contextTitle ? ` · ${contextTitle}` : ''}
+          </p>
+        </>
+      )}
       {moduleId === 'desk' && <DeskPane practiceId={practiceId} vi={vi} />}
       {moduleId === 'calendar' && <CalendarPane practiceId={practiceId} vi={vi} />}
       {moduleId === 'tasks' && <TasksPane practiceId={practiceId} vi={vi} />}
@@ -97,6 +99,7 @@ export function WorkbenchModulePane({
       {moduleId === 'health' && <HealthPane vi={vi} />}
       {moduleId === 'self-growth' && <GrowthPane vi={vi} />}
       {moduleId === 'family' && <FamilyPane vi={vi} />}
+      {moduleId === 'friends' && <FriendsPane vi={vi} />}
       {moduleId === 'travel' && (
         <TravelPane vi={vi} packId={packId} onPackLinked={onPackLinked} />
       )}
@@ -108,75 +111,6 @@ export function WorkbenchModulePane({
         <MattersPane practiceId={practiceId} vi={vi} packId={packId} onPackLinked={onPackLinked} />
       )}
     </section>
-  )
-}
-
-function CalendarPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }): ReactElement {
-  const label = (a: string, b: string) => (vi ? a : b)
-  const [items, setItems] = useState<WbCalendarItem[]>(() => readCalendar(practiceId))
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [title, setTitle] = useState('')
-
-  useEffect(() => {
-    setItems(readCalendar(practiceId))
-  }, [practiceId])
-
-  const persist = (next: WbCalendarItem[]) => {
-    setItems(next)
-    writeCalendar(practiceId, next)
-  }
-
-  const add = () => {
-    const t = title.trim()
-    if (!t || !date) return
-    persist([{ id: newId(), date, title: t }, ...items].sort((a, b) => a.date.localeCompare(b.date)))
-    setTitle('')
-  }
-
-  return (
-    <>
-      <div className="wb-module-form">
-        <label>
-          <span>{label('Ngày', 'Date')}</span>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
-        <label className="teacher-form-wide">
-          <span>{label('Sự kiện / hạn', 'Event / deadline')}</span>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder={label('VD: Nộp giáo án tuần 12', 'e.g. Submit week-12 plan')}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') add()
-            }}
-          />
-        </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm', 'Add')}
-        </button>
-      </div>
-      <ul className="wb-module-list">
-        {items.length === 0 ? (
-          <li className="teacher-empty">{label('Chưa có mốc nào.', 'No events yet.')}</li>
-        ) : (
-          items.map((it) => (
-            <li key={it.id} className="wb-module-row">
-              <div>
-                <strong>{it.date}</strong>
-                <span>{it.title}</span>
-              </div>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => persist(items.filter((x) => x.id !== it.id))}
-              >
-                {label('Xóa', 'Delete')}
-              </button>
-            </li>
-          ))
-        )}
-      </ul>
-    </>
   )
 }
 
@@ -531,121 +465,6 @@ function PersonalPane({ vi }: { vi: boolean }): ReactElement {
   )
 }
 
-function FinancePane({ vi }: { vi: boolean }): ReactElement {
-  const label = (a: string, b: string) => (vi ? a : b)
-  const [items, setItems] = useState<WbFinanceItem[]>(() => readFinance())
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [kind, setKind] = useState<'income' | 'expense'>('expense')
-  const [amount, setAmount] = useState('')
-  const [itemLabel, setItemLabel] = useState('')
-
-  const persist = (next: WbFinanceItem[]) => {
-    setItems(next)
-    writeFinance(next)
-  }
-
-  const add = () => {
-    const n = Number(amount)
-    const t = itemLabel.trim()
-    if (!t || !Number.isFinite(n) || n <= 0 || !date) return
-    persist(
-      [{ id: newId(), date, kind, amount: Math.round(n * 100) / 100, label: t }, ...items].sort((a, b) =>
-        b.date.localeCompare(a.date),
-      ),
-    )
-    setAmount('')
-    setItemLabel('')
-  }
-
-  const income = items.filter((i) => i.kind === 'income').reduce((s, i) => s + i.amount, 0)
-  const expense = items.filter((i) => i.kind === 'expense').reduce((s, i) => s + i.amount, 0)
-  const fmt = (n: number) =>
-    n.toLocaleString(vi ? 'vi-VN' : 'en-US', { maximumFractionDigits: 0 })
-
-  return (
-    <>
-      <p className="teacher-hint">
-        {label(
-          'Sổ thu/chi cá nhân trên máy — không đồng bộ cloud.',
-          'On-device personal ledger — not synced to cloud.',
-        )}
-      </p>
-      <div className="wb-finance-summary">
-        <span>
-          {label('Thu', 'In')}: <strong>{fmt(income)}</strong>
-        </span>
-        <span>
-          {label('Chi', 'Out')}: <strong>{fmt(expense)}</strong>
-        </span>
-        <span>
-          {label('Số dư', 'Balance')}: <strong>{fmt(income - expense)}</strong>
-        </span>
-      </div>
-      <div className="wb-module-form">
-        <label>
-          <span>{label('Ngày', 'Date')}</span>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
-        <label>
-          <span>{label('Loại', 'Type')}</span>
-          <select value={kind} onChange={(e) => setKind(e.target.value as 'income' | 'expense')}>
-            <option value="expense">{label('Chi', 'Expense')}</option>
-            <option value="income">{label('Thu', 'Income')}</option>
-          </select>
-        </label>
-        <label>
-          <span>{label('Số tiền', 'Amount')}</span>
-          <input
-            type="number"
-            min={0}
-            step="1000"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-        </label>
-        <label className="teacher-form-wide">
-          <span>{label('Nội dung', 'Label')}</span>
-          <input
-            value={itemLabel}
-            onChange={(e) => setItemLabel(e.target.value)}
-            placeholder={label('VD: Xăng xe', 'e.g. Fuel')}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') add()
-            }}
-          />
-        </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm', 'Add')}
-        </button>
-      </div>
-      <ul className="wb-module-list">
-        {items.length === 0 ? (
-          <li className="teacher-empty">{label('Chưa có giao dịch.', 'No entries yet.')}</li>
-        ) : (
-          items.map((it) => (
-            <li key={it.id} className="wb-module-row">
-              <div>
-                <strong>
-                  {it.date} · {it.kind === 'income' ? label('Thu', 'In') : label('Chi', 'Out')} ·{' '}
-                  {fmt(it.amount)}
-                </strong>
-                <span>{it.label}</span>
-              </div>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => persist(items.filter((x) => x.id !== it.id))}
-              >
-                {label('Xóa', 'Delete')}
-              </button>
-            </li>
-          ))
-        )}
-      </ul>
-    </>
-  )
-}
-
 function EventsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }): ReactElement {
   const label = (a: string, b: string) => (vi ? a : b)
   const [items, setItems] = useState<WbEventItem[]>(() => readEvents(practiceId))
@@ -732,124 +551,6 @@ function EventsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean })
                 </strong>
                 <span>{it.title}</span>
                 {it.place ? <span>{it.place}</span> : null}
-              </div>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => persist(items.filter((x) => x.id !== it.id))}
-              >
-                {label('Xóa', 'Delete')}
-              </button>
-            </li>
-          ))
-        )}
-      </ul>
-    </>
-  )
-}
-
-function HealthPane({ vi }: { vi: boolean }): ReactElement {
-  const label = (a: string, b: string) => (vi ? a : b)
-  const [items, setItems] = useState<WbHealthItem[]>(() => readHealth())
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
-  const [kind, setKind] = useState<WbHealthItem['kind']>('exercise')
-  const [note, setNote] = useState('')
-  const [value, setValue] = useState('')
-
-  const persist = (next: WbHealthItem[]) => {
-    setItems(next)
-    writeHealth(next)
-  }
-
-  const kindLabel = (k: WbHealthItem['kind']) => {
-    switch (k) {
-      case 'sleep':
-        return label('Ngủ', 'Sleep')
-      case 'exercise':
-        return label('Vận động', 'Exercise')
-      case 'checkup':
-        return label('Khám / đo', 'Checkup')
-      default:
-        return label('Khác', 'Other')
-    }
-  }
-
-  const add = () => {
-    const n = note.trim()
-    if (!n || !date) return
-    persist(
-      [
-        {
-          id: newId(),
-          date,
-          kind,
-          note: n,
-          ...(value.trim() ? { value: value.trim() } : {}),
-        },
-        ...items,
-      ].sort((a, b) => b.date.localeCompare(a.date)),
-    )
-    setNote('')
-    setValue('')
-  }
-
-  return (
-    <>
-      <p className="teacher-hint">
-        {label(
-          'Nhật ký sức khoẻ cá nhân trên máy — riêng tư, không đồng bộ.',
-          'Personal health log on device — private, not synced.',
-        )}
-      </p>
-      <div className="wb-module-form">
-        <label>
-          <span>{label('Ngày', 'Date')}</span>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        </label>
-        <label>
-          <span>{label('Loại', 'Type')}</span>
-          <select value={kind} onChange={(e) => setKind(e.target.value as WbHealthItem['kind'])}>
-            <option value="exercise">{label('Vận động', 'Exercise')}</option>
-            <option value="sleep">{label('Ngủ', 'Sleep')}</option>
-            <option value="checkup">{label('Khám / đo', 'Checkup')}</option>
-            <option value="other">{label('Khác', 'Other')}</option>
-          </select>
-        </label>
-        <label>
-          <span>{label('Chỉ số (tuỳ chọn)', 'Metric (optional)')}</span>
-          <input
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            placeholder={label('VD: 7 giờ / 5 km', 'e.g. 7h / 5km')}
-          />
-        </label>
-        <label className="teacher-form-wide">
-          <span>{label('Ghi chú', 'Note')}</span>
-          <input
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder={label('VD: Đi bộ buổi sáng', 'e.g. Morning walk')}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') add()
-            }}
-          />
-        </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm', 'Add')}
-        </button>
-      </div>
-      <ul className="wb-module-list">
-        {items.length === 0 ? (
-          <li className="teacher-empty">{label('Chưa có nhật ký.', 'No entries yet.')}</li>
-        ) : (
-          items.map((it) => (
-            <li key={it.id} className="wb-module-row">
-              <div>
-                <strong>
-                  {it.date} · {kindLabel(it.kind)}
-                  {it.value ? ` · ${it.value}` : ''}
-                </strong>
-                <span>{it.note}</span>
               </div>
               <button
                 type="button"
@@ -1285,126 +986,6 @@ function TravelPane({
               </li>
             )
           })
-        )}
-      </ul>
-    </>
-  )
-}
-
-function FamilyPane({ vi }: { vi: boolean }): ReactElement {
-  const label = (a: string, b: string) => (vi ? a : b)
-  const [items, setItems] = useState<WbFamilyMember[]>(() => readFamily())
-  const [name, setName] = useState('')
-  const [relation, setRelation] = useState(vi ? 'Con' : 'Child')
-  const [birthday, setBirthday] = useState('')
-  const [phone, setPhone] = useState('')
-  const [note, setNote] = useState('')
-
-  const persist = (next: WbFamilyMember[]) => {
-    setItems(next)
-    writeFamily(next)
-  }
-
-  const add = () => {
-    const n = name.trim()
-    const r = relation.trim()
-    if (!n || !r) return
-    persist([
-      {
-        id: newId(),
-        name: n,
-        relation: r,
-        ...(birthday ? { birthday } : {}),
-        ...(phone.trim() ? { phone: phone.trim() } : {}),
-        ...(note.trim() ? { note: note.trim() } : {}),
-      },
-      ...items,
-    ])
-    setName('')
-    setBirthday('')
-    setPhone('')
-    setNote('')
-  }
-
-  return (
-    <>
-      <p className="teacher-hint">
-        {label(
-          'Danh sách thành viên gia đình trên máy — dùng khi soạn đơn / liên hệ khẩn. Riêng tư, không đồng bộ.',
-          'Family members on device — useful for forms / emergency contacts. Private, not synced.',
-        )}
-      </p>
-      <div className="wb-module-form">
-        <label>
-          <span>{label('Họ tên', 'Name')}</span>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder={label('VD: Nguyễn An', 'e.g. An Nguyen')}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') add()
-            }}
-          />
-        </label>
-        <label>
-          <span>{label('Quan hệ', 'Relation')}</span>
-          <select value={relation} onChange={(e) => setRelation(e.target.value)}>
-            {(vi
-              ? ['Bố', 'Mẹ', 'Vợ/Chồng', 'Con', 'Anh/Chị/Em', 'Ông/Bà', 'Khác']
-              : ['Father', 'Mother', 'Spouse', 'Child', 'Sibling', 'Grandparent', 'Other']
-            ).map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>{label('Sinh nhật', 'Birthday')}</span>
-          <input type="date" value={birthday} onChange={(e) => setBirthday(e.target.value)} />
-        </label>
-        <label>
-          <span>{label('Điện thoại', 'Phone')}</span>
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} />
-        </label>
-        <label className="teacher-form-wide">
-          <span>{label('Ghi chú', 'Note')}</span>
-          <input
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder={label('VD: Trường / lớp / dị ứng…', 'e.g. School / grade / allergy…')}
-          />
-        </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm thành viên', 'Add member')}
-        </button>
-      </div>
-      <ul className="wb-module-list">
-        {items.length === 0 ? (
-          <li className="teacher-empty">{label('Chưa có thành viên.', 'No members yet.')}</li>
-        ) : (
-          items.map((it) => (
-            <li key={it.id} className="wb-module-row">
-              <div>
-                <strong>
-                  {it.name} · {it.relation}
-                </strong>
-                <span>
-                  {[it.birthday ? `${label('Sinh nhật', 'Birthday')}: ${it.birthday}` : null, it.phone]
-                    .filter(Boolean)
-                    .join(' · ')}
-                </span>
-                {it.note ? <span>{it.note}</span> : null}
-              </div>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => persist(items.filter((x) => x.id !== it.id))}
-              >
-                {label('Xóa', 'Delete')}
-              </button>
-            </li>
-          ))
         )}
       </ul>
     </>

@@ -18,6 +18,7 @@ export type WorkbenchModuleId =
   | 'health'
   | 'self-growth'
   | 'family'
+  | 'friends'
   | 'travel'
   | 'clients'
   | 'contracts'
@@ -36,18 +37,18 @@ export interface WorkbenchModuleDef {
 export const WORKBENCH_MODULES: readonly WorkbenchModuleDef[] = [
   {
     id: 'desk',
-    labelVi: 'Bàn làm việc',
-    labelEn: 'Desk',
-    hintVi: 'Tóm tắt chỉ số, nhắc việc và biểu đồ cá nhân',
-    hintEn: 'Personal KPIs, reminders, and charts',
+    labelVi: 'Không gian của tôi',
+    labelEn: 'My Space',
+    hintVi: 'Tổng hợp việc làm & đời sống — chỉ số, nhắc, biểu đồ',
+    hintEn: 'Work and life at a glance — KPIs, reminders, charts',
     available: true,
   },
   {
     id: 'calendar',
     labelVi: 'Lịch',
     labelEn: 'Calendar',
-    hintVi: 'Mốc hạn / sự kiện theo vai trò',
-    hintEn: 'Deadlines and events for this role',
+    hintVi: 'Xem dạng Calendar hoặc danh sách · mốc hạn theo vai trò',
+    hintEn: 'Calendar or list view · role deadlines',
     available: true,
   },
   {
@@ -60,7 +61,7 @@ export const WORKBENCH_MODULES: readonly WorkbenchModuleDef[] = [
   },
   {
     id: 'notes',
-    labelVi: 'Notes',
+    labelVi: 'Ghi chú',
     labelEn: 'Notes',
     hintVi: 'Ghi chú nhanh tại máy',
     hintEn: 'Quick on-device notes',
@@ -94,8 +95,8 @@ export const WORKBENCH_MODULES: readonly WorkbenchModuleDef[] = [
     id: 'personal-finance',
     labelVi: 'Tài chính cá nhân',
     labelEn: 'Personal finance',
-    hintVi: 'Thu / chi cá nhân trên máy',
-    hintEn: 'On-device personal income & expenses',
+    hintVi: 'Mục tiêu · chi tiêu · đầu tư tích luỹ',
+    hintEn: 'Goals · spending · investing',
     available: true,
   },
   {
@@ -110,8 +111,8 @@ export const WORKBENCH_MODULES: readonly WorkbenchModuleDef[] = [
     id: 'health',
     labelVi: 'Sức khoẻ',
     labelEn: 'Health',
-    hintVi: 'Theo dõi sức khoẻ cá nhân trên máy',
-    hintEn: 'Personal health tracking on device',
+    hintVi: 'Chỉ số, chạy bộ, yoga, thể thao, ăn kiêng, IF, ăn chay',
+    hintEn: 'Metrics, running, yoga, sports, diet, IF, plant-based',
     available: true,
   },
   {
@@ -126,13 +127,21 @@ export const WORKBENCH_MODULES: readonly WorkbenchModuleDef[] = [
     id: 'family',
     labelVi: 'Gia đình tôi',
     labelEn: 'My family',
-    hintVi: 'Thành viên gia đình & ghi chú quan trọng',
-    hintEn: 'Family members and important notes',
+    hintVi: 'Thành viên, đồng hành cùng con, thuốc, chi tiêu, gia phả, cột mốc',
+    hintEn: 'Members, parenting, meds, shopping, family tree, milestones',
+    available: true,
+  },
+  {
+    id: 'friends',
+    labelVi: 'Bạn bè',
+    labelEn: 'Friends',
+    hintVi: 'Thông tin bạn bè, sự kiện quan trọng, kỷ niệm',
+    hintEn: 'Friend profiles, important events, anniversaries',
     available: true,
   },
   {
     id: 'travel',
-    labelVi: 'Travel',
+    labelVi: 'Du lịch',
     labelEn: 'Travel',
     hintVi: 'Quản lý du lịch, chuẩn bị chuyến đi, lưu hành trình',
     hintEn: 'Trips, packing prep, and saved itineraries',
@@ -166,7 +175,7 @@ export const WORKBENCH_MODULES: readonly WorkbenchModuleDef[] = [
 
 /**
  * Suggested pins when a practice has never customized Tab +.
- * Only Bàn làm việc is pinned by default; other modules are opt-in via +.
+ * Only My Space is pinned by default; other modules are opt-in via +.
  */
 export function defaultPinnedModules(_practiceId: PracticeId): WorkbenchModuleId[] {
   return ['desk']

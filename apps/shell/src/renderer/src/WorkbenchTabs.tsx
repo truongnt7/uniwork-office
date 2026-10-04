@@ -55,6 +55,12 @@ export function WorkbenchTabs({
   }, [practiceId])
 
   useEffect(() => {
+    const refresh = () => setPins(readPinnedModules(practiceId))
+    window.addEventListener('uniwork:wb-pins-changed', refresh)
+    return () => window.removeEventListener('uniwork:wb-pins-changed', refresh)
+  }, [practiceId])
+
+  useEffect(() => {
     if (!menuOpen) return
     const onDoc = (e: MouseEvent) => {
       if (!wrapRef.current?.contains(e.target as Node)) setMenuOpen(false)
@@ -214,7 +220,7 @@ export function WorkbenchTabs({
         </button>
         {menuOpen && (
           <div className="teacher-tab-menu" role="menu">
-            <p className="teacher-tab-menu-title">{label('Thêm vào Workbench', 'Add to Workbench')}</p>
+            <p className="teacher-tab-menu-title">{label('Thêm vào bàn làm việc', 'Add to Workbench')}</p>
             {availableToAdd.length === 0 ? (
               <p className="teacher-tab-menu-empty">
                 {label('Đã thêm đủ module.', 'All modules are pinned.')}

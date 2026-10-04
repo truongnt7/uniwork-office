@@ -1,6 +1,6 @@
 import type { PracticeId } from '@uniwork/practice-core'
 
-/** Dashboard widget ids for Tab Bàn làm việc. */
+/** Dashboard widget ids for Tab My Space (module id: desk). */
 export type DeskWidgetId =
   | 'kpi-strip'
   | 'reminders'
@@ -35,10 +35,10 @@ export const DESK_WIDGETS: readonly DeskWidgetDef[] = [
   {
     id: 'kpi-strip',
     group: 'personal',
-    labelVi: 'Chỉ số nhanh',
-    labelEn: 'Quick KPIs',
-    hintVi: 'Việc · sự kiện · thu/chi tháng',
-    hintEn: 'Tasks · events · month income/expense',
+    labelVi: 'Nhịp sống nhanh',
+    labelEn: 'Life pulse',
+    hintVi: 'Việc · sự kiện · thu/chi tháng (dải hero)',
+    hintEn: 'Tasks · events · month cash (hero strip)',
     defaultOn: true,
     wide: true,
   },

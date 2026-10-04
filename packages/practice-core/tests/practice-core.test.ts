@@ -1,16 +1,20 @@
 import { describe, expect, it } from 'vitest'
 import {
+  SKILL_DOMAINS,
   WORKBENCH_MODULES,
   createPracticeMeta,
   defaultPinnedModules,
+  defaultPinnedSkillDomains,
   getPractice,
   isPracticeMeta,
+  isSkillDomainId,
   listPractices,
   practiceIdFromProjectKind,
   practiceMatchesFilter,
   practiceMaterialSeedHtml,
   practiceProjectKind,
   practiceSkillPrompt,
+  skillsForDomain,
 } from '../src/index.js'
 
 describe('practice-core', () => {
@@ -67,6 +71,7 @@ describe('practice-core', () => {
         'health',
         'self-growth',
         'family',
+        'friends',
         'travel',
         'clients',
         'contracts',
@@ -77,5 +82,26 @@ describe('practice-core', () => {
     expect(defaultPinnedModules('legal')).toEqual(['desk'])
     expect(defaultPinnedModules('teacher')).toEqual(['desk'])
     expect(defaultPinnedModules('construction')).toEqual(['desk'])
+  })
+
+  it('exposes skill domains with starter skills', () => {
+    expect(SKILL_DOMAINS.map((d) => d.id)).toEqual(
+      expect.arrayContaining([
+        'education',
+        'health',
+        'legal',
+        'design',
+        'project-mgmt',
+        'sales',
+        'admin',
+        'hr',
+        'customer-care',
+        'personal',
+      ]),
+    )
+    expect(defaultPinnedSkillDomains()).toEqual(['education', 'personal', 'admin'])
+    expect(isSkillDomainId('sales')).toBe(true)
+    expect(skillsForDomain('legal').length).toBeGreaterThan(0)
+    expect(skillsForDomain('personal').every((s) => s.domainId === 'personal')).toBe(true)
   })
 })

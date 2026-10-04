@@ -315,6 +315,21 @@ const tUpd = createI18n({
       'स्वचालित अपडेट विफल रहा। कृपया डाउनलोड पृष्ठ से नवीनतम संस्करण प्राप्त करें और मैन्युअल रूप से इंस्टॉल करें।',
     updOpenDownload: 'डाउनलोड पृष्ठ खोलें',
   },
+  vi: {
+    updTitle: 'Cập nhật phần mềm',
+    updHeadline: 'Có phiên bản mới',
+    updDesc:
+      'Bản cập nhật này gồm cải thiện hiệu năng và sửa lỗi. Chúng tôi khuyên bạn cập nhật ngay.',
+    updDownload: 'Cập nhật ngay',
+    updLater: 'Nhắc tôi sau',
+    updInstall: 'Khởi động lại và cài đặt',
+    updDownloading: 'Đang tải bản cập nhật…',
+    updFailed: 'Tải bản cập nhật thất bại. Kiểm tra mạng và thử lại.',
+    updRetry: 'Thử lại',
+    updManual:
+      'Cập nhật tự động thất bại. Vui lòng tải phiên bản mới nhất từ trang tải xuống và cài đặt thủ công.',
+    updOpenDownload: 'Mở trang tải xuống',
+  },
   'zh-TW': {
     updTitle: '軟體更新',
     updHeadline: '發現新版本',

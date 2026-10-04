@@ -33,6 +33,7 @@ export type UiLanguage =
   | 'ms'
   | 'he'
   | 'hi'
+  | 'vi'
   | 'zh-TW'
 
 /** UI theme preference */
@@ -105,6 +106,17 @@ export interface HomeApi {
     balanceText?: string
     modelCount?: number
   }>
+  /** PWA / Hub → desktop Agent Intent (navigate Workbench tabs, optional mutate) */
+  onAgentIntent(handler: (intent: AgentIntentDto) => void): () => void
+  /** Ack intent lifecycle for future Hub result channel */
+  agentIntentAck(
+    intentId: string,
+    status: 'applied' | 'dismissed' | 'failed',
+  ): Promise<void>
+  /** Resolve NL text to an Agent Intent (desktop helper) */
+  resolveAgentIntent(text: string): Promise<AgentIntentDto | null>
+  /** DEV / tests: inject an intent without deep link */
+  submitAgentIntent(intent: AgentIntentDto): Promise<boolean>
   /** Zip an education lesson pack (files + README + meta.json) */
   exportLessonPack(projectId: string): Promise<{
     ok: boolean
@@ -138,15 +150,15 @@ export interface HomeApi {
   getUpdateChannel(): Promise<UpdateChannel>
   /** switch + persist the update channel; triggers an immediate update check */
   setUpdateChannel(channel: UpdateChannel): Promise<void>
-  /** Genspark account status (gsk login state; to be upgraded to a signup/account system later) */
+  /** UniWork account status (desktop session sync TBD; Sign-in opens the UniWork web link) */
   accountStatus(): Promise<AccountStatus>
-  /** start Genspark login (opens the browser; accountStatus flips to logged-in on completion); returns whether the launch succeeded */
+  /** open UniWork Sign-in in the system browser; returns whether the launch succeeded */
   accountLogin(): Promise<boolean>
   /** progress events for the login started via accountLogin; returns an unsubscribe */
   onAccountLogin(handler: (ev: AccountLoginEvent) => void): () => void
-  /** re-open the pending login auth URL in the default browser (rescue when auto-open failed) */
+  /** re-open the pending UniWork Sign-in URL in the default browser (rescue when auto-open failed) */
   openLoginUrl(): Promise<void>
-  /** log out (clears the saved API key; the login state is shared globally with the gsk CLI) */
+  /** log out (clears any leftover local auth material) */
   accountLogout(): Promise<void>
   /** app version (from package.json / electron app.getVersion) */
   getAppVersion(): Promise<string>
@@ -262,20 +274,37 @@ export interface CloudProjectsSnapshot {
 }
 
 export interface AccountStatus {
-  /** gsk is installed and logged in */
+  /** UniWork desktop session present (web Sign-in link used until sync lands) */
   loggedIn: boolean
   email?: string
-  /** remaining Genspark credits (absent when the balance query failed) */
+  /** remaining account credits when the balance query succeeds */
   creditBalance?: number
 }
 
-/** login flow progress pushed from main (gsk login CLI output) */
+/** login flow progress pushed from main (UniWork Sign-in URL open) */
 export interface AccountLoginEvent {
   phase: 'launched' | 'url' | 'success' | 'error'
   url?: string
   expiresInSec?: number
-  /** 'network' | 'expired' | raw CLI error text */
+  /** 'network' | 'expired' | error text */
   error?: string
+}
+
+/** Serializable Agent Intent (PWA / Hub → desktop Workbench router). */
+export interface AgentIntentDto {
+  intentId: string
+  target:
+    | { kind: 'module'; id: string }
+    | { kind: 'pillar'; id: string }
+    | { kind: 'skill-domain'; id: string }
+  action: 'open' | 'navigate' | 'add_item' | 'summarize' | 'run_skill'
+  scope: 'local' | 'cloud' | 'dual'
+  source: 'pwa' | 'desktop' | 'hub' | 'dev'
+  summary: string
+  text?: string
+  fields?: Record<string, string | number | boolean>
+  requireConsent: boolean
+  createdAt: string
 }
 
 export interface RenameResult {
@@ -508,6 +537,10 @@ export const HOME_CHANNELS = {
   openCloudProject: 'home:open-cloud-project',
   probeAiHub: 'home:probe-ai-hub',
   exportLessonPack: 'home:export-lesson-pack',
+  agentIntentEvent: 'home:agent-intent-event',
+  agentIntentAck: 'home:agent-intent-ack',
+  resolveAgentIntent: 'home:resolve-agent-intent',
+  submitAgentIntent: 'home:submit-agent-intent',
 } as const
 
 export const PROJECT_CHANNELS = {

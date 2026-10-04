@@ -337,6 +337,23 @@ export const zoteroStrings = defineStrings({
       'इस दस्तावेज़ के फ़ुटनोट या एंडनोट में Zotero उद्धरण हैं, जिन्हें UniWork Office अभी अपडेट नहीं कर सकता। ग्रंथसूची को सुरक्षित रखने के लिए यहाँ Zotero कमांड बंद हैं।',
     zoteroGroup: 'Zotero',
   },
+  vi: {
+    zoteroCitation: 'Trích dẫn Zotero',
+    zoteroCitationTip: 'Thêm trích dẫn bằng Zotero; đặt con trỏ trong trích dẫn hiện có để sửa',
+    zoteroBibliography: 'Thư mục Zotero',
+    zoteroBibliographyTip: 'Thêm hoặc sửa thư mục tài liệu tham khảo bằng Zotero',
+    zoteroRefresh: 'Làm mới',
+    zoteroRefreshTip: 'Làm mới tất cả trích dẫn và thư mục Zotero',
+    zoteroDocumentSettings: 'Cài đặt tài liệu',
+    zoteroDocumentSettingsTip: 'Cài đặt tài liệu Zotero',
+    zoteroDocumentPreferences: 'Tùy chọn tài liệu',
+    zoteroRemoveCodes: 'Gỡ mã trường',
+    zoteroConnectionError: 'Không kết nối được Zotero. Hãy khởi động Zotero và giữ chương trình chạy.',
+    zoteroOperationError: 'Thao tác Zotero thất bại.',
+    zoteroNoteFieldsUnsupported:
+      'Tài liệu này có trích dẫn Zotero trong chú thích cuối trang hoặc cuối tài liệu mà UniWork Office chưa cập nhật được. Các lệnh Zotero bị tắt ở đây để giữ thư mục tham khảo nguyên vẹn.',
+    zoteroGroup: 'Zotero',
+  },
   'zh-TW': {
     zoteroCitation: 'Zotero 引文',
     zoteroCitationTip: '使用 Zotero 新增引文；游標位於現有引文中時可編輯',

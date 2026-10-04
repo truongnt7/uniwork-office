@@ -52,6 +52,8 @@ describe('normalizeLang', () => {
     expect(normalizeLang('he-IL')).toBe('he')
     expect(normalizeLang('iw-IL')).toBe('he')
     expect(normalizeLang('hi-IN')).toBe('hi')
+    expect(normalizeLang('vi-VN')).toBe('vi')
+    expect(normalizeLang('vi')).toBe('vi')
   })
 
   it('maps everything else (and missing) to en', () => {
@@ -97,6 +99,7 @@ describe('isLang', () => {
     expect(isLang('ms')).toBe(true)
     expect(isLang('he')).toBe(true)
     expect(isLang('hi')).toBe(true)
+    expect(isLang('vi')).toBe(true)
     expect(isLang('zh-TW')).toBe(true)
     expect(isLang('zh-CN')).toBe(false)
     expect(isLang(42)).toBe(false)
@@ -193,6 +196,7 @@ describe('createI18n', () => {
     ms: { hello: 'Helo {name}', plain: 'Fail' },
     he: { hello: 'שלום {name}', plain: 'קבצים' },
     hi: { hello: 'नमस्ते {name}', plain: 'फ़ाइलें' },
+    vi: { hello: 'Xin chào {name}', plain: 'Tệp' },
     'zh-TW': { hello: '你好 {name}', plain: '檔案' },
   })
 
@@ -209,5 +213,6 @@ describe('createI18n', () => {
     expect(t('he', 'plain')).toBe('קבצים')
     expect(t('cs', 'plain')).toBe('Soubory')
     expect(t('zh-TW', 'plain')).toBe('檔案')
+    expect(t('vi', 'plain')).toBe('Tệp')
   })
 })

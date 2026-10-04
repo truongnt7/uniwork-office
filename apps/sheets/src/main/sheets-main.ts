@@ -1334,6 +1334,66 @@ const tMain = createI18n({
     csvKeepFormatDetail:
       'CSV केवल एक शीट के मान रखता है — सूत्र, स्वरूपण और अतिरिक्त शीट .csv फ़ाइल में सहेजे नहीं जाते।',
   },
+  vi: {
+    filterSpreadsheets: 'Bảng tính',
+    filterXlsx: 'Sổ làm việc Excel',
+    filterXlsm: 'Sổ làm việc Excel có macro',
+    dlgAddAttachment: 'Thêm tệp đính kèm',
+    filterSupported: 'Tệp được hỗ trợ',
+    filterAll: 'Tất cả tệp',
+    errUnsupportedExt: 'Tệp .{ext} không được hỗ trợ',
+    errNotFile: 'không phải tệp',
+    errTooLarge: 'vượt quá giới hạn {mb}MB',
+    errImageTooLarge: 'ảnh vượt quá giới hạn 5MB',
+    errUnreadable: 'không đọc được',
+    errFileTooLarge: 'Tệp vượt quá giới hạn kích thước',
+    errParseFailed: 'Phân tích tệp thất bại',
+    errImageNoText: 'Tệp đính kèm ảnh không có văn bản; ảnh được gửi kèm tin nhắn của người dùng',
+    errNotImage: 'không phải loại ảnh được hỗ trợ',
+    errGskNotLoggedIn:
+      'Chưa đăng nhập Genspark: nhấp “Đăng nhập Genspark” bên dưới, đăng nhập, rồi thử lại',
+    errNoApiKey: 'Chưa cấu hình khóa API cho {provider}',
+    errAiBusy: 'Dịch vụ AI đang bận — vui lòng thử lại sau giây lát',
+    errNoModel: 'Chưa cấu hình tên mô hình',
+    errImgAbsPath: 'Đường dẫn ảnh phải là tuyệt đối.',
+    errImgNotFound: 'Không tìm thấy tệp ảnh: {path}',
+    errImgTooLarge20: 'Ảnh vượt quá 20MB và không thể chèn.',
+    errImgBadType: 'Tệp không phải ảnh PNG/JPEG/GIF.',
+    errDiskChanged: 'Sổ làm việc đã thay đổi trên đĩa sau khi mở — hãy dùng Lưu thành.',
+    autosaveFoundTitle: 'Tìm thấy phiên bản khôi phục',
+    autosaveFoundBody:
+      'Có thay đổi chưa lưu từ phiên trước. Khôi phục phiên bản tự lưu? Lưu sau khi khôi phục sẽ ghi đè tệp gốc.',
+    autosaveRestore: 'Khôi phục',
+    autosaveDiscard: 'Hủy bỏ',
+    menuFile: 'Tệp',
+    menuOpenWorkbook: 'Mở sổ làm việc…',
+    menuSave: 'Lưu',
+    menuSaveAs: 'Lưu thành…',
+    menuExportPdf: 'Xuất PDF…',
+    menuPrint: 'In…',
+    menuClose: 'Đóng',
+    menuQuit: 'Thoát',
+    menuEdit: 'Chỉnh sửa',
+    menuUndo: 'Hoàn tác',
+    menuRedo: 'Làm lại',
+    closeUnsavedMsg: '{count} thay đổi chưa lưu',
+    closeUnsavedDetail: 'Các thay đổi sẽ bị mất nếu bạn đóng mà không lưu.',
+    btnDontSave: 'Không lưu',
+    btnCancel: 'Hủy',
+    csvSaveAsNotice: 'Tệp CSV không giữ được định dạng — lưu thành .xlsx để giữ mọi thay đổi.',
+    menuExportCsv: 'Xuất CSV…',
+    filterCsv: 'CSV (phân tách bằng dấu phẩy)',
+    csvFormulaLossMsg: 'Trang tính này chứa công thức mà CSV không thể giữ.',
+    csvFormulaLossDetail:
+      'CSV chỉ giữ giá trị thuần — công thức bị làm phẳng thành kết quả hiện tại, và định dạng bị mất.',
+    csvKeepXlsxBtn: 'Lưu thành .xlsx',
+    csvContinueBtn: 'Tiếp tục với CSV',
+    csvActiveSheetOnlyNotice:
+      'Tệp CSV chỉ chứa một trang tính — chỉ trang đang hoạt động "{name}" sẽ được xuất.',
+    csvKeepFormatMsg: 'Tiếp tục lưu ở định dạng CSV?',
+    csvKeepFormatDetail:
+      'CSV chỉ giữ giá trị thuần của một trang tính — công thức, định dạng và các trang tính khác không được lưu vào tệp .csv.',
+  },
   'zh-TW': {
     filterSpreadsheets: '電子試算表',
     filterXlsx: 'Excel 活頁簿',
@@ -1507,7 +1567,10 @@ async function createStandaloneSheetsDocument(
   request: SheetsAiHostDocumentRequest,
 ): Promise<WorkbookCreateDocumentResult> {
   if (request.type === 'docx') {
-    return { ok: false, error: 'Creating DOCX files requires the UniWork Office shell or Docs app.' }
+    return {
+      ok: false,
+      error: 'Creating DOCX files requires the UniWork Office shell or Docs app.',
+    }
   }
   const title = sanitizeGeneratedFileBase(request.title)
   try {

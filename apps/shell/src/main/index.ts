@@ -92,13 +92,24 @@ import {
   syncCloudProjects,
 } from './cloud-projects'
 import { handleDroppedFiles } from './dropped-files'
+import {
+  handleOfficeLaunchUrl,
+  liveBridgeSessionForPath,
+  persistUniWorkApiOriginFromEnv,
+  resolveUniWorkSignInUrl,
+  saveActivePathToUniWork,
+} from './office-bridge-host'
+import { isAgentIntentUrl, parseAgentIntentUrl } from './agent-intent-host'
+import { extractLaunchUrlFromArgv } from '@uniwork/office-bridge'
+import {
+  createAgentIntent,
+  resolveAgentIntentFromText,
+  type AgentIntent,
+} from '@uniwork/practice-core'
 import { ProjectStore } from '@genoffice/project-store'
 import {
   genofficeLogout,
-  gskLoginInfo,
-  loadGenofficeAuth,
   setGskProxyUrl,
-  startGenofficeLogin,
 } from '@genoffice/ai-search'
 
 import {
@@ -577,6 +588,15 @@ const tMain = createI18n({
     menuWindow: '窗口',
     menuHome: '首页',
     backToHome: '返回首页',
+    saveToUniWork: '保存到 UniWork',
+    uwOpening: '正在从 UniWork 打开…',
+    uwSaving: '正在保存到 UniWork…',
+    uwSavedVersion: '已保存为 v{version}',
+    uwSaveFailed: '保存到 UniWork 失败',
+    uwVersionConflict: '已有更新版本。本地文件已保留。',
+    uwAccessDenied: '访问权限已移除。本地文件已保留。',
+    uwSessionExpired: 'UniWork 会话已过期。',
+    uwUnsupported: 'UniWork 无法打开此文件类型。',
     dlgOpenTitle: '打开文件',
     filterSupported: '支持的文件',
     filterWord: 'Word 文档',
@@ -658,6 +678,15 @@ const tMain = createI18n({
     menuWindow: 'Window',
     menuHome: 'Home',
     backToHome: 'Back to Home',
+    saveToUniWork: 'Save to UniWork',
+    uwOpening: 'Opening from UniWork…',
+    uwSaving: 'Saving to UniWork…',
+    uwSavedVersion: 'Saved as v{version}',
+    uwSaveFailed: 'Save to UniWork failed',
+    uwVersionConflict: 'A newer version exists. Your local file was kept.',
+    uwAccessDenied: 'Access to this Work Product was removed. Your local file was kept.',
+    uwSessionExpired: 'The UniWork session expired.',
+    uwUnsupported: 'This file type cannot be opened from UniWork.',
     dlgOpenTitle: 'Open File',
     filterSupported: 'Supported Files',
     filterWord: 'Word Documents',
@@ -747,6 +776,15 @@ const tMain = createI18n({
     menuWindow: 'ウィンドウ',
     menuHome: 'ホーム',
     backToHome: 'ホームに戻る',
+    saveToUniWork: 'UniWork に保存',
+    uwOpening: 'UniWork から開いています…',
+    uwSaving: 'UniWork に保存しています…',
+    uwSavedVersion: 'v{version} として保存しました',
+    uwSaveFailed: 'UniWork への保存に失敗しました',
+    uwVersionConflict: '新しいバージョンがあります。ローカルファイルは保持されます。',
+    uwAccessDenied: 'アクセス権が削除されました。ローカルファイルは保持されます。',
+    uwSessionExpired: 'UniWork セッションの有効期限が切れました。',
+    uwUnsupported: 'このファイル種類は UniWork から開けません。',
     dlgOpenTitle: 'ファイルを開く',
     filterSupported: '対応ファイル',
     filterWord: 'Word 文書',
@@ -836,6 +874,15 @@ const tMain = createI18n({
     menuWindow: '창',
     menuHome: '홈',
     backToHome: '홈으로 돌아가기',
+    saveToUniWork: 'UniWork에 저장',
+    uwOpening: 'UniWork에서 여는 중…',
+    uwSaving: 'UniWork에 저장하는 중…',
+    uwSavedVersion: 'v{version}(으)로 저장됨',
+    uwSaveFailed: 'UniWork 저장 실패',
+    uwVersionConflict: '더 최신 버전이 있습니다. 로컬 파일은 유지됩니다.',
+    uwAccessDenied: '접근 권한이 제거되었습니다. 로컬 파일은 유지됩니다.',
+    uwSessionExpired: 'UniWork 세션이 만료되었습니다.',
+    uwUnsupported: '이 파일 형식은 UniWork에서 열 수 없습니다.',
     dlgOpenTitle: '파일 열기',
     filterSupported: '지원되는 파일',
     filterWord: 'Word 문서',
@@ -924,6 +971,15 @@ const tMain = createI18n({
     menuWindow: 'Fenêtre',
     menuHome: 'Accueil',
     backToHome: "Retour à l'accueil",
+    saveToUniWork: 'Enregistrer dans UniWork',
+    uwOpening: 'Ouverture depuis UniWork…',
+    uwSaving: 'Enregistrement dans UniWork…',
+    uwSavedVersion: 'Enregistré en v{version}',
+    uwSaveFailed: 'Échec de l’enregistrement UniWork',
+    uwVersionConflict: 'Une version plus récente existe. Le fichier local a été conservé.',
+    uwAccessDenied: 'Accès retiré. Le fichier local a été conservé.',
+    uwSessionExpired: 'La session UniWork a expiré.',
+    uwUnsupported: 'Ce type de fichier ne peut pas être ouvert depuis UniWork.',
     dlgOpenTitle: 'Ouvrir un fichier',
     filterSupported: 'Fichiers pris en charge',
     filterWord: 'Documents Word',
@@ -1014,6 +1070,15 @@ const tMain = createI18n({
     menuWindow: 'Fenster',
     menuHome: 'Startseite',
     backToHome: 'Zurück zur Startseite',
+    saveToUniWork: 'In UniWork speichern',
+    uwOpening: 'Wird von UniWork geöffnet…',
+    uwSaving: 'Wird in UniWork gespeichert…',
+    uwSavedVersion: 'Gespeichert als v{version}',
+    uwSaveFailed: 'Speichern in UniWork fehlgeschlagen',
+    uwVersionConflict: 'Eine neuere Version existiert. Die lokale Datei wurde behalten.',
+    uwAccessDenied: 'Zugriff entzogen. Die lokale Datei wurde behalten.',
+    uwSessionExpired: 'Die UniWork-Sitzung ist abgelaufen.',
+    uwUnsupported: 'Dieser Dateityp kann nicht aus UniWork geöffnet werden.',
     dlgOpenTitle: 'Datei öffnen',
     filterSupported: 'Unterstützte Dateien',
     filterWord: 'Word-Dokumente',
@@ -1104,6 +1169,15 @@ const tMain = createI18n({
     menuWindow: 'Ventana',
     menuHome: 'Inicio',
     backToHome: 'Volver al inicio',
+    saveToUniWork: 'Guardar en UniWork',
+    uwOpening: 'Abriendo desde UniWork…',
+    uwSaving: 'Guardando en UniWork…',
+    uwSavedVersion: 'Guardado como v{version}',
+    uwSaveFailed: 'Error al guardar en UniWork',
+    uwVersionConflict: 'Existe una versión más reciente. Se conservó el archivo local.',
+    uwAccessDenied: 'Se quitó el acceso. Se conservó el archivo local.',
+    uwSessionExpired: 'La sesión de UniWork caducó.',
+    uwUnsupported: 'Este tipo de archivo no se puede abrir desde UniWork.',
     dlgOpenTitle: 'Abrir archivo',
     filterSupported: 'Archivos compatibles',
     filterWord: 'Documentos de Word',
@@ -1194,6 +1268,15 @@ const tMain = createI18n({
     menuWindow: 'หน้าต่าง',
     menuHome: 'หน้าแรก',
     backToHome: 'กลับไปหน้าแรก',
+    saveToUniWork: 'บันทึกไปยัง UniWork',
+    uwOpening: 'กำลังเปิดจาก UniWork…',
+    uwSaving: 'กำลังบันทึกไปยัง UniWork…',
+    uwSavedVersion: 'บันทึกเป็น v{version}',
+    uwSaveFailed: 'บันทึกไปยัง UniWork ไม่สำเร็จ',
+    uwVersionConflict: 'มีรุ่นที่ใหม่กว่า ไฟล์ในเครื่องถูกเก็บไว้',
+    uwAccessDenied: 'สิทธิ์ถูกถอน ไฟล์ในเครื่องถูกเก็บไว้',
+    uwSessionExpired: 'เซสชัน UniWork หมดอายุ',
+    uwUnsupported: 'ไม่สามารถเปิดชนิดไฟล์นี้จาก UniWork',
     dlgOpenTitle: 'เปิดไฟล์',
     filterSupported: 'ไฟล์ที่รองรับ',
     filterWord: 'เอกสาร Word',
@@ -1280,6 +1363,15 @@ const tMain = createI18n({
     menuWindow: 'Jendela',
     menuHome: 'Beranda',
     backToHome: 'Kembali ke Beranda',
+    saveToUniWork: 'Simpan ke UniWork',
+    uwOpening: 'Membuka dari UniWork…',
+    uwSaving: 'Menyimpan ke UniWork…',
+    uwSavedVersion: 'Disimpan sebagai v{version}',
+    uwSaveFailed: 'Gagal menyimpan ke UniWork',
+    uwVersionConflict: 'Ada versi lebih baru. File lokal tetap ada.',
+    uwAccessDenied: 'Akses dicabut. File lokal tetap ada.',
+    uwSessionExpired: 'Sesi UniWork kedaluwarsa.',
+    uwUnsupported: 'Jenis file ini tidak dapat dibuka dari UniWork.',
     dlgOpenTitle: 'Buka File',
     filterSupported: 'File yang Didukung',
     filterWord: 'Dokumen Word',
@@ -1370,6 +1462,15 @@ const tMain = createI18n({
     menuWindow: 'Окно',
     menuHome: 'Главная',
     backToHome: 'Вернуться на главную',
+    saveToUniWork: 'Сохранить в UniWork',
+    uwOpening: 'Открытие из UniWork…',
+    uwSaving: 'Сохранение в UniWork…',
+    uwSavedVersion: 'Сохранено как v{version}',
+    uwSaveFailed: 'Не удалось сохранить в UniWork',
+    uwVersionConflict: 'Есть более новая версия. Локальный файл сохранён.',
+    uwAccessDenied: 'Доступ отозван. Локальный файл сохранён.',
+    uwSessionExpired: 'Сеанс UniWork истёк.',
+    uwUnsupported: 'Этот тип файла нельзя открыть из UniWork.',
     dlgOpenTitle: 'Открытие файла',
     filterSupported: 'Поддерживаемые файлы',
     filterWord: 'Документы Word',
@@ -1460,6 +1561,15 @@ const tMain = createI18n({
     menuWindow: 'نافذة',
     menuHome: 'الصفحة الرئيسية',
     backToHome: 'العودة إلى الصفحة الرئيسية',
+    saveToUniWork: 'حفظ إلى UniWork',
+    uwOpening: 'جارٍ الفتح من UniWork…',
+    uwSaving: 'جارٍ الحفظ إلى UniWork…',
+    uwSavedVersion: 'تم الحفظ كـ v{version}',
+    uwSaveFailed: 'فشل الحفظ إلى UniWork',
+    uwVersionConflict: 'يوجد إصدار أحدث. تم الاحتفاظ بالملف المحلي.',
+    uwAccessDenied: 'تم سحب الوصول. تم الاحتفاظ بالملف المحلي.',
+    uwSessionExpired: 'انتهت جلسة UniWork.',
+    uwUnsupported: 'لا يمكن فتح هذا النوع من UniWork.',
     dlgOpenTitle: 'فتح ملف',
     filterSupported: 'الملفات المدعومة',
     filterWord: 'مستندات Word',
@@ -1546,6 +1656,15 @@ const tMain = createI18n({
     menuWindow: 'Janela',
     menuHome: 'Início',
     backToHome: 'Voltar ao início',
+    saveToUniWork: 'Salvar no UniWork',
+    uwOpening: 'Abrindo do UniWork…',
+    uwSaving: 'Salvando no UniWork…',
+    uwSavedVersion: 'Salvo como v{version}',
+    uwSaveFailed: 'Falha ao salvar no UniWork',
+    uwVersionConflict: 'Existe uma versão mais nova. O arquivo local foi mantido.',
+    uwAccessDenied: 'Acesso removido. O arquivo local foi mantido.',
+    uwSessionExpired: 'A sessão do UniWork expirou.',
+    uwUnsupported: 'Este tipo de arquivo não pode ser aberto pelo UniWork.',
     dlgOpenTitle: 'Abrir arquivo',
     filterSupported: 'Arquivos compatíveis',
     filterWord: 'Documentos do Word',
@@ -1636,6 +1755,15 @@ const tMain = createI18n({
     menuWindow: 'Finestra',
     menuHome: 'Home',
     backToHome: 'Torna alla Home',
+    saveToUniWork: 'Salva su UniWork',
+    uwOpening: 'Apertura da UniWork…',
+    uwSaving: 'Salvataggio su UniWork…',
+    uwSavedVersion: 'Salvato come v{version}',
+    uwSaveFailed: 'Salvataggio su UniWork non riuscito',
+    uwVersionConflict: 'Esiste una versione più recente. Il file locale è stato conservato.',
+    uwAccessDenied: 'Accesso revocato. Il file locale è stato conservato.',
+    uwSessionExpired: 'La sessione UniWork è scaduta.',
+    uwUnsupported: 'Questo tipo di file non può essere aperto da UniWork.',
     dlgOpenTitle: 'Apri file',
     filterSupported: 'File supportati',
     filterWord: 'Documenti Word',
@@ -1726,6 +1854,15 @@ const tMain = createI18n({
     menuWindow: 'Okno',
     menuHome: 'Strona główna',
     backToHome: 'Wróć do strony głównej',
+    saveToUniWork: 'Zapisz w UniWork',
+    uwOpening: 'Otwieranie z UniWork…',
+    uwSaving: 'Zapisywanie w UniWork…',
+    uwSavedVersion: 'Zapisano jako v{version}',
+    uwSaveFailed: 'Nie udało się zapisać w UniWork',
+    uwVersionConflict: 'Istnieje nowsza wersja. Plik lokalny zachowano.',
+    uwAccessDenied: 'Odebrano dostęp. Plik lokalny zachowano.',
+    uwSessionExpired: 'Sesja UniWork wygasła.',
+    uwUnsupported: 'Tego typu pliku nie można otworzyć z UniWork.',
     dlgOpenTitle: 'Otwieranie pliku',
     filterSupported: 'Obsługiwane pliki',
     filterWord: 'Dokumenty programu Word',
@@ -1816,6 +1953,15 @@ const tMain = createI18n({
     menuWindow: 'Okno',
     menuHome: 'Domů',
     backToHome: 'Zpět na domovskou stránku',
+    saveToUniWork: 'Uložit do UniWork',
+    uwOpening: 'Otevírání z UniWork…',
+    uwSaving: 'Ukládání do UniWork…',
+    uwSavedVersion: 'Uloženo jako v{version}',
+    uwSaveFailed: 'Uložení do UniWork selhalo',
+    uwVersionConflict: 'Existuje novější verze. Místní soubor byl zachován.',
+    uwAccessDenied: 'Přístup byl odebrán. Místní soubor byl zachován.',
+    uwSessionExpired: 'Relace UniWork vypršela.',
+    uwUnsupported: 'Tento typ souboru nelze z UniWork otevřít.',
     dlgOpenTitle: 'Otevřít soubor',
     filterSupported: 'Podporované soubory',
     filterWord: 'Dokumenty Word',
@@ -1904,6 +2050,15 @@ const tMain = createI18n({
     menuWindow: 'Venster',
     menuHome: 'Start',
     backToHome: 'Terug naar start',
+    saveToUniWork: 'Opslaan in UniWork',
+    uwOpening: 'Openen vanuit UniWork…',
+    uwSaving: 'Opslaan in UniWork…',
+    uwSavedVersion: 'Opgeslagen als v{version}',
+    uwSaveFailed: 'Opslaan in UniWork mislukt',
+    uwVersionConflict: 'Er is een nieuwere versie. Het lokale bestand is bewaard.',
+    uwAccessDenied: 'Toegang ingetrokken. Het lokale bestand is bewaard.',
+    uwSessionExpired: 'De UniWork-sessie is verlopen.',
+    uwUnsupported: 'Dit bestandstype kan niet vanuit UniWork worden geopend.',
     dlgOpenTitle: 'Bestand openen',
     filterSupported: 'Ondersteunde bestanden',
     filterWord: 'Word-documenten',
@@ -1994,6 +2149,15 @@ const tMain = createI18n({
     menuWindow: 'Tetingkap',
     menuHome: 'Laman Utama',
     backToHome: 'Kembali ke Laman Utama',
+    saveToUniWork: 'Simpan ke UniWork',
+    uwOpening: 'Membuka dari UniWork…',
+    uwSaving: 'Menyimpan ke UniWork…',
+    uwSavedVersion: 'Disimpan sebagai v{version}',
+    uwSaveFailed: 'Gagal menyimpan ke UniWork',
+    uwVersionConflict: 'Terdapat versi lebih baharu. Fail setempat dikekalkan.',
+    uwAccessDenied: 'Akses dibuang. Fail setempat dikekalkan.',
+    uwSessionExpired: 'Sesi UniWork telah tamat.',
+    uwUnsupported: 'Jenis fail ini tidak boleh dibuka dari UniWork.',
     dlgOpenTitle: 'Buka Fail',
     filterSupported: 'Fail yang Disokong',
     filterWord: 'Dokumen Word',
@@ -2083,6 +2247,15 @@ const tMain = createI18n({
     menuWindow: 'חלון',
     menuHome: 'דף הבית',
     backToHome: 'חזרה לדף הבית',
+    saveToUniWork: 'שמירה ל-UniWork',
+    uwOpening: 'פתיחה מ-UniWork…',
+    uwSaving: 'שמירה ל-UniWork…',
+    uwSavedVersion: 'נשמר כ-v{version}',
+    uwSaveFailed: 'השמירה ל-UniWork נכשלה',
+    uwVersionConflict: 'קיימת גרסה חדשה יותר. הקובץ המקומי נשמר.',
+    uwAccessDenied: 'הגישה הוסרה. הקובץ המקומי נשמר.',
+    uwSessionExpired: 'פג תוקף ההפעלה של UniWork.',
+    uwUnsupported: 'לא ניתן לפתוח סוג קובץ זה מ-UniWork.',
     dlgOpenTitle: 'פתיחת קובץ',
     filterSupported: 'קבצים נתמכים',
     filterWord: 'מסמכי Word',
@@ -2170,6 +2343,15 @@ const tMain = createI18n({
     menuWindow: 'विंडो',
     menuHome: 'होम',
     backToHome: 'होम पर वापस जाएँ',
+    saveToUniWork: 'UniWork में सहेजें',
+    uwOpening: 'UniWork से खोला जा रहा है…',
+    uwSaving: 'UniWork में सहेजा जा रहा है…',
+    uwSavedVersion: 'v{version} के रूप में सहेजा गया',
+    uwSaveFailed: 'UniWork में सहेजना विफल',
+    uwVersionConflict: 'एक नया संस्करण मौजूद है। स्थानीय फ़ाइल रखी गई।',
+    uwAccessDenied: 'पहुँच हटा दी गई। स्थानीय फ़ाइल रखी गई।',
+    uwSessionExpired: 'UniWork सत्र समाप्त हो गया।',
+    uwUnsupported: 'इस फ़ाइल प्रकार को UniWork से नहीं खोला जा सकता।',
     dlgOpenTitle: 'फ़ाइल खोलें',
     filterSupported: 'समर्थित फ़ाइलें',
     filterWord: 'Word दस्तावेज़',
@@ -2233,6 +2415,103 @@ const tMain = createI18n({
     errSaveDirUnusable:
       'चयनित फ़ोल्डर में लिखा नहीं जा सकता, इसलिए इसे डिफ़ॉल्ट सहेजने के स्थान के रूप में उपयोग नहीं किया जा सकता',
   },
+  vi: {
+    menuFile: 'Tệp',
+    menuSectionNew: 'Mới',
+    menuNewDoc: 'AI Docs',
+    menuNewSheet: 'AI Sheets',
+    untitledSheet: 'Bảng tính chưa đặt tên',
+    untitledDoc: 'Tài liệu chưa đặt tên',
+    untitledDeck: 'Bài trình bày chưa đặt tên',
+    untitledMarkdown: 'Markdown chưa đặt tên',
+    untitledHtml: 'HTML chưa đặt tên',
+    untitledPdf: 'PDF chưa đặt tên',
+    menuNewSlide: 'AI Slides',
+    menuNewMarkdown: 'AI Markdown',
+    menuNewHtml: 'AI HTML',
+    menuNewPdf: 'AI PDF',
+    menuExportPdf: 'Xuất thành PDF…',
+    menuExportHtml: 'Xuất thành HTML một tệp…',
+    menuOpenInDocs: 'Chuyển đổi và mở trong Docs',
+    menuPrint: 'In…',
+    menuOpen: 'Mở…',
+    menuSave: 'Lưu',
+    menuSaveAs: 'Lưu thành…',
+    menuClose: 'Đóng',
+    menuEdit: 'Chỉnh sửa',
+    menuWindow: 'Cửa sổ',
+    menuHome: 'Trang chủ',
+    backToHome: 'Quay lại trang chủ',
+    saveToUniWork: 'Lưu vào UniWork',
+    uwOpening: 'Đang mở từ UniWork…',
+    uwSaving: 'Đang lưu vào UniWork…',
+    uwSavedVersion: 'Đã lưu thành v{version}',
+    uwSaveFailed: 'Lưu vào UniWork thất bại',
+    uwVersionConflict: 'Đã có phiên bản mới hơn. Tệp cục bộ của bạn được giữ lại.',
+    uwAccessDenied: 'Quyền truy cập Work Product này đã bị gỡ. Tệp cục bộ của bạn được giữ lại.',
+    uwSessionExpired: 'Phiên UniWork đã hết hạn.',
+    uwUnsupported: 'Không thể mở loại tệp này từ UniWork.',
+    dlgOpenTitle: 'Mở tệp',
+    filterSupported: 'Tệp được hỗ trợ',
+    filterWord: 'Tài liệu Word',
+    filterExcel: 'Sổ làm việc Excel',
+    filterPpt: 'Bài trình bày PowerPoint',
+    filterMarkdown: 'Tài liệu Markdown',
+    filterHtml: 'Tài liệu HTML',
+    filterPdf: 'Tài liệu PDF',
+    errBadArgs: 'Đối số không hợp lệ',
+    errBadName: 'Tên tệp không hợp lệ',
+    errMissing: 'Không tìm thấy tệp',
+    errExists: 'Đã có tệp với tên đó',
+    errRenameFailed: 'Đổi tên thất bại',
+    errNewTabFailed: 'Không thể tạo tài liệu mới',
+    errUnsupportedExt: 'Tệp .{ext} không được hỗ trợ',
+    copySuffix: 'bản sao',
+    menuHelp: 'Trợ giúp',
+    thirdPartyNotices: 'Thông báo phần mềm bên thứ ba',
+    menuExportDocx: 'Xuất thành Word…',
+    btnCancel: 'Hủy',
+    pdfDocxFailedMsg: 'Xuất thành Word thất bại',
+    pdfDocxBusyMsg: 'Đang xuất Word. Vui lòng đợi hoàn tất.',
+    menuExportPptx: 'Xuất thành PowerPoint…',
+    pdfPptxFailedMsg: 'Xuất thành PowerPoint thất bại',
+    pdfPptxBusyMsg: 'Đang xuất. Vui lòng đợi hoàn tất.',
+    pdfPptxLocalScannedDetail:
+      'Mỗi trang được xuất dưới dạng ảnh toàn trang; văn bản trên các slide không thể chỉnh sửa.',
+    menuExportXlsx: 'Xuất thành Excel…',
+    pdfXlsxFailedMsg: 'Xuất thành Excel thất bại',
+    pdfXlsxBusyMsg: 'Đang xuất. Vui lòng đợi hoàn tất.',
+    pdfXlsxLocalScannedDetail:
+      'Không thể chuyển trang đã quét thành ô; mỗi trang có một hàng thông báo trên worksheet.',
+    pdfXlsxLocalSkippedMsg: 'Một số trang không được chuyển thành ô',
+    pdfXlsxLocalSkippedDetail:
+      'Không thể chuyển trang {pages} thành ô; worksheet của chúng có một hàng thông báo.',
+    pdfDocxLocalScannedMsg: 'Phát hiện tài liệu đã quét',
+    pdfDocxLocalScannedDetail:
+      'Các trang được xuất dưới dạng ảnh để giữ nguyên giao diện; không nhận dạng được văn bản có thể chỉnh sửa.',
+    pdfDocxLocalDegradedMsg: 'Một số trang được xuất dưới dạng ảnh',
+    pdfDocxLocalDegradedDetail:
+      'Không thể tái tạo đáng tin cậy trang {pages}, nên chúng được xuất dưới dạng ảnh toàn trang.',
+    pdfDocxLocalOcrMsg: 'Trang đã quét đã được chuyển thành văn bản có thể chỉnh sửa',
+    pdfDocxLocalOcrDetail:
+      'Trang {pages} là bản quét; văn bản được khôi phục bằng OCR trên thiết bị. Vui lòng kiểm tra kết quả.',
+    pdfDocxLocalEncryptedDetail:
+      'PDF này đã được mã hóa và không thể mở nếu không có mật khẩu đúng.',
+    pdfDocxLocalUnsupportedEncDetail:
+      'PDF này dùng mã hóa dựa trên chứng chỉ hoặc không được hỗ trợ và không thể chuyển đổi.',
+    pdfPwdTitle: 'Nhập mật khẩu',
+    pdfPwdPrompt: 'PDF này đã được mã hóa. Nhập mật khẩu để mở:',
+    pdfPwdRetryPrompt: 'Mật khẩu không đúng. Vui lòng thử lại.',
+    pdfPwdOk: 'OK',
+    pdfPwdVerifying: 'Đang xác minh mật khẩu…',
+    pdfPwdLabel: 'Mật khẩu',
+    pdfPwdPlaceholder: 'Nhập mật khẩu mở tệp',
+    pdfPwdShow: 'Hiện mật khẩu',
+    pdfPwdHide: 'Ẩn mật khẩu',
+    pdfDocxLocalCorruptDetail: 'Tệp bị hỏng hoặc không phải PDF hợp lệ và không thể chuyển đổi.',
+    dlgPickSaveDir: 'Chọn vị trí lưu mặc định',
+    errSaveDirUnusable: 'Thư mục đã chọn không ghi được và không thể dùng làm vị trí lưu mặc định',
+  },
   'zh-TW': {
     menuFile: '檔案',
     menuSectionNew: '新增',
@@ -2260,6 +2539,15 @@ const tMain = createI18n({
     menuWindow: '視窗',
     menuHome: '首頁',
     backToHome: '返回首頁',
+    saveToUniWork: '儲存到 UniWork',
+    uwOpening: '正在從 UniWork 開啟…',
+    uwSaving: '正在儲存到 UniWork…',
+    uwSavedVersion: '已儲存為 v{version}',
+    uwSaveFailed: '儲存到 UniWork 失敗',
+    uwVersionConflict: '已有更新版本。本機檔案已保留。',
+    uwAccessDenied: '存取權已移除。本機檔案已保留。',
+    uwSessionExpired: 'UniWork 工作階段已過期。',
+    uwUnsupported: '無法從 UniWork 開啟此檔案類型。',
     dlgOpenTitle: '開啟檔案',
     filterSupported: '支援的檔案',
     filterWord: 'Word 文件',
@@ -2679,6 +2967,7 @@ function notifyUnsupportedFile(filePath: string): void {
 
 /** shell-hosted warning box; focused when a shell window exists, standalone otherwise */
 function showAppWarning(message: string): void {
+  if (process.env.UNIWORK_BRIDGE_SILENT === '1') return
   const options = { type: 'warning' as const, message }
   if (shellWindow) {
     shellWindow.show()
@@ -2688,6 +2977,91 @@ function showAppWarning(message: string): void {
     void dialog.showMessageBox(options)
   }
 }
+
+function showAppInfo(message: string): void {
+  if (process.env.UNIWORK_BRIDGE_SILENT === '1') return
+  const options = { type: 'info' as const, message }
+  if (shellWindow) {
+    shellWindow.show()
+    shellWindow.focus()
+    void dialog.showMessageBox(shellWindow, options)
+  } else {
+    void dialog.showMessageBox(options)
+  }
+}
+
+function officeBridgeDeps() {
+  return {
+    userDataDir: app.getPath('userData'),
+    settingsPath: APP_SETTINGS_PATH(),
+    openDocumentPath,
+    showWarning: showAppWarning,
+    showInfo: showAppInfo,
+    t: (key: Parameters<typeof tm>[0], params?: Record<string, string | number>) => tm(key, params),
+  }
+}
+
+function broadcastAgentIntent(intent: AgentIntent): void {
+  for (const wc of webContents.getAllWebContents()) {
+    if (!wc.isDestroyed()) wc.send(HOME_CHANNELS.agentIntentEvent, intent)
+  }
+}
+
+function handleAgentIntentUrl(raw: string): boolean {
+  const parsed = parseAgentIntentUrl(raw)
+  if (!parsed.ok) {
+    showAppWarning(tm('uwUnsupported'))
+    return false
+  }
+  revealShellWindow()
+  broadcastAgentIntent(parsed.intent)
+  return true
+}
+
+async function openUniWorkUrl(raw: string): Promise<boolean> {
+  if (isAgentIntentUrl(raw)) {
+    return handleAgentIntentUrl(raw)
+  }
+  revealShellWindow()
+  return handleOfficeLaunchUrl(raw, officeBridgeDeps())
+}
+
+async function openOfficeBridgeUrl(raw: string): Promise<boolean> {
+  return openUniWorkUrl(raw)
+}
+
+async function saveActiveTabToUniWork(): Promise<boolean> {
+  const filePath = tabManager?.activeFilePath()
+  if (!filePath || !liveBridgeSessionForPath(filePath)) {
+    showAppWarning(tm('uwSaveFailed'))
+    return false
+  }
+  const wc =
+    tabManager?.activePdfTab()?.webContents ??
+    tabManager?.activeMarkdownTab()?.webContents ??
+    tabManager?.activeHtmlTab()?.webContents
+  const active = tabManager?.list().find((t) => t.active)
+  if (active?.kind === 'docs' || active?.kind === 'sheets' || active?.kind === 'slides') {
+    const views = webContents.getAllWebContents()
+    const editor = views.find((w) => {
+      const url = w.getURL()
+      return (
+        (active.kind === 'docs' && url.includes('://docs/')) ||
+        (active.kind === 'sheets' && url.includes('://sheets/')) ||
+        (active.kind === 'slides' && url.includes('://slides/'))
+      )
+    })
+    editor?.send('menu:command', 'save')
+    await new Promise((r) => setTimeout(r, 400))
+  } else if (wc) {
+    wc.send('menu:command', 'save')
+    await new Promise((r) => setTimeout(r, 400))
+  }
+  return saveActivePathToUniWork(filePath, officeBridgeDeps())
+}
+
+;(globalThis as { __uniworkSaveToOffice?: () => Promise<boolean> }).__uniworkSaveToOffice =
+  saveActiveTabToUniWork
 
 /**
  * Files dropped from the OS into any renderer arrive via installDropOpenBridge
@@ -2927,43 +3301,32 @@ function statEntries(paths: string[]): RecentEntry[] {
 }
 
 function registerHomeIpc(): void {
-  // signed-in means UniWork Office's own device-code login; the shared gsk CLI key
-  // is only a silent fallback, deliberately not shown here to nudge users onto our key
+  // Desktop UniWork session sync is not wired yet — Sign-in opens the UniWork web link.
+  // Do not treat legacy Genspark / gsk CLI auth as the UniWork account state.
   ipcMain.handle(HOME_CHANNELS.accountStatus, async () => {
-    if (!loadGenofficeAuth()) return { loggedIn: false }
-    await proxyBootstrap
-    const info = await gskLoginInfo()
-    return info
-      ? { loggedIn: true, email: info.email, creditBalance: info.creditBalance }
-      : { loggedIn: true }
+    return { loggedIn: false }
   })
 
-  // login progress is streamed to the requesting renderer; the auth URL is
-  // kept main-side so the "open manually" rescue never opens a renderer-supplied URL
+  // Sign-in opens the UniWork account URL in the system browser. The URL is
+  // kept main-side so the "open manually" rescue never opens a renderer-supplied URL.
   let pendingLoginUrl = ''
   ipcMain.handle(HOME_CHANNELS.accountLogin, async (event) => {
     analytics.track('login_click')
     const sender = event.sender
-    pendingLoginUrl = ''
-    await proxyBootstrap
     const send = (payload: AccountLoginEvent) => {
       if (!sender.isDestroyed()) sender.send(HOME_CHANNELS.accountLoginEvent, payload)
     }
-    // open the browser on the first url event only; later events refresh the rescue URL
-    let opened = false
-    const launched = startGenofficeLogin((progress) => {
-      if (progress.url) {
-        pendingLoginUrl = progress.url
-        if (!opened) {
-          opened = true
-          void shell.openExternal(progress.url)
-        }
-      }
-      if (progress.phase === 'success') analytics.track('login_success')
-      send(progress)
-    })
-    if (launched) send({ phase: 'launched' })
-    return launched
+    const url = resolveUniWorkSignInUrl(APP_SETTINGS_PATH())
+    pendingLoginUrl = url
+    send({ phase: 'url', url })
+    try {
+      await shell.openExternal(url)
+      send({ phase: 'launched' })
+      return true
+    } catch {
+      send({ phase: 'error', error: 'network' })
+      return false
+    }
   })
 
   ipcMain.handle(HOME_CHANNELS.accountLoginOpenUrl, () => {
@@ -2971,9 +3334,43 @@ function registerHomeIpc(): void {
   })
 
   ipcMain.handle(HOME_CHANNELS.accountLogout, async () => {
+    // Clear any leftover local auth material from the former Genspark login path.
     await genofficeLogout()
-    // the cloud projects cache belongs to the account that just signed out
     clearCloudProjectsStore(cloudProjectsStorePath())
+  })
+
+  ipcMain.handle(HOME_CHANNELS.agentIntentAck, (_event, intentId: unknown, status: unknown) => {
+    if (typeof intentId === 'string' && typeof status === 'string') {
+      analytics.track('agent_intent_ack', { intentId, status })
+    }
+  })
+
+  ipcMain.handle(HOME_CHANNELS.resolveAgentIntent, (_event, text: unknown) => {
+    if (typeof text !== 'string') return null
+    return resolveAgentIntentFromText(text, 'desktop')
+  })
+
+  ipcMain.handle(HOME_CHANNELS.submitAgentIntent, (_event, raw: unknown) => {
+    if (!raw || typeof raw !== 'object') return false
+    const body = raw as Partial<AgentIntent>
+    if (!body.target || !body.action) return false
+    try {
+      const intent = createAgentIntent({
+        intentId: typeof body.intentId === 'string' ? body.intentId : undefined,
+        target: body.target as AgentIntent['target'],
+        action: body.action as AgentIntent['action'],
+        scope: (body.scope as AgentIntent['scope']) ?? 'local',
+        source: (body.source as AgentIntent['source']) ?? 'dev',
+        summary: typeof body.summary === 'string' ? body.summary : 'Agent intent',
+        text: typeof body.text === 'string' ? body.text : undefined,
+        fields: body.fields,
+        requireConsent: body.requireConsent !== false,
+      })
+      broadcastAgentIntent(intent)
+      return true
+    } catch {
+      return false
+    }
   })
 
   ipcMain.handle(HOME_CHANNELS.getAppVersion, (): string => app.getVersion())
@@ -3025,13 +3422,11 @@ function registerHomeIpc(): void {
     if (!result.canceled) for (const path of result.filePaths) openDocumentPath(path)
   })
 
-  ipcMain.handle(
-    HOME_CHANNELS.probeAiHub,
-    (_event, opts?: { baseUrl?: string; apiKey?: string }) =>
-      probeAiHub(
-        typeof opts?.baseUrl === 'string' ? opts.baseUrl : '',
-        typeof opts?.apiKey === 'string' ? opts.apiKey : '',
-      ),
+  ipcMain.handle(HOME_CHANNELS.probeAiHub, (_event, opts?: { baseUrl?: string; apiKey?: string }) =>
+    probeAiHub(
+      typeof opts?.baseUrl === 'string' ? opts.baseUrl : '',
+      typeof opts?.apiKey === 'string' ? opts.apiKey : '',
+    ),
   )
 
   ipcMain.handle(HOME_CHANNELS.exportLessonPack, async (event, projectId: unknown) => {
@@ -3059,14 +3454,13 @@ function registerHomeIpc(): void {
       if (opts?.projectId && opts.projectId !== 'default') {
         pendingNewFileProject.set('doc', opts.projectId)
       }
-      const preset =
-        opts?.aiPreset?.text
-          ? {
-              text: opts.aiPreset.text,
-              autoRun: opts.aiPreset.autoRun !== false,
-              ...(opts.aiPreset.displayText ? { displayText: opts.aiPreset.displayText } : {}),
-            }
-          : undefined
+      const preset = opts?.aiPreset?.text
+        ? {
+            text: opts.aiPreset.text,
+            autoRun: opts.aiPreset.autoRun !== false,
+            ...(opts.aiPreset.displayText ? { displayText: opts.aiPreset.displayText } : {}),
+          }
+        : undefined
       if (opts?.aiContent?.title && opts.aiContent.html) {
         tabManager?.openDocsTab(undefined, {
           newBlank: true,
@@ -4284,9 +4678,15 @@ function installBackToHomeItems(): void {
     accelerator: 'Shift+CmdOrCtrl+H',
     click: () => tabManager?.openHomeTab(),
   }
-  setDocsExtraFileMenuItems([backToHomeItem])
-  setSheetsExtraFileMenuItems([backToHomeItem])
-  setSlidesExtraFileMenuItems([backToHomeItem])
+  const saveToUniWorkItem: MenuItemConstructorOptions = {
+    label: tm('saveToUniWork'),
+    click: () => {
+      void saveActiveTabToUniWork()
+    },
+  }
+  setDocsExtraFileMenuItems([saveToUniWorkItem, backToHomeItem])
+  setSheetsExtraFileMenuItems([saveToUniWorkItem, backToHomeItem])
+  setSlidesExtraFileMenuItems([saveToUniWorkItem, backToHomeItem])
 }
 
 function installDockMenu(): void {
@@ -4354,6 +4754,7 @@ async function installMainProcessProxy(): Promise<void> {
 // ---- lifecycle (the shell is the only owner) ----
 
 let pendingLaunchPath = supportedFileIn(process.argv) ?? unsupportedFileIn(process.argv)
+let pendingLaunchUrl = extractLaunchUrlFromArgv(process.argv)
 
 // show() does not un-minimize, and on macOS ⌘W destroys the shell window while the
 // app keeps running — either way a file opened from Finder would land out of sight.
@@ -4378,11 +4779,23 @@ app.on('open-file', (event, filePath) => {
   if (!openDocumentPath(filePath)) tabManager?.openHomeTab()
 })
 
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  if (!app.isReady()) {
+    pendingLaunchUrl = url
+    return
+  }
+  void openOfficeBridgeUrl(url)
+})
+
 app.on('second-instance', (_event, argv, _cwd, additionalData) => {
-  const file =
-    supportedFileIn(argv) ??
-    unsupportedFileIn(argv) ??
-    (additionalData as { launchPath?: string } | null)?.launchPath
+  const extra = additionalData as { launchPath?: string; launchUrl?: string } | null
+  const url = extractLaunchUrlFromArgv(argv) ?? extra?.launchUrl
+  if (url) {
+    void openOfficeBridgeUrl(url)
+    return
+  }
+  const file = supportedFileIn(argv) ?? unsupportedFileIn(argv) ?? extra?.launchPath
   revealShellWindow()
   if (!file || !openDocumentPath(file)) tabManager?.openHomeTab()
 })
@@ -4467,7 +4880,12 @@ app.whenReady().then(async () => {
     await runHeadlessExportEntry(headlessArgv)
     return
   }
-  const lockData = () => (pendingLaunchPath ? { launchPath: pendingLaunchPath } : {})
+  const lockData = () =>
+    pendingLaunchUrl
+      ? { launchUrl: pendingLaunchUrl }
+      : pendingLaunchPath
+        ? { launchPath: pendingLaunchPath }
+        : {}
   let hasLock = app.requestSingleInstanceLock(lockData())
   if (!hasLock && !app.isPackaged) {
     // Dev watch restart: electron-vite SIGTERMs the previous instance and spawns this
@@ -4546,11 +4964,23 @@ app.whenReady().then(async () => {
   startSheetsCaptureServer()
   createShellWindow()
   // deferred to ready: labels need currentLang(), which reads app.getLocale()
+  if (!app.isPackaged) {
+    app.setAsDefaultProtocolClient('uniwork', process.execPath, [app.getAppPath()])
+  } else {
+    app.setAsDefaultProtocolClient('uniwork')
+  }
   installBackToHomeItems()
   installDockMenu()
   initAutoUpdater(() => shellWindow, currentUpdateChannel())
+  persistUniWorkApiOriginFromEnv(APP_SETTINGS_PATH())
 
-  if (!pendingLaunchPath || !openDocumentPath(pendingLaunchPath)) tabManager?.openHomeTab()
+  if (pendingLaunchUrl) {
+    const opened = await openOfficeBridgeUrl(pendingLaunchUrl)
+    pendingLaunchUrl = null
+    if (!opened) tabManager?.openHomeTab()
+  } else if (!pendingLaunchPath || !openDocumentPath(pendingLaunchPath)) {
+    tabManager?.openHomeTab()
+  }
   pendingLaunchPath = null
 
   app.on('activate', () => {

@@ -21,9 +21,10 @@ import { useDismissablePopover } from '@genoffice/ui'
 import { fileCountKey, visiblePageCount } from './counts'
 import { useI18n } from './locale'
 import type { I18n, StringKey } from './locale'
-import { SettingsModal } from './SettingsModal'
+import { SettingsModal, type SettingsSectionId } from './SettingsModal'
 import { skillUpdateDue } from './IntegrationsPane'
 import { getPractice, listPractices, type PracticeId } from '@uniwork/practice-core'
+import { AgentIntentBanner } from './AgentIntentBanner'
 import { PracticeHome } from './PracticeHome'
 import { TeacherHome } from './TeacherHome'
 
@@ -454,19 +455,92 @@ function ProjectPanel({ projects, selectedId, onSelect, onRefresh }: ProjectPane
   )
 }
 
-// ── Account entry (bottom-left) ──────────────────────────
-// Currently the Genspark (gsk) login entry; to be upgraded to a signup/account system later.
-// Clicking it opens the settings modal directly (SettingsModal.tsx), which hosts
-// login/logout plus preferences (language, theme, save location, update channel).
+// ── Sidebar footer: Settings + Sign-in (bottom-left) ─────
+// Settings is its own control. Sign-in opens the UniWork web link; when already
+// signed in, the account row opens Settings → Account (logout lives there).
 
-const LOGIN_POLL_MS = 2500
-/** fallback deadline when the CLI does not report expires_in (device codes live ~300s) */
-const LOGIN_MAX_WAIT_MS = 300_000
-
-function AccountEntry({
+function SidebarFooter({
   onStatusChange,
 }: {
   onStatusChange?: (status: AccountStatus | null) => void
+}) {
+  const { t } = useI18n()
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId>('general')
+  const [skillUpdate, setSkillUpdate] = useState(false)
+
+  useEffect(() => {
+    if (settingsOpen) return
+    let alive = true
+    void window.aiOfficeIntegrations?.status().then((st) => {
+      if (alive) setSkillUpdate(skillUpdateDue(st))
+    })
+    return () => {
+      alive = false
+    }
+  }, [settingsOpen])
+
+  const openSettings = (section: SettingsSectionId = 'general') => {
+    setSettingsSection(section)
+    setSettingsOpen(true)
+  }
+
+  return (
+    <div className="sidebar-footer">
+      <button
+        type="button"
+        className="settings-btn"
+        onClick={() => openSettings('general')}
+        aria-haspopup="dialog"
+        aria-expanded={settingsOpen}
+        data-tip={t('settings')}
+        aria-label={t('settings')}
+      >
+        <span className="settings-icon" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M6.6 2.4h2.8l.35 1.45a4.6 4.6 0 0 1 1.15.65l1.4-.55 1.4 1.4-.55 1.4c.26.36.48.75.65 1.15L15.6 8v2.8l-1.45.35a4.6 4.6 0 0 1-.65 1.15l.55 1.4-1.4 1.4-1.4-.55a4.6 4.6 0 0 1-1.15.65L9.4 15.6H6.6l-.35-1.45a4.6 4.6 0 0 1-1.15-.65l-1.4.55-1.4-1.4.55-1.4a4.6 4.6 0 0 1-.65-1.15L.4 10.8V8l1.45-.35c.17-.4.39-.79.65-1.15l-.55-1.4 1.4-1.4 1.4.55c.36-.26.75-.48 1.15-.65L6.6 2.4z"
+              stroke="currentColor"
+              strokeWidth="1.2"
+              strokeLinejoin="round"
+            />
+            <circle cx="8" cy="9.2" r="2.1" stroke="currentColor" strokeWidth="1.2" />
+          </svg>
+          {skillUpdate && (
+            <span className="account-badge" role="img" aria-label={t('intgUpdateDue')} />
+          )}
+        </span>
+        <span className="settings-label">{t('settings')}</span>
+      </button>
+      <AccountEntry
+        onStatusChange={onStatusChange}
+        settingsOpen={settingsOpen}
+        settingsSection={settingsSection}
+        onOpenSettings={openSettings}
+        onCloseSettings={() => setSettingsOpen(false)}
+        skillUpdate={skillUpdate}
+        onSkillUpdateDue={setSkillUpdate}
+      />
+    </div>
+  )
+}
+
+function AccountEntry({
+  onStatusChange,
+  settingsOpen,
+  settingsSection,
+  onOpenSettings,
+  onCloseSettings,
+  skillUpdate,
+  onSkillUpdateDue,
+}: {
+  onStatusChange?: (status: AccountStatus | null) => void
+  settingsOpen: boolean
+  settingsSection: SettingsSectionId
+  onOpenSettings: (section?: SettingsSectionId) => void
+  onCloseSettings: () => void
+  skillUpdate: boolean
+  onSkillUpdateDue: (due: boolean) => void
 }) {
   const { t } = useI18n()
   const [status, setStatus] = useState<AccountStatus | null>(null)
@@ -475,17 +549,12 @@ function AccountEntry({
     onStatusChange?.(status)
   }, [status, onStatusChange])
   const [waiting, setWaiting] = useState(false)
-  // incremented on login retry, resetting the polling timer
-  const [loginNonce, setLoginNonce] = useState(0)
   const [loginError, setLoginError] = useState<
     'timeout' | 'launch' | 'network' | 'expired' | 'failed' | null
   >(null)
-  // auth URL reported by the login CLI — rescue entry when the browser did not open
+  // UniWork Sign-in URL from main — rescue / copy when the browser did not open
   const [authUrl, setAuthUrl] = useState<string | null>(null)
   const [urlCopied, setUrlCopied] = useState(false)
-  const loginDeadline = useRef(0)
-  const [settingsOpen, setSettingsOpen] = useState(false)
-  const [skillUpdate, setSkillUpdate] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
   // bumped on logout so an in-flight status refresh (which can still
   // report logged-in) is discarded instead of resurrecting the UI
@@ -502,36 +571,15 @@ function AccountEntry({
     }
   }, [])
 
-  // the skill state is a few file reads; re-probe after the modal closes so an
-  // update done inside it clears the dot
-  useEffect(() => {
-    if (settingsOpen) return
-    let alive = true
-    void window.aiOfficeIntegrations?.status().then((st) => {
-      if (alive) setSkillUpdate(skillUpdateDue(st))
-    })
-    return () => {
-      alive = false
-    }
-  }, [settingsOpen])
-
-  // login progress pushed from main (gsk login CLI output)
+  // UniWork Sign-in: main opens the browser link and reports the URL for rescue/copy.
   useEffect(() => {
     const off = window.aiOffice.onAccountLogin?.((ev) => {
       if (ev.phase === 'url') {
         if (ev.url) setAuthUrl(ev.url)
-        if (ev.expiresInSec) loginDeadline.current = Date.now() + ev.expiresInSec * 1000
-      } else if (ev.phase === 'success') {
-        void window.aiOffice.accountStatus().then((s) => {
-          if (s.loggedIn) {
-            setStatus(s)
-            setWaiting(false)
-            setAuthUrl(null)
-          }
-        })
+      } else if (ev.phase === 'launched') {
+        setWaiting(false)
       } else if (ev.phase === 'error') {
         setWaiting(false)
-        setAuthUrl(null)
         setLoginError(
           ev.error === 'network' ? 'network' : ev.error === 'expired' ? 'expired' : 'failed',
         )
@@ -539,25 +587,6 @@ function AccountEntry({
     })
     return off
   }, [])
-
-  // config-file polling stays as the fallback success path (works even if progress events are lost)
-  useEffect(() => {
-    if (!waiting) return
-    const timer = setInterval(() => {
-      void window.aiOffice.accountStatus().then((s) => {
-        if (s.loggedIn) {
-          setStatus(s)
-          setWaiting(false)
-          setAuthUrl(null)
-        } else if (Date.now() > loginDeadline.current) {
-          setWaiting(false)
-          setAuthUrl(null)
-          setLoginError('timeout')
-        }
-      })
-    }, LOGIN_POLL_MS)
-    return () => clearInterval(timer)
-  }, [waiting, loginNonce])
 
   const loggedIn = status?.loggedIn ?? false
   const email = status?.email ?? ''
@@ -582,17 +611,17 @@ function AccountEntry({
   }
 
   const startLogin = () => {
-    // clicking again while waiting = relaunch the login (main kills the stale CLI, so the new device code is the live one)
+    // Open UniWork Sign-in in the system browser (no Genspark device-code).
     setLoginError(null)
     setWaiting(true)
     setAuthUrl(null)
     setUrlCopied(false)
-    loginDeadline.current = Date.now() + LOGIN_MAX_WAIT_MS
-    setLoginNonce((n) => n + 1)
     void window.aiOffice.accountLogin().then((launched) => {
       if (!launched) {
         setWaiting(false)
         setLoginError('launch')
+      } else {
+        setWaiting(false)
       }
     })
   }
@@ -608,13 +637,16 @@ function AccountEntry({
   }
 
   const handleClick = () => {
-    // refresh the login state / credit balance; drop the response
-    // when a logout happened while it was in flight
-    const seq = statusSeq.current
-    void window.aiOffice.accountStatus?.().then((s) => {
-      if (seq === statusSeq.current) setStatus(s)
-    })
-    setSettingsOpen(true)
+    // Sign-in only opens UniWork in the browser. Settings stays on its own button.
+    if (loggedIn) {
+      const seq = statusSeq.current
+      void window.aiOffice.accountStatus?.().then((s) => {
+        if (seq === statusSeq.current) setStatus(s)
+      })
+      onOpenSettings('account')
+      return
+    }
+    startLogin()
   }
 
   return (
@@ -628,67 +660,22 @@ function AccountEntry({
           urlCopied={urlCopied}
           onOpenLoginUrl={openLoginUrl}
           onCopyLoginUrl={copyLoginUrl}
-          onClose={() => setSettingsOpen(false)}
+          onClose={onCloseSettings}
           onLogin={() => {
-            setSettingsOpen(false)
+            // Keep Settings open; Sign-in is only the UniWork link action.
             startLogin()
           }}
           onLogout={doLogout}
           skillUpdateDue={skillUpdate}
-          onSkillUpdateDue={setSkillUpdate}
+          onSkillUpdateDue={onSkillUpdateDue}
+          initialSection={settingsSection}
         />
-      )}
-      {!settingsOpen && waiting && authUrl && (
-        <div className="login-hint" role="status">
-          <button className="login-hint-open" onClick={openLoginUrl}>
-            {t('loginOpenShort')}
-          </button>
-          <button
-            className={`login-hint-copy${urlCopied ? ' copied' : ''}`}
-            onClick={copyLoginUrl}
-            // static tip: screentips are suppressed from pointerdown until the pointer
-            // leaves the control, so a swapped-in "copied" tip would never show — the
-            // check-mark icon is the visible feedback
-            data-tip={t('loginCopyUrl')}
-            aria-label={urlCopied ? t('loginCopied') : t('loginCopyUrl')}
-          >
-            {urlCopied ? (
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path
-                  d="m3.5 8.5 3 3 6-7"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            ) : (
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <rect
-                  x="5.5"
-                  y="5.5"
-                  width="7"
-                  height="7"
-                  rx="1.5"
-                  stroke="currentColor"
-                  strokeWidth="1.3"
-                />
-                <path
-                  d="M3.5 10.5V5a1.5 1.5 0 0 1 1.5-1.5h5.5"
-                  stroke="currentColor"
-                  strokeWidth="1.3"
-                  strokeLinecap="round"
-                />
-              </svg>
-            )}
-          </button>
-        </div>
       )}
       <button
         className="account-btn"
         onClick={handleClick}
-        aria-haspopup="dialog"
-        aria-expanded={settingsOpen}
+        aria-haspopup={loggedIn ? 'dialog' : undefined}
+        aria-expanded={loggedIn ? settingsOpen : undefined}
         data-tip={
           loggedIn
             ? email || t('loggedInGenspark')
@@ -696,7 +683,9 @@ function AccountEntry({
               ? t('waitingLogin')
               : (errorText ?? t('loginGenspark'))
         }
-        aria-label={t('settings')}
+        aria-label={
+          loggedIn ? email || t('account') : waiting ? t('waitingLogin') : t('loginGenspark')
+        }
       >
         <span
           className={`account-avatar${loggedIn ? ' logged-in' : ''}${waiting ? ' waiting' : ''}`}
@@ -724,9 +713,6 @@ function AccountEntry({
           ) : (
             initial
           )}
-          {skillUpdate && (
-            <span className="account-badge" role="img" aria-label={t('intgUpdateDue')} />
-          )}
         </span>
         <span className="account-text">
           <span className="account-name">
@@ -742,22 +728,6 @@ function AccountEntry({
             <span className="account-sub error">{errorText}</span>
           )}
         </span>
-        <svg
-          className="account-chevron"
-          width="14"
-          height="14"
-          viewBox="0 0 16 16"
-          fill="none"
-          aria-hidden="true"
-        >
-          <path
-            d="M5 6.2 8 3.4l3 2.8M5 9.8l3 2.8 3-2.8"
-            stroke="currentColor"
-            strokeWidth="1.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
       </button>
     </div>
   )
@@ -820,13 +790,10 @@ function CloudProjectsView() {
     }
   }, [])
 
-  // the sign-in button reuses the account login flow; sync once it lands
+  // Sign-in opens UniWork in the browser; clear the waiting spinner when launched.
   useEffect(() => {
     const off = window.aiOffice.onAccountLogin?.((ev) => {
-      if (ev.phase === 'success') {
-        setLoginWaiting(false)
-        startSyncRef.current()
-      } else if (ev.phase === 'error') {
+      if (ev.phase === 'launched' || ev.phase === 'error') {
         setLoginWaiting(false)
       }
     })
@@ -841,7 +808,8 @@ function CloudProjectsView() {
   const startLogin = () => {
     setLoginWaiting(true)
     void window.aiOffice.accountLogin?.().then((ok) => {
-      if (!ok) setLoginWaiting(false)
+      setLoginWaiting(false)
+      if (!ok) return
     })
   }
 
@@ -2296,7 +2264,7 @@ export function Home() {
           </>
         )}
 
-        <AccountEntry onStatusChange={handleAccountStatus} />
+        <SidebarFooter onStatusChange={handleAccountStatus} />
       </aside>
 
       {selectedProjectId ? (
@@ -2338,6 +2306,17 @@ export function Home() {
       ) : (
         renderGlobalContent()
       )}
+
+      <div className="agent-intent-host">
+        <AgentIntentBanner
+          practiceId={activePracticeId}
+          ensureWorkbench={() => {
+            setEduMode(true)
+            setCloudMode(false)
+            setSelectedProjectId(null)
+          }}
+        />
+      </div>
 
       {confirmDelete && (
         <div className="modal-overlay" onClick={() => setConfirmDelete(null)}>

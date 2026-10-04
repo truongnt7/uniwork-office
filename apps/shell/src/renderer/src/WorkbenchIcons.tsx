@@ -49,9 +49,14 @@ const BADGE: Record<IconId, { bg: string; glyph: ReactElement }> = {
     bg: '#0EA5E9',
     glyph: (
       <>
-        <rect x="5.5" y="6" width="13" height="9.5" rx="1.5" stroke="#fff" strokeWidth="1.5" fill="none" />
-        <path d="M8 18.5h8M10 15.5v3M14 15.5v3" stroke="#fff" strokeWidth="1.45" strokeLinecap="round" />
-        <path d="M8 9h3.5v3H8zM12.5 9H16v3h-3.5z" fill="#fff" opacity="0.95" />
+        <path
+          d="M4.5 10.5 12 4.5l7.5 6V18a1 1 0 0 1-1 1h-4.2v-4.2H9.7V19H5.5a1 1 0 0 1-1-1z"
+          stroke="#fff"
+          strokeWidth="1.45"
+          strokeLinejoin="round"
+          fill="none"
+        />
+        <circle cx="12" cy="11.2" r="1.3" fill="#fff" />
       </>
     ),
   },
@@ -166,6 +171,28 @@ const BADGE: Record<IconId, { bg: string; glyph: ReactElement }> = {
           stroke="#fff"
           strokeWidth="1.5"
           strokeLinecap="round"
+        />
+      </>
+    ),
+  },
+  friends: {
+    bg: '#F59E0B',
+    glyph: (
+      <>
+        <circle cx="9" cy="9" r="2" fill="#fff" />
+        <circle cx="15" cy="9.5" r="1.6" fill="#fff" />
+        <path
+          d="M5.5 17c.6-2.2 2-3.3 3.5-3.3S12 14.8 12.5 17M12.8 17c.4-1.6 1.4-2.5 2.4-2.5s2 .9 2.4 2.5"
+          stroke="#fff"
+          strokeWidth="1.45"
+          strokeLinecap="round"
+        />
+        <path
+          d="M16.2 6.2c.7-.2 1.4.2 1.6.9"
+          stroke="#fff"
+          strokeWidth="1.3"
+          strokeLinecap="round"
+          fill="none"
         />
       </>
     ),

@@ -52,6 +52,7 @@ const UI_LANGUAGES: readonly UiLanguage[] = [
   'ms',
   'he',
   'hi',
+  'vi',
   'zh-TW',
 ]
 
@@ -97,6 +98,25 @@ const homeApi: HomeApi = {
       balanceText?: string
       modelCount?: number
     }
+  },
+  onAgentIntent(handler) {
+    const listener = (
+      _event: IpcRendererEvent,
+      intent: import('../shared/home-api').AgentIntentDto,
+    ) => handler(intent)
+    ipcRenderer.on(HOME_CHANNELS.agentIntentEvent, listener)
+    return () => ipcRenderer.removeListener(HOME_CHANNELS.agentIntentEvent, listener)
+  },
+  async agentIntentAck(intentId, status) {
+    await ipcRenderer.invoke(HOME_CHANNELS.agentIntentAck, intentId, status)
+  },
+  async resolveAgentIntent(text) {
+    const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.resolveAgentIntent, text)
+    return (result ?? null) as import('../shared/home-api').AgentIntentDto | null
+  },
+  async submitAgentIntent(intent) {
+    const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.submitAgentIntent, intent)
+    return result === true
   },
   async exportLessonPack(projectId) {
     return (await ipcRenderer.invoke(HOME_CHANNELS.exportLessonPack, projectId)) as {

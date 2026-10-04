@@ -1,0 +1,188 @@
+/**
+ * Local Context Manager — packages on-device snapshots for Agent Intents.
+ * Hub Token / PWA only receive this pack (budget-capped), never raw vault dumps.
+ */
+import {
+  actionDef,
+  labelForTarget,
+  tabIdForTarget,
+  type AgentIntent,
+  type PracticeId,
+  type WorkbenchModuleId,
+} from '@uniwork/practice-core'
+import {
+  healthDeskCounts,
+  readCalendar,
+  readEvents,
+  readFinance,
+  readNotes,
+  readTasks,
+} from './workbench-pins'
+
+const MAX_PACK_CHARS = 6_000
+const MAX_LIST = 8
+
+export interface ContextChunk {
+  id: string
+  source: string
+  text: string
+}
+
+export interface ContextPack {
+  intentId: string
+  tabId: string
+  targetLabel: string
+  actionLabel: string
+  summary: string
+  chunks: ContextChunk[]
+  /** UTF-16 length proxy for UI / egress budget */
+  charCount: number
+  builtAt: string
+}
+
+function clip(text: string, max: number): string {
+  const t = text.trim()
+  if (t.length <= max) return t
+  return `${t.slice(0, max - 1)}…`
+}
+
+function packChunks(chunks: ContextChunk[]): ContextChunk[] {
+  const out: ContextChunk[] = []
+  let used = 0
+  for (const c of chunks) {
+    const room = MAX_PACK_CHARS - used
+    if (room < 40) break
+    const text = clip(c.text, room)
+    out.push({ ...c, text })
+    used += text.length
+  }
+  return out
+}
+
+function moduleContext(practiceId: PracticeId, moduleId: WorkbenchModuleId): ContextChunk[] {
+  const chunks: ContextChunk[] = []
+  if (moduleId === 'tasks') {
+    const open = readTasks(practiceId).filter((t) => !t.done).slice(0, MAX_LIST)
+    chunks.push({
+      id: 'tasks-open',
+      source: 'local:tasks',
+      text: open.length
+        ? `Open tasks (${open.length}): ${open.map((t) => t.title).join('; ')}`
+        : 'No open tasks.',
+    })
+  } else if (moduleId === 'calendar') {
+    const items = readCalendar(practiceId).slice(0, MAX_LIST)
+    chunks.push({
+      id: 'calendar',
+      source: 'local:calendar',
+      text: items.length
+        ? `Calendar: ${items.map((i) => `${i.date} ${i.title}`).join('; ')}`
+        : 'Calendar empty.',
+    })
+  } else if (moduleId === 'notes') {
+    chunks.push({
+      id: 'notes',
+      source: 'local:notes',
+      text: clip(readNotes(practiceId) || 'Notes empty.', 1_500),
+    })
+  } else if (moduleId === 'events') {
+    const items = readEvents(practiceId).slice(0, MAX_LIST)
+    chunks.push({
+      id: 'events',
+      source: 'local:events',
+      text: items.length
+        ? `Events: ${items.map((i) => `${i.date ?? ''} ${i.title}`).join('; ')}`
+        : 'No events.',
+    })
+  } else if (moduleId === 'personal-finance') {
+    const items = readFinance().slice(-MAX_LIST)
+    const sum = items.reduce(
+      (a, x) => a + (x.kind === 'income' ? x.amount : -x.amount),
+      0,
+    )
+    chunks.push({
+      id: 'finance',
+      source: 'local:finance',
+      text: `Recent finance (${items.length} rows), net≈${Math.round(sum)}: ${items
+        .map((i) => `${i.kind} ${i.amount} ${i.label}`)
+        .join('; ')}`,
+    })
+  } else if (moduleId === 'health') {
+    const c = healthDeskCounts()
+    chunks.push({
+      id: 'health',
+      source: 'local:health',
+      text: `Health desk counts: exercise=${c.exercise} sleep=${c.sleep} checkup=${c.checkup} other=${c.other}`,
+    })
+  } else if (moduleId === 'desk') {
+    const tasks = readTasks(practiceId).filter((t) => !t.done).length
+    const events = readEvents(practiceId).length
+    chunks.push({
+      id: 'desk',
+      source: 'local:desk',
+      text: `My Space pulse: openTasks=${tasks}, events=${events}`,
+    })
+  } else {
+    chunks.push({
+      id: 'tab',
+      source: `local:${moduleId}`,
+      text: `Active tab scope: ${moduleId}. Use on-device tools for details.`,
+    })
+  }
+  return chunks
+}
+
+/** Build a budget-capped context pack for Hub / preview UI. */
+export function buildContextPack(
+  intent: AgentIntent,
+  practiceId: PracticeId,
+  vi: boolean,
+): ContextPack {
+  const tabId = tabIdForTarget(intent.target)
+  const chunks: ContextChunk[] = [
+    {
+      id: 'intent',
+      source: 'intent',
+      text: clip(
+        [
+          `Intent ${intent.intentId}`,
+          `source=${intent.source}`,
+          `scope=${intent.scope}`,
+          intent.text ? `user: ${intent.text}` : '',
+        ]
+          .filter(Boolean)
+          .join(' | '),
+        800,
+      ),
+    },
+  ]
+
+  if (intent.target.kind === 'module') {
+    chunks.push(...moduleContext(practiceId, intent.target.id))
+  } else if (intent.target.kind === 'pillar') {
+    chunks.push({
+      id: 'pillar',
+      source: `pillar:${intent.target.id}`,
+      text: `Workbench pillar ${intent.target.id}. Pack library / skills stay on device.`,
+    })
+  } else {
+    chunks.push({
+      id: 'skill-domain',
+      source: `skill-domain:${intent.target.id}`,
+      text: `Skills domain ${intent.target.id}.`,
+    })
+  }
+
+  const packed = packChunks(chunks)
+  const charCount = packed.reduce((n, c) => n + c.text.length, 0)
+  return {
+    intentId: intent.intentId,
+    tabId,
+    targetLabel: labelForTarget(intent.target, vi),
+    actionLabel: vi ? actionDef(intent.action).labelVi : actionDef(intent.action).labelEn,
+    summary: intent.summary,
+    chunks: packed,
+    charCount,
+    builtAt: new Date().toISOString(),
+  }
+}

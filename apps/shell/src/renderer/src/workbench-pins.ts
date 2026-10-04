@@ -69,6 +69,26 @@ export interface WbCalendarItem {
   done?: boolean
 }
 
+export type CalendarViewMode = 'list' | 'calendar'
+
+export function readCalendarView(): CalendarViewMode {
+  try {
+    const raw = localStorage.getItem('uniwork.wb.calendar.view')
+    if (raw === 'list' || raw === 'calendar') return raw
+  } catch {
+    /* ignore */
+  }
+  return 'calendar'
+}
+
+export function writeCalendarView(mode: CalendarViewMode): void {
+  try {
+    localStorage.setItem('uniwork.wb.calendar.view', mode)
+  } catch {
+    /* ignore */
+  }
+}
+
 export interface WbTaskItem {
   id: string
   title: string
@@ -148,6 +168,65 @@ export interface WbFinanceItem {
   kind: 'income' | 'expense'
   amount: number
   label: string
+  category?: 'living' | 'food' | 'transport' | 'bills' | 'fun' | 'health' | 'other'
+}
+
+/** Sub-tabs inside Tài chính cá nhân */
+export type FinanceSubTabId = 'goals' | 'spending' | 'invest'
+
+export function readFinanceSubTab(): FinanceSubTabId {
+  try {
+    const raw = localStorage.getItem('uniwork.wb.finance.subtab')
+    if (raw === 'goals' || raw === 'spending' || raw === 'invest') return raw
+  } catch {
+    /* ignore */
+  }
+  return 'goals'
+}
+
+export function writeFinanceSubTab(id: FinanceSubTabId): void {
+  try {
+    localStorage.setItem('uniwork.wb.finance.subtab', id)
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Mục tiêu tài chính */
+export interface WbFinanceGoal {
+  id: string
+  title: string
+  targetAmount: number
+  currentAmount: number
+  deadline?: string
+  note?: string
+  done: boolean
+}
+
+export function readFinanceGoals(): WbFinanceGoal[] {
+  return readJson('uniwork.wb.finance.goals', [])
+}
+
+export function writeFinanceGoals(items: WbFinanceGoal[]): void {
+  writeJson('uniwork.wb.finance.goals', items)
+}
+
+/** Đầu tư / tích luỹ tài sản */
+export interface WbFinanceInvest {
+  id: string
+  name: string
+  kind: 'stock' | 'fund' | 'bond' | 'crypto' | 'savings' | 'gold' | 'realestate' | 'other'
+  amount: number
+  date: string
+  note?: string
+}
+
+export function readFinanceInvest(): WbFinanceInvest[] {
+  return readJson('uniwork.wb.finance.invest', [])
+}
+
+export function writeFinanceInvest(items: WbFinanceInvest[]): void {
+  writeJson('uniwork.wb.finance.invest', items)
 }
 
 const DEFAULT_PERSONAL: WbPersonalProfile = {
@@ -199,6 +278,223 @@ export interface WbHealthItem {
   value?: string
 }
 
+/** Sub-tabs inside Sức khoẻ */
+export type HealthSubTabId =
+  | 'metrics'
+  | 'running'
+  | 'yoga'
+  | 'sports'
+  | 'diet'
+  | 'fasting'
+  | 'veg'
+
+export function readHealthSubTab(): HealthSubTabId {
+  try {
+    const raw = localStorage.getItem('uniwork.wb.health.subtab')
+    const ok: HealthSubTabId[] = [
+      'metrics',
+      'running',
+      'yoga',
+      'sports',
+      'diet',
+      'fasting',
+      'veg',
+    ]
+    if (raw && (ok as string[]).includes(raw)) return raw as HealthSubTabId
+  } catch {
+    /* ignore */
+  }
+  return 'metrics'
+}
+
+export function writeHealthSubTab(id: HealthSubTabId): void {
+  try {
+    localStorage.setItem('uniwork.wb.health.subtab', id)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readHealth(): WbHealthItem[] {
+  return readJson('uniwork.wb.health', [])
+}
+
+export function writeHealth(items: WbHealthItem[]): void {
+  writeJson('uniwork.wb.health', items)
+}
+
+export interface WbHealthMetric {
+  id: string
+  date: string
+  metric: 'weight' | 'bmi' | 'bp' | 'hr' | 'sleep' | 'steps' | 'glucose' | 'other'
+  value: string
+  unit?: string
+  note?: string
+}
+
+export function readHealthMetrics(): WbHealthMetric[] {
+  return readJson('uniwork.wb.health.metrics', [])
+}
+
+export function writeHealthMetrics(items: WbHealthMetric[]): void {
+  writeJson('uniwork.wb.health.metrics', items)
+}
+
+/** Mục tiêu chỉ số sức khoẻ (cân nặng, bước, ngủ…) */
+export interface WbHealthMetricGoal {
+  id: string
+  metric: WbHealthMetric['metric']
+  target: string
+  unit?: string
+  note?: string
+}
+
+export function readHealthMetricGoals(): WbHealthMetricGoal[] {
+  return readJson('uniwork.wb.health.metricGoals', [])
+}
+
+export function writeHealthMetricGoals(items: WbHealthMetricGoal[]): void {
+  writeJson('uniwork.wb.health.metricGoals', items)
+}
+
+export interface WbHealthRun {
+  id: string
+  date: string
+  distanceKm: number
+  durationMin: number
+  pace?: string
+  note?: string
+}
+
+export function readHealthRuns(): WbHealthRun[] {
+  return readJson('uniwork.wb.health.runs', [])
+}
+
+export function writeHealthRuns(items: WbHealthRun[]): void {
+  writeJson('uniwork.wb.health.runs', items)
+}
+
+export interface WbHealthYoga {
+  id: string
+  date: string
+  style: string
+  durationMin: number
+  intensity: 'easy' | 'moderate' | 'hard'
+  note?: string
+}
+
+export function readHealthYoga(): WbHealthYoga[] {
+  return readJson('uniwork.wb.health.yoga', [])
+}
+
+export function writeHealthYoga(items: WbHealthYoga[]): void {
+  writeJson('uniwork.wb.health.yoga', items)
+}
+
+export interface WbHealthSport {
+  id: string
+  date: string
+  sport: string
+  durationMin: number
+  note?: string
+}
+
+export function readHealthSports(): WbHealthSport[] {
+  return readJson('uniwork.wb.health.sports', [])
+}
+
+export function writeHealthSports(items: WbHealthSport[]): void {
+  writeJson('uniwork.wb.health.sports', items)
+}
+
+export interface WbHealthDietPlan {
+  id: string
+  title: string
+  goal?: string
+  startDate: string
+  endDate?: string
+  dailyKcal?: number
+  note?: string
+  active: boolean
+}
+
+export function readHealthDiets(): WbHealthDietPlan[] {
+  return readJson('uniwork.wb.health.diets', [])
+}
+
+export function writeHealthDiets(items: WbHealthDietPlan[]): void {
+  writeJson('uniwork.wb.health.diets', items)
+}
+
+export interface WbHealthFasting {
+  id: string
+  date: string
+  protocol: '16:8' | '18:6' | '20:4' | 'OMAD' | '5:2' | 'other'
+  fastStart?: string
+  fastEnd?: string
+  completed: boolean
+  note?: string
+}
+
+export function readHealthFasting(): WbHealthFasting[] {
+  return readJson('uniwork.wb.health.fasting', [])
+}
+
+export function writeHealthFasting(items: WbHealthFasting[]): void {
+  writeJson('uniwork.wb.health.fasting', items)
+}
+
+export interface WbHealthVeg {
+  id: string
+  date: string
+  mode: 'vegetarian' | 'vegan' | 'flexitarian' | 'other'
+  meals?: string
+  note?: string
+  ok: boolean
+}
+
+export function readHealthVeg(): WbHealthVeg[] {
+  return readJson('uniwork.wb.health.veg', [])
+}
+
+export function writeHealthVeg(items: WbHealthVeg[]): void {
+  writeJson('uniwork.wb.health.veg', items)
+}
+
+/** Aggregated counts for Desk health widget (legacy + new logs). */
+export function healthDeskCounts(): {
+  exercise: number
+  sleep: number
+  checkup: number
+  other: number
+} {
+  const legacy = readHealth()
+  const metrics = readHealthMetrics()
+  const runs = readHealthRuns()
+  const yoga = readHealthYoga()
+  const sports = readHealthSports()
+  return {
+    exercise:
+      legacy.filter((h) => h.kind === 'exercise').length +
+      runs.length +
+      yoga.length +
+      sports.length,
+    sleep:
+      legacy.filter((h) => h.kind === 'sleep').length +
+      metrics.filter((m) => m.metric === 'sleep').length,
+    checkup:
+      legacy.filter((h) => h.kind === 'checkup').length +
+      metrics.filter((m) => m.metric !== 'sleep' && m.metric !== 'steps' && m.metric !== 'other')
+        .length,
+    other:
+      legacy.filter((h) => h.kind === 'other').length +
+      metrics.filter((m) => m.metric === 'other' || m.metric === 'steps').length +
+      readHealthDiets().length +
+      readHealthFasting().length +
+      readHealthVeg().length,
+  }
+}
+
 export interface WbGrowthItem {
   id: string
   title: string
@@ -213,14 +509,6 @@ export function readEvents(practiceId: PracticeId): WbEventItem[] {
 
 export function writeEvents(practiceId: PracticeId, items: WbEventItem[]): void {
   writeJson(`uniwork.wb.events.${practiceId}`, items)
-}
-
-export function readHealth(): WbHealthItem[] {
-  return readJson('uniwork.wb.health', [])
-}
-
-export function writeHealth(items: WbHealthItem[]): void {
-  writeJson('uniwork.wb.health', items)
 }
 
 export function readGrowth(): WbGrowthItem[] {
@@ -240,12 +528,221 @@ export interface WbFamilyMember {
   note?: string
 }
 
+/** Sub-tabs inside Gia đình tôi */
+export type FamilySubTabId =
+  | 'members'
+  | 'parenting'
+  | 'meds'
+  | 'shopping'
+  | 'tree'
+  | 'milestones'
+
+export function readFamilySubTab(): FamilySubTabId {
+  try {
+    const raw = localStorage.getItem('uniwork.wb.family.subtab')
+    const ok: FamilySubTabId[] = [
+      'members',
+      'parenting',
+      'meds',
+      'shopping',
+      'tree',
+      'milestones',
+    ]
+    if (raw && (ok as string[]).includes(raw)) return raw as FamilySubTabId
+  } catch {
+    /* ignore */
+  }
+  return 'members'
+}
+
+export function writeFamilySubTab(id: FamilySubTabId): void {
+  try {
+    localStorage.setItem('uniwork.wb.family.subtab', id)
+  } catch {
+    /* ignore */
+  }
+}
+
 export function readFamily(): WbFamilyMember[] {
   return readJson('uniwork.wb.family', [])
 }
 
 export function writeFamily(items: WbFamilyMember[]): void {
   writeJson('uniwork.wb.family', items)
+}
+
+/** Đồng hành cùng con — hoạt động / học tập / quan tâm */
+export interface WbFamilyParentingItem {
+  id: string
+  date: string
+  childName: string
+  title: string
+  kind: 'study' | 'health' | 'activity' | 'talk' | 'other'
+  note?: string
+  done: boolean
+}
+
+export function readFamilyParenting(): WbFamilyParentingItem[] {
+  return readJson('uniwork.wb.family.parenting', [])
+}
+
+export function writeFamilyParenting(items: WbFamilyParentingItem[]): void {
+  writeJson('uniwork.wb.family.parenting', items)
+}
+
+/** Nhắc thuốc trong gia đình */
+export interface WbFamilyMedItem {
+  id: string
+  person: string
+  medicine: string
+  dose?: string
+  schedule: string
+  startDate?: string
+  endDate?: string
+  note?: string
+  active: boolean
+}
+
+export function readFamilyMeds(): WbFamilyMedItem[] {
+  return readJson('uniwork.wb.family.meds', [])
+}
+
+export function writeFamilyMeds(items: WbFamilyMedItem[]): void {
+  writeJson('uniwork.wb.family.meds', items)
+}
+
+/** Chi tiêu / mua sắm gia đình */
+export interface WbFamilyShopItem {
+  id: string
+  date: string
+  title: string
+  amount: number
+  category: 'food' | 'kids' | 'home' | 'health' | 'gift' | 'other'
+  note?: string
+}
+
+export function readFamilyShopping(): WbFamilyShopItem[] {
+  return readJson('uniwork.wb.family.shopping', [])
+}
+
+export function writeFamilyShopping(items: WbFamilyShopItem[]): void {
+  writeJson('uniwork.wb.family.shopping', items)
+}
+
+/** Gia phả — thành viên trên cây */
+export interface WbFamilyTreeNode {
+  id: string
+  name: string
+  generation: number
+  side: 'paternal' | 'maternal' | 'self' | 'spouse' | 'other'
+  parentNames?: string
+  birthYear?: string
+  note?: string
+}
+
+export function readFamilyTree(): WbFamilyTreeNode[] {
+  return readJson('uniwork.wb.family.tree', [])
+}
+
+export function writeFamilyTree(items: WbFamilyTreeNode[]): void {
+  writeJson('uniwork.wb.family.tree', items)
+}
+
+/** Cột mốc kỷ niệm */
+export interface WbFamilyMilestone {
+  id: string
+  date: string
+  title: string
+  kind: 'birthday' | 'wedding' | 'memorial' | 'achievement' | 'other'
+  people?: string
+  note?: string
+  recurYearly: boolean
+}
+
+export function readFamilyMilestones(): WbFamilyMilestone[] {
+  return readJson('uniwork.wb.family.milestones', [])
+}
+
+export function writeFamilyMilestones(items: WbFamilyMilestone[]): void {
+  writeJson('uniwork.wb.family.milestones', items)
+}
+
+/** Sub-tabs inside Bạn bè */
+export type FriendsSubTabId = 'people' | 'events' | 'anniversaries'
+
+export interface WbFriend {
+  id: string
+  name: string
+  nickname?: string
+  howMet?: string
+  birthday?: string
+  phone?: string
+  email?: string
+  social?: string
+  note?: string
+}
+
+export interface WbFriendEvent {
+  id: string
+  date: string
+  title: string
+  friendName?: string
+  kind: 'meetup' | 'party' | 'trip' | 'gift' | 'other'
+  note?: string
+  done: boolean
+}
+
+export interface WbFriendAnniversary {
+  id: string
+  date: string
+  title: string
+  friendName?: string
+  kind: 'friendship' | 'birthday' | 'met' | 'other'
+  note?: string
+  recurYearly: boolean
+}
+
+export function readFriendsSubTab(): FriendsSubTabId {
+  try {
+    const raw = localStorage.getItem('uniwork.wb.friends.subtab')
+    const ok: FriendsSubTabId[] = ['people', 'events', 'anniversaries']
+    if (raw && (ok as string[]).includes(raw)) return raw as FriendsSubTabId
+  } catch {
+    /* ignore */
+  }
+  return 'people'
+}
+
+export function writeFriendsSubTab(id: FriendsSubTabId): void {
+  try {
+    localStorage.setItem('uniwork.wb.friends.subtab', id)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readFriends(): WbFriend[] {
+  return readJson('uniwork.wb.friends', [])
+}
+
+export function writeFriends(items: WbFriend[]): void {
+  writeJson('uniwork.wb.friends', items)
+}
+
+export function readFriendEvents(): WbFriendEvent[] {
+  return readJson('uniwork.wb.friends.events', [])
+}
+
+export function writeFriendEvents(items: WbFriendEvent[]): void {
+  writeJson('uniwork.wb.friends.events', items)
+}
+
+export function readFriendAnniversaries(): WbFriendAnniversary[] {
+  return readJson('uniwork.wb.friends.anniversaries', [])
+}
+
+export function writeFriendAnniversaries(items: WbFriendAnniversary[]): void {
+  writeJson('uniwork.wb.friends.anniversaries', items)
 }
 
 export interface WbTravelCheckItem {

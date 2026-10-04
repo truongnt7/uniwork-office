@@ -19,10 +19,10 @@ import {
   readClients,
   readContracts,
   readEvents,
+  healthDeskCounts,
   readFamily,
   readFinance,
   readGrowth,
-  readHealth,
   readMatters,
   readTasks,
 } from './workbench-pins'
@@ -62,7 +62,7 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
     const tasks = readTasks(practiceId)
     const events = readEvents(practiceId)
     const finance = readFinance()
-    const health = readHealth()
+    const healthCounts = healthDeskCounts()
     const growth = readGrowth()
     const family = readFamily()
     const clients = readClients(practiceId)
@@ -172,14 +172,31 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
     reminders.sort((a, b) => a.date.localeCompare(b.date) || a.title.localeCompare(b.title))
 
     const healthKinds = [
-      { id: 'exercise' as const, label: L('Vận động', 'Exercise'), color: DESK_CHART.tasks },
-      { id: 'sleep' as const, label: L('Ngủ', 'Sleep'), color: DESK_CHART.legal },
-      { id: 'checkup' as const, label: L('Khám', 'Checkup'), color: DESK_CHART.health },
-      { id: 'other' as const, label: L('Khác', 'Other'), color: DESK_CHART.muted },
-    ].map((k) => ({
-      ...k,
-      count: health.filter((h) => h.kind === k.id).length,
-    }))
+      {
+        id: 'exercise' as const,
+        label: L('Vận động', 'Exercise'),
+        color: DESK_CHART.tasks,
+        count: healthCounts.exercise,
+      },
+      {
+        id: 'sleep' as const,
+        label: L('Ngủ', 'Sleep'),
+        color: DESK_CHART.legal,
+        count: healthCounts.sleep,
+      },
+      {
+        id: 'checkup' as const,
+        label: L('Chỉ số', 'Metrics'),
+        color: DESK_CHART.health,
+        count: healthCounts.checkup,
+      },
+      {
+        id: 'other' as const,
+        label: L('Chế độ ăn / IF', 'Diet / IF'),
+        color: DESK_CHART.muted,
+        count: healthCounts.other,
+      },
+    ]
 
     const familySoon = family
       .filter((f) => f.birthday)
@@ -253,16 +270,80 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
   const money = (n: number) =>
     n.toLocaleString(vi ? 'vi-VN' : 'en-US', { maximumFractionDigits: 0 })
 
+  const now = new Date()
+  const hour = now.getHours()
+  const greet =
+    hour < 12
+      ? label('Chào buổi sáng', 'Good morning')
+      : hour < 18
+        ? label('Chào buổi chiều', 'Good afternoon')
+        : label('Chào buổi tối', 'Good evening')
+  const dateLine = now.toLocaleDateString(vi ? 'vi-VN' : 'en-US', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
+  const showPulse = layout.includes('kpi-strip')
+  const gridIds = layout.filter((id) => id !== 'kpi-strip')
+  const nextReminder = data.reminders[0]
+
+  const widgetTone = (id: DeskWidgetId): string => {
+    switch (id) {
+      case 'reminders':
+      case 'calendar-14d':
+      case 'events-upcoming':
+        return DESK_CHART.events
+      case 'finance-bar':
+      case 'finance-donut':
+        return DESK_CHART.income
+      case 'tasks-ring':
+        return DESK_CHART.tasks
+      case 'growth-bars':
+        return DESK_CHART.growth
+      case 'health-dots':
+        return DESK_CHART.health
+      case 'family-upcoming':
+        return DESK_CHART.family
+      case 'clients-kpi':
+        return DESK_CHART.clients
+      case 'contracts-status':
+        return DESK_CHART.legal
+      case 'matters-status':
+        return DESK_CHART.matter
+      default:
+        return 'var(--accent)'
+    }
+  }
+
   return (
-    <div className="wb-desk">
-      <div className="wb-desk-toolbar">
-        <p className="teacher-hint">
-          {label(
-            'Tóm tắt từ các tab cá nhân. Mặc định: chỉ số & biểu đồ cá nhân — thêm HĐ / vụ / KH khi cần.',
-            'Summary from your personal tabs. Defaults are personal KPIs & charts — add contracts / matters / clients when needed.',
+    <div className="wb-myspace">
+      <header className="wb-ms-hero">
+        <div className="wb-ms-hero-glow" aria-hidden />
+        <div className="wb-ms-hero-copy">
+          <p className="wb-ms-kicker">{label('Không gian của tôi', 'My Space')}</p>
+          <h2 className="wb-ms-title">{greet}</h2>
+          <p className="wb-ms-sub">
+            {dateLine}
+            {' · '}
+            {label(
+              'Việc làm và đời sống trong một khung nhìn',
+              'Work and life in one view',
+            )}
+          </p>
+          {nextReminder ? (
+            <p className="wb-ms-next">
+              <span>{label('Sắp tới', 'Up next')}</span>
+              <strong>
+                {nextReminder.date} — {nextReminder.title}
+              </strong>
+            </p>
+          ) : (
+            <p className="wb-ms-next is-quiet">
+              {label('Chưa có nhắc gần — không gian đang trống trải.', 'No upcoming reminders — your space is clear.')}
+            </p>
           )}
-        </p>
-        <div className="teacher-chip-row">
+        </div>
+        <div className="wb-ms-hero-actions">
           <button type="button" className="btn btn-secondary" onClick={() => setTick((t) => t + 1)}>
             {label('Làm mới', 'Refresh')}
           </button>
@@ -271,15 +352,58 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
             className="btn btn-primary"
             onClick={() => setCustomOpen((o) => !o)}
           >
-            {customOpen
-              ? label('Xong', 'Done')
-              : label('Tùy chỉnh bàn làm việc', 'Customize desk')}
+            {customOpen ? label('Xong', 'Done') : label('Tùy chỉnh', 'Customize')}
           </button>
         </div>
-      </div>
+      </header>
+
+      {showPulse ? (
+        <div className="wb-ms-pulse" aria-label={label('Nhịp sống nhanh', 'Life pulse')}>
+          <PulseChip
+            label={label('Việc mở', 'Open tasks')}
+            value={String(data.openTasks)}
+            tone="tasks"
+            delay={0}
+          />
+          <PulseChip
+            label={label('Sự kiện 7 ngày', 'Events · 7d')}
+            value={String(data.events7)}
+            tone="events"
+            delay={1}
+          />
+          <PulseChip
+            label={label('Thu tháng', 'Income')}
+            value={money(data.monthIncome)}
+            tone="income"
+            delay={2}
+          />
+          <PulseChip
+            label={label('Chi tháng', 'Expense')}
+            value={money(data.monthExpense)}
+            tone="expense"
+            delay={3}
+          />
+          {(layout.includes('contracts-status') || layout.includes('matters-status')) && (
+            <>
+              <PulseChip
+                label={label('Hợp đồng', 'Contracts')}
+                value={String(data.contractsOpen)}
+                tone="legal"
+                delay={4}
+              />
+              <PulseChip
+                label={label('Vụ mở', 'Matters')}
+                value={String(data.mattersOpen)}
+                tone="matter"
+                delay={5}
+              />
+            </>
+          )}
+        </div>
+      ) : null}
 
       {customOpen ? (
-        <div className="wb-desk-customize">
+        <div className="wb-desk-customize wb-ms-customize">
           <div>
             <h3>{label('Đang hiện', 'Visible')}</h3>
             <ul className="wb-desk-customize-list">
@@ -319,11 +443,11 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
             </ul>
           </div>
           <div>
-            <h3>{label('Thêm vào màn hình', 'Add to desk')}</h3>
+            <h3>{label('Thêm vào Không gian của tôi', 'Add to My Space')}</h3>
             <p className="teacher-hint">
               {label(
-                'Nhóm thêm: sự kiện chi tiết, gia đình, khách hàng, hợp đồng, vụ việc.',
-                'Extras: detailed events, family, clients, contracts, matters.',
+                'Tuỳ chọn: sự kiện, gia đình, khách hàng, hợp đồng, vụ việc.',
+                'Optional: events, family, clients, contracts, matters.',
               )}
             </p>
             <ul className="wb-desk-customize-list">
@@ -347,60 +471,30 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
               )}
             </ul>
             <button type="button" className="btn btn-secondary" onClick={reset}>
-              {label('Khôi phục mặc định cá nhân', 'Reset personal defaults')}
+              {label('Khôi phục mặc định', 'Reset defaults')}
             </button>
           </div>
         </div>
       ) : null}
 
-      <div className="wb-desk-grid">
-        {layout.map((id) => {
+      <div className="wb-ms-bento">
+        {gridIds.map((id, index) => {
           const def = getDeskWidget(id)
           const wide = def?.wide ? ' is-wide' : ''
           return (
-            <article key={id} className={`wb-desk-card${wide}`}>
-              <header className="wb-desk-card-head">
+            <article
+              key={id}
+              className={`wb-ms-card${wide}`}
+              style={{
+                ['--ms-i' as string]: String(index),
+                ['--ms-tone' as string]: widgetTone(id),
+              }}
+            >
+              <header className="wb-ms-card-head">
                 <h3>{def ? (vi ? def.labelVi : def.labelEn) : id}</h3>
+                {def ? <span>{vi ? def.hintVi : def.hintEn}</span> : null}
               </header>
-              <div className="wb-desk-card-body">
-                {id === 'kpi-strip' && (
-                  <div className="wb-desk-kpis">
-                    <Kpi
-                      label={label('Việc mở', 'Open tasks')}
-                      value={String(data.openTasks)}
-                      tone="tasks"
-                    />
-                    <Kpi
-                      label={label('Sự kiện 7 ngày', 'Events (7d)')}
-                      value={String(data.events7)}
-                      tone="events"
-                    />
-                    <Kpi
-                      label={label('Thu tháng', 'Income')}
-                      value={money(data.monthIncome)}
-                      tone="income"
-                    />
-                    <Kpi
-                      label={label('Chi tháng', 'Expense')}
-                      value={money(data.monthExpense)}
-                      tone="expense"
-                    />
-                    {layout.includes('contracts-status') || layout.includes('matters-status') ? (
-                      <>
-                        <Kpi
-                          label={label('HĐ đang xử lý', 'Active contracts')}
-                          value={String(data.contractsOpen)}
-                          tone="legal"
-                        />
-                        <Kpi
-                          label={label('Vụ mở', 'Open matters')}
-                          value={String(data.mattersOpen)}
-                          tone="matter"
-                        />
-                      </>
-                    ) : null}
-                  </div>
-                )}
+              <div className="wb-ms-card-body">
                 {id === 'reminders' &&
                   (data.reminders.length === 0 ? (
                     <p className="teacher-empty">
@@ -467,7 +561,10 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
                 {id === 'growth-bars' &&
                   (data.growth.length === 0 ? (
                     <p className="teacher-empty">
-                      {label('Chưa có mục tiêu — thêm ở Phát triển bản thân.', 'No goals — add in Self-growth.')}
+                      {label(
+                        'Chưa có mục tiêu — thêm ở Phát triển bản thân.',
+                        'No goals — add in Self-growth.',
+                      )}
                     </p>
                   ) : (
                     <ul className="wb-desk-bars">
@@ -491,7 +588,10 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
                     </ul>
                   ))}
                 {id === 'health-dots' && (
-                  <HealthDots kinds={data.healthKinds} empty={label('Chưa ghi nhận SK.', 'No health entries.')} />
+                  <HealthDots
+                    kinds={data.healthKinds}
+                    empty={label('Chưa ghi nhận SK.', 'No health entries.')}
+                  />
                 )}
                 {id === 'events-upcoming' &&
                   (data.eventsUpcoming.length === 0 ? (
@@ -510,7 +610,10 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
                 {id === 'family-upcoming' &&
                   (data.familySoon.length === 0 ? (
                     <p className="teacher-empty">
-                      {label('Chưa có sinh nhật sắp tới / chưa nhập ngày sinh.', 'No upcoming birthdays.')}
+                      {label(
+                        'Chưa có sinh nhật sắp tới / chưa nhập ngày sinh.',
+                        'No upcoming birthdays.',
+                      )}
                     </p>
                   ) : (
                     <ul className="wb-desk-reminders">
@@ -546,7 +649,11 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
                 {id === 'contracts-status' && (
                   <StatusBars
                     rows={[
-                      { label: label('Nháp', 'Draft'), value: data.contractCounts.draft, color: DESK_CHART.muted },
+                      {
+                        label: label('Nháp', 'Draft'),
+                        value: data.contractCounts.draft,
+                        color: DESK_CHART.muted,
+                      },
                       {
                         label: label('Hiệu lực', 'Active'),
                         value: data.contractCounts.active,
@@ -557,7 +664,11 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
                         value: data.contractCounts.expired,
                         color: DESK_CHART.expense,
                       },
-                      { label: label('Khác', 'Other'), value: data.contractCounts.other, color: DESK_CHART.legal },
+                      {
+                        label: label('Khác', 'Other'),
+                        value: data.contractCounts.other,
+                        color: DESK_CHART.legal,
+                      },
                     ]}
                     empty={label('Chưa có hợp đồng.', 'No contracts.')}
                   />
@@ -565,7 +676,11 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
                 {id === 'matters-status' && (
                   <StatusBars
                     rows={[
-                      { label: label('Đang xử lý', 'Open'), value: data.matterCounts.open, color: DESK_CHART.matter },
+                      {
+                        label: label('Đang xử lý', 'Open'),
+                        value: data.matterCounts.open,
+                        color: DESK_CHART.matter,
+                      },
                       {
                         label: label('Chờ', 'Pending'),
                         value: data.matterCounts.pending,
@@ -585,6 +700,30 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
           )
         })}
       </div>
+    </div>
+  )
+}
+
+function PulseChip({
+  label: lab,
+  value,
+  tone,
+  delay,
+}: {
+  label: string
+  value: string
+  tone: keyof typeof DESK_CHART | 'income' | 'expense' | 'tasks' | 'events' | 'legal' | 'matter'
+  delay: number
+}): ReactElement {
+  const color =
+    tone in DESK_CHART ? String(DESK_CHART[tone as keyof typeof DESK_CHART]) : DESK_CHART.tasks
+  return (
+    <div
+      className="wb-ms-pulse-chip"
+      style={{ ['--wb-kpi' as string]: color, ['--ms-i' as string]: String(delay) }}
+    >
+      <span>{lab}</span>
+      <strong>{value}</strong>
     </div>
   )
 }

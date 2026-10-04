@@ -27,10 +27,11 @@ import { useI18n } from './locale'
 import type { StringKey, TFunc } from './locale'
 import type { AccountStatus, AiCatalogEntry, UiTheme } from '../../shared/home-api'
 import { ProviderLogo } from './provider-logos'
+import { BackupStoragePane } from './BackupStoragePane'
 import { IntegrationsPane, skillUpdateDue } from './IntegrationsPane'
 import './settings.css'
 
-// ── Settings modal (opened from the account menu) ─────────
+// ── Settings modal (opened from the sidebar Settings entry) ─
 // Genspark-style two-pane dialog: section nav on the left, fields on the right.
 // All values go through the existing home IPC; nothing is stored locally.
 
@@ -55,6 +56,7 @@ const LANG_OPTIONS = [
   { value: 'pt', label: 'Português' },
   { value: 'ru', label: 'Русский' },
   { value: 'th', label: 'ไทย' },
+  { value: 'vi', label: 'Tiếng Việt' },
   { value: 'zh', label: '简体中文' },
   { value: 'zh-TW', label: '繁體中文' },
 ] as const
@@ -138,13 +140,23 @@ function CustomFontSizeInput({
   )
 }
 
-type SectionId = 'account' | 'aiModel' | 'aiMedia' | 'general' | 'integrations' | 'about'
+export type SettingsSectionId =
+  | 'account'
+  | 'aiModel'
+  | 'aiMedia'
+  | 'general'
+  | 'backup'
+  | 'integrations'
+  | 'about'
+
+type SectionId = SettingsSectionId
 
 const SECTIONS: readonly { id: SectionId; labelKey: StringKey }[] = [
   { id: 'account', labelKey: 'setSecAccount' },
   { id: 'aiModel', labelKey: 'setSecAiModel' },
   { id: 'aiMedia', labelKey: 'setSecAiMedia' },
   { id: 'general', labelKey: 'setSecGeneral' },
+  { id: 'backup', labelKey: 'setSecBackup' },
   { id: 'integrations', labelKey: 'setSecIntegrations' },
   { id: 'about', labelKey: 'setSecAbout' },
 ]
@@ -220,6 +232,26 @@ function SectionIcon({ id }: { id: SectionId }) {
         />
         <circle cx="11.5" cy="5" r="1.7" stroke="currentColor" strokeWidth="1.3" />
         <circle cx="4.5" cy="11" r="1.7" stroke="currentColor" strokeWidth="1.3" />
+      </svg>
+    )
+  }
+  if (id === 'backup') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <path
+          d="M4.5 11.5A3.5 3.5 0 0 1 5 4.6a4 4 0 0 1 7.6 1.2A2.8 2.8 0 0 1 12 12H5"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M8 7.5v4M6.5 10 8 11.5 9.5 10"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     )
   }
@@ -992,6 +1024,8 @@ export interface SettingsModalProps {
   /** an installed skill is older than the bundled one: dot on the Integrations entry */
   skillUpdateDue?: boolean
   onSkillUpdateDue?: (due: boolean) => void
+  /** section shown when the modal opens */
+  initialSection?: SettingsSectionId
 }
 
 export function SettingsModal({
@@ -1007,9 +1041,10 @@ export function SettingsModal({
   onLogout,
   skillUpdateDue: updateDue = false,
   onSkillUpdateDue,
+  initialSection = 'general',
 }: SettingsModalProps) {
   const { lang, setLang, t } = useI18n()
-  const [section, setSection] = useState<SectionId>('account')
+  const [section, setSection] = useState<SectionId>(initialSection)
   const [theme, setTheme] = useState<UiTheme>('system')
   const [saveDir, setSaveDir] = useState('')
   const [analyticsOn, setAnalyticsOn] = useState(true)
@@ -1161,7 +1196,7 @@ export function SettingsModal({
                     </button>
                   ) : (
                     <>
-                      {loginWaiting && loginUrl && (
+                      {loginUrl && (
                         <>
                           <button className="set-btn" onClick={onOpenLoginUrl}>
                             {t('loginOpenManually')}
@@ -1181,6 +1216,9 @@ export function SettingsModal({
             )}
             {section === 'aiModel' && <AiModelPane t={t} />}
             {section === 'aiMedia' && <AiMediaPane t={t} />}
+            {section === 'backup' && (
+              <BackupStoragePane lang={lang} loggedIn={loggedIn} onLogin={onLogin} />
+            )}
             {section === 'general' && (
               <>
                 <h3 className="set-pane-title">{t('setSecGeneral')}</h3>

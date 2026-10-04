@@ -13,7 +13,7 @@ export const teacherPractice: PracticeDefinition = {
   projectKind: 'education',
   labelVi: 'Giáo viên',
   labelEn: 'Teacher',
-  subtitleVi: 'Soạn bài · học liệu · skills sư phạm trên máy',
+  subtitleVi: 'Soạn bài · học liệu · kỹ năng sư phạm trên máy',
   subtitleEn: 'Lesson packs · materials · pedagogy skills on device',
   titleFacetId: 'lessonTitle',
   facets: [

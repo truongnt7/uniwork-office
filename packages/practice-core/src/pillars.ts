@@ -18,7 +18,7 @@ export const DEFAULT_PILLARS: readonly PracticePillarLabels[] = [
   },
   {
     id: 'skills',
-    labelVi: 'Skills',
+    labelVi: 'Kỹ năng',
     labelEn: 'Skills',
     hintVi: 'Prompt AI tái sử dụng',
     hintEn: 'Reusable AI prompts',

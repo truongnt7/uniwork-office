@@ -683,3 +683,158 @@
 .set-intg-path {
   text-align: left;
 }
+
+/* ── Backup & Storage addon ─────────────────────────────── */
+.set-backup {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.set-backup-lead {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.set-backup-status {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-content);
+}
+
+.set-backup-status span {
+  display: block;
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+}
+
+.set-backup-status strong {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.set-backup-sim {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.set-backup-login {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.set-backup-login p {
+  margin: 0;
+  flex: 1;
+  min-width: 200px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.set-backup-h {
+  margin: 6px 0 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.set-backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.set-backup-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.set-backup-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-btn);
+}
+
+.set-backup-card.is-active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.set-backup-card header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.set-backup-card h5 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.set-backup-card p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.set-backup-card ul {
+  margin: 0;
+  padding: 0 0 0 16px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.set-backup-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.set-backup-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
+}
+
+.set-backup-msg {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.set-backup-err {
+  margin: 0;
+  font-size: 12px;
+  color: var(--danger);
+}

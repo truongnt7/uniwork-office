@@ -24,7 +24,8 @@
   --placeholder: #8e8e8e;
   --on-accent: #ffffff;
   --font-size: 16px;
-  font-family: Inter, "Segoe UI", "SF Pro Text", system-ui, sans-serif;
+  /* UniAI Sans = Inter (EN/Latin) + Be Vietnam Pro (VI) via unicode-range in fonts.css */
+  font-family: "UniAI Sans", Inter, "Be Vietnam Pro", "Segoe UI", "SF Pro Text", "Noto Sans", system-ui, sans-serif;
   color-scheme: dark;
 }
 
@@ -376,6 +377,172 @@ textarea {
   margin-top: 4px;
   font-size: 12px;
   color: var(--muted);
+}
+
+/* Tasks / Projects hub */
+.hub-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hub-form {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.hub-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+}
+
+.hub-input:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 1px;
+}
+
+.hub-btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.hub-btn:hover {
+  background: var(--hover);
+}
+
+.hub-btn.primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.hub-btn.primary:hover {
+  filter: brightness(1.05);
+}
+
+.hub-btn.ghost {
+  background: transparent;
+}
+
+.hub-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.hub-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+
+.hub-row.is-done .hub-check span {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.hub-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.hub-check input {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+}
+
+.hub-check span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hub-empty {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 8px 2px;
+}
+
+.hub-project {
+  align-items: flex-start;
+}
+
+.hub-project-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.hub-project-main strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.hub-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.hub-project.status-active {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.hub-project.status-done .hub-project-main strong {
+  color: var(--muted);
+}
+
+.hub-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 560px) {
+  .hub-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hub-row.hub-project {
+    flex-direction: column;
+  }
+
+  .hub-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 
 /* Settings modal */
@@ -848,8 +1015,9 @@ textarea {
   padding: 6px;
   border-radius: 18px;
   background: var(--surface-2);
+  color: var(--text);
   border: 1px solid var(--border);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--panel-shadow);
   z-index: 30;
   display: flex;
   flex-direction: column;
@@ -878,7 +1046,7 @@ textarea {
 }
 
 .attach-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--hover-fill);
 }
 
 .attach-ico {
@@ -887,7 +1055,7 @@ textarea {
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--hover-fill);
   color: var(--text);
   flex-shrink: 0;
 }
@@ -909,8 +1077,8 @@ textarea {
 }
 
 .composer:focus-within {
-  border-color: rgba(255, 255, 255, 0.14);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 32px rgba(0, 0, 0, 0.35);
+  border-color: color-mix(in srgb, var(--text) 14%, transparent);
+  box-shadow: var(--shadow-composer);
 }
 
 .composer-stack {
@@ -943,15 +1111,15 @@ textarea {
   max-width: 100%;
   padding: 6px 8px 6px 10px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--hover-fill-strong);
   border: 1px solid var(--border-soft);
   font-size: 12.5px;
   color: var(--text);
 }
 
 .chip.is-plugin {
-  background: rgba(91, 140, 255, 0.16);
-  border-color: rgba(91, 140, 255, 0.35);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 .chip-label {
@@ -977,7 +1145,7 @@ textarea {
 }
 
 .chip-x:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--hover-fill-strong);
   color: var(--text);
 }
 
@@ -997,7 +1165,7 @@ textarea {
 
 .composer-icon:hover,
 .composer-icon[aria-expanded='true'] {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--hover-fill);
 }
 
 .composer textarea {
@@ -1016,7 +1184,7 @@ textarea {
 }
 
 .composer textarea::placeholder {
-  color: #8e8e8e;
+  color: var(--placeholder);
 }
 
 .composer-actions {
@@ -1052,6 +1220,17 @@ textarea {
   flex-direction: column;
   animation: slideIn 0.2s ease both;
   box-shadow: var(--panel-shadow);
+  color-scheme: inherit;
+}
+
+.plugin-panel,
+.plugin-panel * {
+  /* Keep Plugin chrome on semantic text; brand icon fills stay via inline bg. */
+  scrollbar-color: color-mix(in srgb, var(--text) 28%, transparent) transparent;
+}
+
+.plugin-panel button {
+  color: inherit;
 }
 
 .plugin-panel[hidden] {
@@ -1077,6 +1256,8 @@ textarea {
   padding: 16px 16px 8px;
   border-bottom: 1px solid var(--border-soft);
   background: var(--bg);
+  color: var(--text);
+  flex-shrink: 0;
 }
 
 .plugin-head h2 {
@@ -1090,6 +1271,8 @@ textarea {
 .plugin-search-wrap {
   position: relative;
   margin: 10px 16px 10px;
+  background: var(--bg);
+  flex-shrink: 0;
 }
 
 .plugin-search-ico {
@@ -1203,7 +1386,7 @@ textarea {
   font-size: 13px;
   font-weight: 750;
   letter-spacing: -0.02em;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--text) 18%, transparent);
 }
 
 .plugin-suite-app-label {

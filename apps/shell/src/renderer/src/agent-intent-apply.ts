@@ -105,7 +105,7 @@ function addItem(
     ])
     return { vi: `Đã thêm mục tiêu: ${title}`, en: `Added growth goal: ${title}` }
   }
-  // family / friends / travel: open tab only — structured forms differ
+  // family / friends / pets / travel: open tab only — structured forms differ
   return {
     vi: `Đã mở tab để bạn hoàn tất: ${title}`,
     en: `Opened tab for you to finish: ${title}`,

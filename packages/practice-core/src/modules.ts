@@ -19,6 +19,7 @@ export type WorkbenchModuleId =
   | 'self-growth'
   | 'family'
   | 'friends'
+  | 'pets'
   | 'travel'
   | 'clients'
   | 'contracts'
@@ -137,6 +138,14 @@ export const WORKBENCH_MODULES: readonly WorkbenchModuleDef[] = [
     labelEn: 'Friends',
     hintVi: 'Thông tin bạn bè, sự kiện quan trọng, kỷ niệm',
     hintEn: 'Friend profiles, important events, anniversaries',
+    available: true,
+  },
+  {
+    id: 'pets',
+    labelVi: 'Thú cưng',
+    labelEn: 'Pets',
+    hintVi: 'Hồ sơ, album ảnh & lịch chăm sóc — lưu trên máy',
+    hintEn: 'Profiles, photo albums & care schedule — stored on this device',
     available: true,
   },
   {

@@ -7,6 +7,7 @@ import { FamilyPane } from './FamilyPane'
 import { FinancePane } from './FinancePane'
 import { FriendsPane } from './FriendsPane'
 import { HealthPane } from './HealthPane'
+import { PetsPane } from './PetsPane'
 import {
   readClients,
   readContracts,
@@ -100,6 +101,7 @@ export function WorkbenchModulePane({
       {moduleId === 'self-growth' && <GrowthPane vi={vi} />}
       {moduleId === 'family' && <FamilyPane vi={vi} />}
       {moduleId === 'friends' && <FriendsPane vi={vi} />}
+      {moduleId === 'pets' && <PetsPane vi={vi} />}
       {moduleId === 'travel' && (
         <TravelPane vi={vi} packId={packId} onPackLinked={onPackLinked} />
       )}

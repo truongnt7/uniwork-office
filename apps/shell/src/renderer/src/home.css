@@ -2493,12 +2493,361 @@ body.vib .home {
 
 .wb-family,
 .wb-friends,
+.wb-pets,
 .wb-health,
 .wb-finance,
 .wb-cal {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+/* ── Pets workbench ─────────────────────────────────── */
+.wb-pets-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  border: 1px solid color-mix(in srgb, #f97316 35%, var(--border));
+  background:
+    radial-gradient(120% 80% at 100% 0%, color-mix(in srgb, #fb923c 28%, transparent), transparent),
+    color-mix(in srgb, #f97316 8%, var(--surface));
+}
+
+.wb-pets-hero-copy strong {
+  display: block;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.wb-pets-hero-copy p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  max-width: 36rem;
+}
+
+.wb-pets-hero-art {
+  display: flex;
+  gap: 6px;
+  font-size: 28px;
+  opacity: 0.9;
+}
+
+.wb-pets-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.wb-pets-form {
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-content, var(--surface));
+}
+
+.wb-pets-err {
+  margin: 0;
+  font-size: 13px;
+  color: var(--danger);
+}
+
+.wb-pets-empty {
+  display: grid;
+  place-items: center;
+  gap: 8px;
+  padding: 36px 16px;
+  text-align: center;
+  border-radius: 16px;
+  border: 1px dashed var(--border);
+  color: var(--text-secondary);
+}
+
+.wb-pets-empty span {
+  font-size: 36px;
+}
+
+.wb-pets-empty.is-compact {
+  padding: 20px;
+}
+
+.wb-pets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.wb-pet-card {
+  position: relative;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-btn);
+  overflow: hidden;
+}
+
+.wb-pet-card-main {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  padding: 14px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.wb-pet-card-main:hover {
+  background: var(--hover);
+}
+
+.wb-pet-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, #f97316 18%, var(--bg-content, var(--surface)));
+  background-size: cover;
+  background-position: center;
+  font-size: 28px;
+  border: 2px solid color-mix(in srgb, #f97316 30%, var(--border));
+}
+
+.wb-pet-avatar.is-lg {
+  width: 88px;
+  height: 88px;
+  font-size: 36px;
+}
+
+.wb-pet-card-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wb-pet-card-body strong {
+  font-size: 15px;
+}
+
+.wb-pet-card-body span,
+.wb-pet-card-body small {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.wb-pet-card-del {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--danger) 12%, var(--surface));
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.wb-pet-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.wb-pets-back {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+}
+
+.wb-pet-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.wb-pet-detail-head h3 {
+  margin: 0;
+  font-size: 1.35rem;
+  color: var(--text);
+}
+
+.wb-pet-detail-head p,
+.wb-pet-detail-head small {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.wb-pets-photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wb-pets-album {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.wb-pets-shot {
+  margin: 0;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.wb-pets-shot img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  display: block;
+  background: var(--bg-content, var(--surface));
+}
+
+.wb-pets-shot-ph {
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+  background: var(--bg-content, var(--surface));
+}
+
+.wb-pets-shot figcaption {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.wb-pets-shot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 8px 10px;
+}
+
+.wb-pets-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.wb-pets-notes textarea {
+  width: 100%;
+  resize: vertical;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-content, var(--surface));
+  color: var(--text);
+  padding: 10px 12px;
+  font: inherit;
+}
+
+.wb-pets-care-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.wb-pets-care-list {
+  margin: 0;
+}
+
+.wb-pets-care-row {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.wb-pets-care-row > div:first-child {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.wb-pets-care-result {
+  display: block;
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.wb-pets-care-actions {
+  flex: 1 1 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.wb-pets-care-result-input {
+  width: 100%;
+  resize: vertical;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--bg-content, var(--surface));
+  color: var(--text);
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.wb-pets-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.wb-pets-gallery-tile {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  padding: 0;
+  background: var(--surface);
+  cursor: pointer;
+  color: var(--text);
+  text-align: left;
+}
+
+.wb-pets-gallery-tile img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  display: block;
+}
+
+.wb-pets-gallery-tile > span {
+  display: block;
+  padding: 8px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .wb-cal-toolbar {

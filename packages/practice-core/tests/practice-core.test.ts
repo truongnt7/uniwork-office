@@ -72,6 +72,7 @@ describe('practice-core', () => {
         'self-growth',
         'family',
         'friends',
+        'pets',
         'travel',
         'clients',
         'contracts',

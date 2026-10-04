@@ -17,7 +17,7 @@ npm run start -w @uniwork/uniai-pwa
 
 ## Deploy
 
-Copy static assets (`index.html`, `styles.css`, `app.js`, `sw.js`, `manifest.webmanifest`, `icons/`) to the CDN/origin path `/app/` with HTTPS. Service worker and installability require a secure origin.
+Copy static assets (`index.html`, `fonts.css`, `styles.css`, `app.js`, `sw.js`, `manifest.webmanifest`, `fonts/`, `icons/`) to the CDN/origin path `/app/` with HTTPS. Service worker and installability require a secure origin. Self-hosted Inter + Be Vietnam Pro (OFL) cover English and Vietnamese offline.
 
 ## Install (users)
 

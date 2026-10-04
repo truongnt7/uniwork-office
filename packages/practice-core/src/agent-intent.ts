@@ -108,6 +108,10 @@ const MODULE_KEYWORDS: readonly { id: WorkbenchModuleId; keys: readonly string[]
   { id: 'self-growth', keys: ['phát triển', 'self-growth', 'growth', 'thói quen'] },
   { id: 'family', keys: ['gia đình', 'family', 'con cái', 'gia phả'] },
   { id: 'friends', keys: ['bạn bè', 'friends', 'bạn'] },
+  {
+    id: 'pets',
+    keys: ['thú cưng', 'pets', 'pet', 'chó', 'mèo', 'dog', 'cat'],
+  },
   { id: 'travel', keys: ['du lịch', 'travel', 'chuyến đi', 'trip'] },
   { id: 'clients', keys: ['khách hàng', 'clients', 'client', 'đối tác'] },
   { id: 'contracts', keys: ['hợp đồng', 'contracts', 'contract'] },
@@ -264,6 +268,7 @@ export function moduleSupportsAddItem(id: WorkbenchModuleId): boolean {
     id === 'personal-finance' ||
     id === 'health' ||
     id === 'friends' ||
+    id === 'pets' ||
     id === 'family' ||
     id === 'travel' ||
     id === 'self-growth'

@@ -6,6 +6,8 @@
 const STORE_KEY = 'uniai.chats.v1'
 const PREFS_KEY = 'uniai.prefs.v1'
 const OFFICE_DOCS_KEY = 'uniai.officeDocs.v1'
+const TASKS_KEY = 'uniai.tasks.v1'
+const PROJECTS_KEY = 'uniai.projects.v1'
 
 const ACCENTS = [
   { id: 'blue', value: '#5b8cff' },
@@ -172,6 +174,13 @@ const WORKBENCH_TABS = [
     icon: '<circle cx="9" cy="9" r="2.6" stroke="currentColor" stroke-width="1.5"/><path d="M4 19a5 5 0 0 1 10 0M16 8a2.4 2.4 0 1 1 0 4.8M14.5 19a4.2 4.2 0 0 1 5.5-3.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
   },
   {
+    id: 'pets',
+    label: 'Thú cưng',
+    hint: 'Hồ sơ & album ảnh trên máy',
+    color: '#f97316',
+    icon: '<ellipse cx="12" cy="14" rx="4.2" ry="3.4" stroke="currentColor" stroke-width="1.5"/><circle cx="7.2" cy="8.5" r="1.5" stroke="currentColor" stroke-width="1.4"/><circle cx="10.5" cy="7" r="1.3" stroke="currentColor" stroke-width="1.4"/><circle cx="13.5" cy="7" r="1.3" stroke="currentColor" stroke-width="1.4"/><circle cx="16.8" cy="8.5" r="1.5" stroke="currentColor" stroke-width="1.4"/>',
+  },
+  {
     id: 'travel',
     label: 'Du lịch',
     hint: 'Chuyến đi & hành trình',
@@ -279,7 +288,48 @@ let activeId = chats[0].id
 /** @type {typeof DEFAULT_PREFS} */
 let prefs = loadPrefs()
 let officeDocs = loadOfficeDocs()
-/** @type {'chat'|'knowledge'|'documents'|'office'} */
+
+/** @typedef {{ id: string, title: string, done: boolean, createdAt: string }} HubTask */
+/** @typedef {{ id: string, name: string, status: 'active'|'paused'|'done', note?: string, createdAt: string }} HubProject */
+
+/** @returns {HubTask[]} */
+function loadTasks() {
+  try {
+    const raw = localStorage.getItem(TASKS_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+/** @param {HubTask[]} items */
+function saveTasks(items) {
+  localStorage.setItem(TASKS_KEY, JSON.stringify(items))
+}
+
+/** @returns {HubProject[]} */
+function loadProjects() {
+  try {
+    const raw = localStorage.getItem(PROJECTS_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+/** @param {HubProject[]} items */
+function saveProjects(items) {
+  localStorage.setItem(PROJECTS_KEY, JSON.stringify(items))
+}
+
+let hubTasks = loadTasks()
+let hubProjects = loadProjects()
+
+/** @type {'chat'|'knowledge'|'documents'|'tasks'|'projects'|'office'} */
 let navView = 'chat'
 let officeExpanded = true
 let activeDocId = ''
@@ -347,6 +397,12 @@ function applyPrefs() {
       : 'dark'
     : prefs.theme
   document.documentElement.dataset.theme = theme
+  const lang = prefs.lang === 'en' ? 'en' : 'vi'
+  document.documentElement.lang = lang
+  const themeColor = document.querySelector('meta[name="theme-color"]')
+  if (themeColor) {
+    themeColor.setAttribute('content', theme === 'light' ? '#ffffff' : '#000000')
+  }
   const accent = ACCENTS.find((a) => a.id === prefs.accent)?.value || ACCENTS[0].value
   document.documentElement.style.setProperty('--accent', accent)
   const fontMap = { small: '14px', default: '16px', large: '18px', xlarge: '20px' }
@@ -613,6 +669,8 @@ function renderLibrary() {
   const titles = {
     knowledge: ['Tri thức', 'Kho kiến thức, skill và ghi chú dùng lại trong uniAI.'],
     documents: ['Tài liệu', 'Tài liệu đã tải lên hoặc gắn với cuộc trò chuyện.'],
+    tasks: ['Công việc', 'Việc cần làm — lưu trên thiết bị này.'],
+    projects: ['Dự án', 'Theo dõi dự án đang chạy — lưu trên thiết bị này.'],
     office: ['UniOffice', 'Tài liệu Office trên UniWork — mở bằng Desktop nếu đã cài.'],
   }
   const [title, desc] = titles[navView] || titles.documents
@@ -620,55 +678,249 @@ function renderLibrary() {
   const card = document.createElement('div')
   card.className = 'library-card'
   card.innerHTML = `<h2>${escapeHtml(title)}</h2><p>${escapeHtml(desc)}</p>`
-  const grid = document.createElement('div')
-  grid.className = 'library-grid'
 
-  if (navView === 'office') {
-    for (const doc of officeDocs) {
-      const tile = document.createElement('button')
-      tile.type = 'button'
-      tile.className = 'library-tile'
-      tile.innerHTML = `<strong>${escapeHtml(doc.name)}</strong><span>${escapeHtml(doc.kind.toUpperCase())} · UniWork Office</span>`
-      tile.addEventListener('click', () => {
-        activeDocId = doc.id
-        openDeepLink(intentUrl('desk', `Open ${doc.name}`))
-        renderOfficeDocs()
-      })
-      grid.appendChild(tile)
-    }
-  } else if (navView === 'knowledge') {
-    ;[
-      ['Playbook bán hàng', 'Quy trình & checklist'],
-      ['Thuật ngữ nội bộ', 'Glossary dùng chung'],
-      ['Mẫu email', 'Thư chào / follow-up'],
-    ].forEach(([name, hint]) => {
-      const tile = document.createElement('button')
-      tile.type = 'button'
-      tile.className = 'library-tile'
-      tile.innerHTML = `<strong>${escapeHtml(name)}</strong><span>${escapeHtml(hint)}</span>`
-      tile.addEventListener('click', () => {
-        setNavView('chat')
-        send(`Dùng tri thức: ${name}`)
-      })
-      grid.appendChild(tile)
-    })
+  if (navView === 'tasks') {
+    card.appendChild(renderTasksHub())
+  } else if (navView === 'projects') {
+    card.appendChild(renderProjectsHub())
   } else {
-    ;[
-      ['Đề xuất dự án.pdf', 'Đã tải lên'],
-      ['Ảnh whiteboard.png', 'Từ Camera'],
-      ['Ghi chú họp.txt', 'Tệp cục bộ'],
-    ].forEach(([name, hint]) => {
-      const tile = document.createElement('button')
-      tile.type = 'button'
-      tile.className = 'library-tile'
-      tile.innerHTML = `<strong>${escapeHtml(name)}</strong><span>${escapeHtml(hint)}</span>`
-      grid.appendChild(tile)
-    })
+    const grid = document.createElement('div')
+    grid.className = 'library-grid'
+
+    if (navView === 'office') {
+      for (const doc of officeDocs) {
+        const tile = document.createElement('button')
+        tile.type = 'button'
+        tile.className = 'library-tile'
+        tile.innerHTML = `<strong>${escapeHtml(doc.name)}</strong><span>${escapeHtml(doc.kind.toUpperCase())} · UniWork Office</span>`
+        tile.addEventListener('click', () => {
+          activeDocId = doc.id
+          openDeepLink(intentUrl('desk', `Open ${doc.name}`))
+          renderOfficeDocs()
+        })
+        grid.appendChild(tile)
+      }
+    } else if (navView === 'knowledge') {
+      ;[
+        ['Playbook bán hàng', 'Quy trình & checklist'],
+        ['Thuật ngữ nội bộ', 'Glossary dùng chung'],
+        ['Mẫu email', 'Thư chào / follow-up'],
+      ].forEach(([name, hint]) => {
+        const tile = document.createElement('button')
+        tile.type = 'button'
+        tile.className = 'library-tile'
+        tile.innerHTML = `<strong>${escapeHtml(name)}</strong><span>${escapeHtml(hint)}</span>`
+        tile.addEventListener('click', () => {
+          setNavView('chat')
+          send(`Dùng tri thức: ${name}`)
+        })
+        grid.appendChild(tile)
+      })
+    } else {
+      ;[
+        ['Đề xuất dự án.pdf', 'Đã tải lên'],
+        ['Ảnh whiteboard.png', 'Từ Camera'],
+        ['Ghi chú họp.txt', 'Tệp cục bộ'],
+      ].forEach(([name, hint]) => {
+        const tile = document.createElement('button')
+        tile.type = 'button'
+        tile.className = 'library-tile'
+        tile.innerHTML = `<strong>${escapeHtml(name)}</strong><span>${escapeHtml(hint)}</span>`
+        grid.appendChild(tile)
+      })
+    }
+
+    card.appendChild(grid)
   }
 
-  card.appendChild(grid)
   el.library.appendChild(card)
   el.title.textContent = title
+}
+
+/** @returns {HTMLElement} */
+function renderTasksHub() {
+  const wrap = document.createElement('div')
+  wrap.className = 'hub-panel'
+
+  const form = document.createElement('div')
+  form.className = 'hub-form'
+  const input = document.createElement('input')
+  input.type = 'text'
+  input.className = 'hub-input'
+  input.placeholder = 'VD: Soạn phiếu kiểm tra'
+  input.setAttribute('aria-label', 'Việc mới')
+  const addBtn = document.createElement('button')
+  addBtn.type = 'button'
+  addBtn.className = 'hub-btn primary'
+  addBtn.textContent = 'Thêm'
+
+  const add = () => {
+    const t = input.value.trim()
+    if (!t) return
+    hubTasks = [{ id: uid(), title: t, done: false, createdAt: new Date().toISOString() }, ...hubTasks]
+    saveTasks(hubTasks)
+    input.value = ''
+    renderLibrary()
+  }
+  addBtn.addEventListener('click', add)
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      add()
+    }
+  })
+  form.append(input, addBtn)
+  wrap.appendChild(form)
+
+  const list = document.createElement('ul')
+  list.className = 'hub-list'
+  if (hubTasks.length === 0) {
+    const empty = document.createElement('li')
+    empty.className = 'hub-empty'
+    empty.textContent = 'Chưa có việc.'
+    list.appendChild(empty)
+  } else {
+    for (const task of hubTasks) {
+      const li = document.createElement('li')
+      li.className = `hub-row${task.done ? ' is-done' : ''}`
+
+      const label = document.createElement('label')
+      label.className = 'hub-check'
+      const check = document.createElement('input')
+      check.type = 'checkbox'
+      check.checked = task.done
+      check.addEventListener('change', () => {
+        hubTasks = hubTasks.map((x) => (x.id === task.id ? { ...x, done: !x.done } : x))
+        saveTasks(hubTasks)
+        renderLibrary()
+      })
+      const span = document.createElement('span')
+      span.textContent = task.title
+      label.append(check, span)
+
+      const del = document.createElement('button')
+      del.type = 'button'
+      del.className = 'hub-btn ghost'
+      del.textContent = 'Xóa'
+      del.addEventListener('click', () => {
+        hubTasks = hubTasks.filter((x) => x.id !== task.id)
+        saveTasks(hubTasks)
+        renderLibrary()
+      })
+
+      li.append(label, del)
+      list.appendChild(li)
+    }
+  }
+  wrap.appendChild(list)
+  return wrap
+}
+
+/** @returns {HTMLElement} */
+function renderProjectsHub() {
+  const wrap = document.createElement('div')
+  wrap.className = 'hub-panel'
+
+  const form = document.createElement('div')
+  form.className = 'hub-form'
+  const input = document.createElement('input')
+  input.type = 'text'
+  input.className = 'hub-input'
+  input.placeholder = 'VD: Ra mắt sản phẩm Q2'
+  input.setAttribute('aria-label', 'Dự án mới')
+  const addBtn = document.createElement('button')
+  addBtn.type = 'button'
+  addBtn.className = 'hub-btn primary'
+  addBtn.textContent = 'Thêm'
+
+  const add = () => {
+    const name = input.value.trim()
+    if (!name) return
+    hubProjects = [
+      { id: uid(), name, status: 'active', createdAt: new Date().toISOString() },
+      ...hubProjects,
+    ]
+    saveProjects(hubProjects)
+    input.value = ''
+    renderLibrary()
+  }
+  addBtn.addEventListener('click', add)
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      add()
+    }
+  })
+  form.append(input, addBtn)
+  wrap.appendChild(form)
+
+  /** @type {Record<HubProject['status'], string>} */
+  const statusLabel = { active: 'Đang chạy', paused: 'Tạm dừng', done: 'Hoàn thành' }
+  /** @type {HubProject['status'][]} */
+  const statusCycle = ['active', 'paused', 'done']
+
+  const list = document.createElement('ul')
+  list.className = 'hub-list'
+  if (hubProjects.length === 0) {
+    const empty = document.createElement('li')
+    empty.className = 'hub-empty'
+    empty.textContent = 'Chưa có dự án.'
+    list.appendChild(empty)
+  } else {
+    for (const project of hubProjects) {
+      const li = document.createElement('li')
+      li.className = `hub-row hub-project status-${project.status}`
+
+      const main = document.createElement('div')
+      main.className = 'hub-project-main'
+      const nameEl = document.createElement('strong')
+      nameEl.textContent = project.name
+      const meta = document.createElement('span')
+      meta.className = 'hub-meta'
+      meta.textContent = statusLabel[project.status]
+      main.append(nameEl, meta)
+
+      const actions = document.createElement('div')
+      actions.className = 'hub-actions'
+
+      const statusBtn = document.createElement('button')
+      statusBtn.type = 'button'
+      statusBtn.className = 'hub-btn ghost'
+      statusBtn.textContent = 'Trạng thái'
+      statusBtn.addEventListener('click', () => {
+        const idx = statusCycle.indexOf(project.status)
+        const next = statusCycle[(idx + 1) % statusCycle.length]
+        hubProjects = hubProjects.map((x) => (x.id === project.id ? { ...x, status: next } : x))
+        saveProjects(hubProjects)
+        renderLibrary()
+      })
+
+      const chatBtn = document.createElement('button')
+      chatBtn.type = 'button'
+      chatBtn.className = 'hub-btn ghost'
+      chatBtn.textContent = 'Chat'
+      chatBtn.addEventListener('click', () => {
+        setNavView('chat')
+        send(`Giúp tôi với dự án: ${project.name}`)
+      })
+
+      const del = document.createElement('button')
+      del.type = 'button'
+      del.className = 'hub-btn ghost'
+      del.textContent = 'Xóa'
+      del.addEventListener('click', () => {
+        hubProjects = hubProjects.filter((x) => x.id !== project.id)
+        saveProjects(hubProjects)
+        renderLibrary()
+      })
+
+      actions.append(statusBtn, chatBtn, del)
+      li.append(main, actions)
+      list.appendChild(li)
+    }
+  }
+  wrap.appendChild(list)
+  return wrap
 }
 
 function renderList() {
@@ -1102,7 +1354,9 @@ document.querySelectorAll('.nav-item[data-nav]').forEach((btn) => {
       renderOfficeDocs()
       return
     }
-    if (view === 'knowledge' || view === 'documents') setNavView(view)
+    if (view === 'knowledge' || view === 'documents' || view === 'tasks' || view === 'projects') {
+      setNavView(view)
+    }
   })
 })
 

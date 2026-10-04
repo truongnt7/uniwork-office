@@ -197,6 +197,18 @@ const BADGE: Record<IconId, { bg: string; glyph: ReactElement }> = {
       </>
     ),
   },
+  pets: {
+    bg: '#F97316',
+    glyph: (
+      <>
+        <ellipse cx="12" cy="13.2" rx="4.2" ry="3.6" fill="#fff" />
+        <circle cx="7.2" cy="8.2" r="1.7" fill="#fff" />
+        <circle cx="10.2" cy="6.8" r="1.5" fill="#fff" />
+        <circle cx="13.8" cy="6.8" r="1.5" fill="#fff" />
+        <circle cx="16.8" cy="8.2" r="1.7" fill="#fff" />
+      </>
+    ),
+  },
   travel: {
     bg: '#0284C7',
     glyph: (

@@ -745,6 +745,195 @@ export function writeFriendAnniversaries(items: WbFriendAnniversary[]): void {
   writeJson('uniwork.wb.friends.anniversaries', items)
 }
 
+/** ── Pets (on-device profiles + photo album via IndexedDB) ─ */
+
+export type PetsSubTabId = 'roster' | 'gallery' | 'care'
+
+export type WbPetSpecies = 'dog' | 'cat' | 'bird' | 'fish' | 'rabbit' | 'other'
+
+export type WbPetCareKind =
+  | 'feed'
+  | 'walk'
+  | 'bath'
+  | 'groom'
+  | 'meds'
+  | 'vet'
+  | 'play'
+  | 'other'
+
+export type WbPetCareStatus = 'planned' | 'done' | 'skipped'
+
+export interface WbPet {
+  id: string
+  name: string
+  species: WbPetSpecies
+  breed?: string
+  birthday?: string
+  sex?: 'male' | 'female' | 'unknown'
+  color?: string
+  notes?: string
+  /** Photo id used as avatar (blob in IndexedDB). */
+  avatarPhotoId?: string
+  createdAt: string
+}
+
+export interface WbPetPhotoMeta {
+  id: string
+  petId: string
+  caption?: string
+  takenAt: string
+  source: 'upload' | 'camera'
+}
+
+/** Scheduled care activity + optional result log (on-device). */
+export interface WbPetCareItem {
+  id: string
+  petId: string
+  kind: WbPetCareKind
+  /** Optional free-text title; kind covers the category. */
+  title?: string
+  /** Local calendar date YYYY-MM-DD */
+  scheduledDate: string
+  /** Optional local time HH:mm */
+  scheduledTime?: string
+  status: WbPetCareStatus
+  /** Plan / reminder note */
+  note?: string
+  /** Outcome when marked done or skipped */
+  result?: string
+  completedAt?: string
+  createdAt: string
+}
+
+const PETS_DB = 'uniwork.wb.pets.media'
+const PETS_STORE = 'photos'
+
+function openPetsDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(PETS_DB, 1)
+    req.onupgradeneeded = () => {
+      const db = req.result
+      if (!db.objectStoreNames.contains(PETS_STORE)) {
+        db.createObjectStore(PETS_STORE)
+      }
+    }
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error ?? new Error('pets_idb_open_failed'))
+  })
+}
+
+export async function putPetPhotoBlob(id: string, dataUrl: string): Promise<void> {
+  const db = await openPetsDb()
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(PETS_STORE, 'readwrite')
+    tx.objectStore(PETS_STORE).put(dataUrl, id)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error ?? new Error('pets_idb_put_failed'))
+  })
+  db.close()
+}
+
+export async function getPetPhotoBlob(id: string): Promise<string | null> {
+  const db = await openPetsDb()
+  const value = await new Promise<string | null>((resolve, reject) => {
+    const tx = db.transaction(PETS_STORE, 'readonly')
+    const req = tx.objectStore(PETS_STORE).get(id)
+    req.onsuccess = () => resolve(typeof req.result === 'string' ? req.result : null)
+    req.onerror = () => reject(req.error ?? new Error('pets_idb_get_failed'))
+  })
+  db.close()
+  return value
+}
+
+export async function deletePetPhotoBlob(id: string): Promise<void> {
+  const db = await openPetsDb()
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(PETS_STORE, 'readwrite')
+    tx.objectStore(PETS_STORE).delete(id)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error ?? new Error('pets_idb_delete_failed'))
+  })
+  db.close()
+}
+
+export function readPetsSubTab(): PetsSubTabId {
+  try {
+    const raw = localStorage.getItem('uniwork.wb.pets.subtab')
+    if (raw === 'roster' || raw === 'gallery' || raw === 'care') return raw
+  } catch {
+    /* ignore */
+  }
+  return 'roster'
+}
+
+export function writePetsSubTab(id: PetsSubTabId): void {
+  try {
+    localStorage.setItem('uniwork.wb.pets.subtab', id)
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readPets(): WbPet[] {
+  return readJson('uniwork.wb.pets', [])
+}
+
+export function writePets(items: WbPet[]): void {
+  writeJson('uniwork.wb.pets', items)
+}
+
+export function readPetPhotos(): WbPetPhotoMeta[] {
+  return readJson('uniwork.wb.pets.photos', [])
+}
+
+export function writePetPhotos(items: WbPetPhotoMeta[]): void {
+  writeJson('uniwork.wb.pets.photos', items)
+}
+
+export function readPetCare(): WbPetCareItem[] {
+  return readJson('uniwork.wb.pets.care', [])
+}
+
+export function writePetCare(items: WbPetCareItem[]): void {
+  writeJson('uniwork.wb.pets.care', items)
+}
+
+/**
+ * Resize/compress an image File to a JPEG data URL for on-device storage.
+ * Keeps albums usable within browser storage quotas.
+ */
+export function compressPetImage(file: File, maxEdge = 960, quality = 0.78): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const img = new Image()
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const scale = Math.min(1, maxEdge / Math.max(img.width, img.height))
+      const w = Math.max(1, Math.round(img.width * scale))
+      const h = Math.max(1, Math.round(img.height * scale))
+      const canvas = document.createElement('canvas')
+      canvas.width = w
+      canvas.height = h
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        reject(new Error('canvas_unavailable'))
+        return
+      }
+      ctx.drawImage(img, 0, 0, w, h)
+      try {
+        resolve(canvas.toDataURL('image/jpeg', quality))
+      } catch (err) {
+        reject(err)
+      }
+    }
+    img.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new Error('image_load_failed'))
+    }
+    img.src = url
+  })
+}
+
 export interface WbTravelCheckItem {
   id: string
   text: string

@@ -100,7 +100,11 @@ import {
   saveActivePathToUniWork,
 } from './office-bridge-host'
 import { isAgentIntentUrl, parseAgentIntentUrl } from './agent-intent-host'
-import { extractLaunchUrlFromArgv } from '@uniwork/office-bridge'
+import {
+  extractLaunchUrlFromArgv,
+  isOfficeAppUrl,
+  parseOfficeAppUrl,
+} from '@uniwork/office-bridge'
 import {
   createAgentIntent,
   resolveAgentIntentFromText,
@@ -3018,9 +3022,51 @@ function handleAgentIntentUrl(raw: string): boolean {
   return true
 }
 
+/** `uniwork://office/app?kind=…` — open a new UniOffice editor tab (no file path in URL). */
+function handleOfficeAppUrl(raw: string): boolean {
+  const parsed = parseOfficeAppUrl(raw)
+  if (!parsed.ok) {
+    showAppWarning(tm('uwUnsupported'))
+    return false
+  }
+  revealShellWindow()
+  try {
+    switch (parsed.kind) {
+      case 'docs':
+        tabManager?.openDocsTab(undefined, { newBlank: true })
+        break
+      case 'sheets':
+        tabManager?.openSheetsTab(undefined, { newBlank: true })
+        break
+      case 'slides':
+        tabManager?.openSlidesTab()
+        break
+      case 'markdown':
+        tabManager?.openMarkdownTab()
+        break
+      case 'html':
+        tabManager?.openHtmlTab()
+        break
+      case 'pdf':
+        void newPdfTab()
+        break
+      default:
+        showAppWarning(tm('uwUnsupported'))
+        return false
+    }
+    return true
+  } catch {
+    showAppWarning(tm('uwUnsupported'))
+    return false
+  }
+}
+
 async function openUniWorkUrl(raw: string): Promise<boolean> {
   if (isAgentIntentUrl(raw)) {
     return handleAgentIntentUrl(raw)
+  }
+  if (isOfficeAppUrl(raw)) {
+    return handleOfficeAppUrl(raw)
   }
   revealShellWindow()
   return handleOfficeLaunchUrl(raw, officeBridgeDeps())

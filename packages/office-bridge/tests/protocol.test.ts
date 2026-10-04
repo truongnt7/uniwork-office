@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { extractLaunchUrlFromArgv, parseOfficeLaunchUrl } from '../src/protocol'
+import {
+  buildOfficeAppUrl,
+  extractLaunchUrlFromArgv,
+  parseOfficeAppUrl,
+  parseOfficeLaunchUrl,
+} from '../src/protocol'
 import { assertSafeApiOrigin } from '../src/origin'
 
 describe('parseOfficeLaunchUrl', () => {
@@ -29,6 +34,18 @@ describe('parseOfficeLaunchUrl', () => {
     expect(parseOfficeLaunchUrl('https://evil.example/office/open?token=olt_abcdefghijklmnop').ok).toBe(
       false,
     )
+  })
+})
+
+describe('parseOfficeAppUrl', () => {
+  it('accepts kind deep links', () => {
+    expect(parseOfficeAppUrl('uniwork://office/app?kind=docs')).toEqual({ ok: true, kind: 'docs' })
+    expect(parseOfficeAppUrl(buildOfficeAppUrl('sheets'))).toEqual({ ok: true, kind: 'sheets' })
+  })
+
+  it('rejects file params and unknown kinds', () => {
+    expect(parseOfficeAppUrl('uniwork://office/app?kind=docs&file=/tmp/a.docx').ok).toBe(false)
+    expect(parseOfficeAppUrl('uniwork://office/app?kind=notepad').ok).toBe(false)
   })
 })
 

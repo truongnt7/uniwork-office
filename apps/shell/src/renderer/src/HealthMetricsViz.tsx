@@ -1,10 +1,18 @@
-import { useMemo, useState } from 'react'
-import type { ReactElement } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { ChangeEvent, ReactElement } from 'react'
+import defaultBodyMannequin from './assets/health-body-mannequin-3d.jpg'
 import {
+  clearHealthBodyBlob,
+  compressPetImage,
+  getHealthBodyBlob,
+  putHealthBodyBlob,
+  readHealthBodyMeta,
   readHealthMetricGoals,
   readHealthMetrics,
+  writeHealthBodyMeta,
   writeHealthMetricGoals,
   writeHealthMetrics,
+  type WbHealthBodySource,
   type WbHealthMetric,
   type WbHealthMetricGoal,
 } from './workbench-pins'
@@ -450,67 +458,190 @@ function DashboardBody({
   vi: boolean
   latest: Partial<Record<MetricKey, WbHealthMetric>>
 }): ReactElement {
+  const label = (a: string, b: string) => (vi ? a : b)
+  const uploadRef = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const [customSrc, setCustomSrc] = useState<string | null>(null)
+  const [bodySource, setBodySource] = useState<WbHealthBodySource>('default')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    const meta = readHealthBodyMeta()
+    if (!meta) {
+      setCustomSrc(null)
+      setBodySource('default')
+      return
+    }
+    void getHealthBodyBlob().then((data) => {
+      if (cancelled) return
+      if (data) {
+        setCustomSrc(data)
+        setBodySource(meta.source)
+      } else {
+        setCustomSrc(null)
+        setBodySource('default')
+        writeHealthBodyMeta(null)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const saveCustom = async (files: FileList | null, source: 'upload' | 'camera') => {
+    if (!files?.length) return
+    const file = files[0]
+    if (!file?.type.startsWith('image/')) return
+    setBusy(true)
+    setErr('')
+    try {
+      const dataUrl = await compressPetImage(file, 720, 0.82)
+      await putHealthBodyBlob(dataUrl)
+      const meta = { source, updatedAt: new Date().toISOString() }
+      writeHealthBodyMeta(meta)
+      setCustomSrc(dataUrl)
+      setBodySource(source)
+    } catch {
+      setErr(
+        label(
+          'Không lưu được ảnh trên máy. Thử ảnh nhỏ hơn.',
+          'Could not save photo on this device. Try a smaller image.',
+        ),
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const resetDefault = async () => {
+    setBusy(true)
+    setErr('')
+    try {
+      await clearHealthBodyBlob()
+      writeHealthBodyMeta(null)
+      setCustomSrc(null)
+      setBodySource('default')
+    } catch {
+      setErr(label('Không xoá được ảnh tuỳ chỉnh.', 'Could not clear custom photo.'))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onFile = (e: ChangeEvent<HTMLInputElement>, source: 'upload' | 'camera') => {
+    const files = e.target.files
+    e.target.value = ''
+    void saveCustom(files, source)
+  }
+
+  const photoSrc = customSrc || defaultBodyMannequin
+
   return (
     <div className="wb-hdash-body-wrap">
-      <svg
-        className="wb-hdash-body"
-        viewBox="0 0 200 360"
-        role="img"
-        aria-label={vi ? 'Hình cơ thể chỉ số' : 'Body metrics figure'}
-      >
-        <defs>
-          <linearGradient id="hdBody" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#E2E8F0" />
-            <stop offset="100%" stopColor="#94A3B8" />
-          </linearGradient>
-          <filter id="hdGlow" x="-30%" y="-30%" width="160%" height="160%">
-            <feDropShadow dx="0" dy="0" stdDeviation="6" floodColor="#38BDF8" floodOpacity="0.45" />
-          </filter>
-        </defs>
-        <ellipse cx="100" cy="338" rx="48" ry="8" fill="color-mix(in srgb, var(--accent) 25%, transparent)" />
-        <g filter="url(#hdGlow)" fill="url(#hdBody)" opacity="0.92">
-          <circle cx="100" cy="40" r="26" />
-          <rect x="91" y="64" width="18" height="16" rx="5" />
-          <path d="M64 86c8-10 26-14 36-14s28 4 36 14c10 12 13 28 11 50l-5 46c-2 14-10 22-24 24H86c-14-2-22-10-24-24l-5-46c-2-22 1-38 11-50z" />
-          <path d="M64 98c-16 8-28 26-30 46l-3 40c-1 7 4 12 10 11l12-3c5-2 8-7 9-12l5-34c2-11 7-20 16-26z" />
-          <path d="M136 98c16 8 28 26 30 46l3 40c1 7-4 12-10 11l-12-3c-5-2-8-7-9-12l-5-34c-2-11-7-20-16-26z" />
-          <path d="M80 208c-2 22-4 50-6 78-1 11 5 18 14 18h7c7 0 11-5 12-12l6-70c1-9-2-14-9-16H88c-5 1-8 3-8 6z" />
-          <path d="M120 208c2 22 4 50 6 78 1 11-5 18-14 18h-7c-7 0-11-5-12-12l-6-70c-1-9 2-14 9-16h14c5 1 8 3 8 6z" />
-        </g>
-        {METRIC_KEYS.map((m) => {
-          const mm = METRIC_META[m]
-          const on = active === m
-          const has = Boolean(latest[m])
-          return (
-            <g key={m} className="wb-hdash-node" onClick={() => onSelect(m)} style={{ cursor: 'pointer' }}>
-              <title>{vi ? mm.labelVi : mm.labelEn}</title>
-              <circle
-                cx={mm.node.cx}
-                cy={mm.node.cy}
-                r={on ? 11 : 8}
-                fill={mm.color}
-                opacity={on ? 1 : has ? 0.85 : 0.45}
-              />
-              <circle
-                cx={mm.node.cx}
-                cy={mm.node.cy}
-                r={on ? 18 : 14}
-                fill="none"
-                stroke={mm.color}
-                strokeWidth={on ? 2.5 : 1.5}
-                opacity={on ? 0.9 : 0.35}
-              />
-            </g>
-          )
-        })}
-      </svg>
+      <div className="wb-hdash-body-stage">
+        <img
+          className="wb-hdash-body-photo"
+          src={photoSrc}
+          alt={
+            bodySource === 'default'
+              ? label('Mô hình cơ thể 3D chuẩn y khoa', 'Medical 3D body mannequin')
+              : label('Ảnh cơ thể của bạn (lưu trên máy)', 'Your body photo (stored on device)')
+          }
+          draggable={false}
+        />
+        <svg
+          className="wb-hdash-body-nodes"
+          viewBox="0 0 200 360"
+          role="img"
+          aria-label={vi ? 'Điểm chỉ số trên cơ thể' : 'Body metric nodes'}
+        >
+          {METRIC_KEYS.map((m) => {
+            const mm = METRIC_META[m]
+            const on = active === m
+            const has = Boolean(latest[m])
+            return (
+              <g
+                key={m}
+                className="wb-hdash-node"
+                onClick={() => onSelect(m)}
+                style={{ cursor: 'pointer' }}
+              >
+                <title>{vi ? mm.labelVi : mm.labelEn}</title>
+                <circle
+                  cx={mm.node.cx}
+                  cy={mm.node.cy}
+                  r={on ? 11 : 8}
+                  fill={mm.color}
+                  opacity={on ? 1 : has ? 0.9 : 0.55}
+                />
+                <circle
+                  cx={mm.node.cx}
+                  cy={mm.node.cy}
+                  r={on ? 18 : 14}
+                  fill="none"
+                  stroke={mm.color}
+                  strokeWidth={on ? 2.5 : 1.5}
+                  opacity={on ? 0.95 : 0.4}
+                />
+              </g>
+            )
+          })}
+        </svg>
+      </div>
+
+      <div className="wb-hdash-body-actions">
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={busy}
+          onClick={() => cameraRef.current?.click()}
+        >
+          {label('📷 Chụp ảnh', '📷 Camera')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={busy}
+          onClick={() => uploadRef.current?.click()}
+        >
+          {label('📁 Tải ảnh lên', '📁 Upload')}
+        </button>
+        {bodySource !== 'default' ? (
+          <button type="button" className="btn btn-secondary" disabled={busy} onClick={() => void resetDefault()}>
+            {label('Mô hình mặc định', 'Default model')}
+          </button>
+        ) : null}
+        <input
+          ref={cameraRef}
+          type="file"
+          accept="image/*"
+          capture="user"
+          hidden
+          onChange={(e) => onFile(e, 'camera')}
+        />
+        <input
+          ref={uploadRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(e) => onFile(e, 'upload')}
+        />
+      </div>
+
+      {err ? <p className="wb-pets-err">{err}</p> : null}
       <p className="wb-hdash-body-cap">
-        {labelCap(vi)}
+        {bodySource === 'default'
+          ? label(
+              'Mô hình 3D y khoa mặc định · chạm nút chỉ số · ảnh tuỳ chỉnh lưu trên máy.',
+              'Default medical 3D model · tap metric nodes · custom photos stay on-device.',
+            )
+          : label(
+              'Ảnh của bạn (IndexedDB trên máy) · chạm nút để chọn chỉ số.',
+              'Your photo (on-device IndexedDB) · tap nodes to select a metric.',
+            )}
       </p>
     </div>
   )
-}
-
-function labelCap(vi: boolean): string {
-  return vi ? 'Chạm nút trên cơ thể để chọn chỉ số' : 'Tap body nodes to select a metric'
 }

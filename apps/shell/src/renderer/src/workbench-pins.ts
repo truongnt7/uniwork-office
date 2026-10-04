@@ -357,6 +357,88 @@ export function writeHealthMetricGoals(items: WbHealthMetricGoal[]): void {
   writeJson('uniwork.wb.health.metricGoals', items)
 }
 
+/** Custom body figure for health metrics (photo blob in IndexedDB; default = bundled mannequin). */
+export type WbHealthBodySource = 'default' | 'upload' | 'camera'
+
+export interface WbHealthBodyMeta {
+  source: WbHealthBodySource
+  updatedAt: string
+}
+
+const HEALTH_BODY_DB = 'uniwork.wb.health.media'
+const HEALTH_BODY_STORE = 'blobs'
+const HEALTH_BODY_BLOB_KEY = 'body-figure'
+const HEALTH_BODY_META_KEY = 'uniwork.wb.health.bodyMeta'
+
+function openHealthMediaDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(HEALTH_BODY_DB, 1)
+    req.onupgradeneeded = () => {
+      const db = req.result
+      if (!db.objectStoreNames.contains(HEALTH_BODY_STORE)) {
+        db.createObjectStore(HEALTH_BODY_STORE)
+      }
+    }
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error ?? new Error('health_media_idb_open_failed'))
+  })
+}
+
+export function readHealthBodyMeta(): WbHealthBodyMeta | null {
+  try {
+    const raw = localStorage.getItem(HEALTH_BODY_META_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as WbHealthBodyMeta
+    if (parsed?.source === 'upload' || parsed?.source === 'camera') return parsed
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
+export function writeHealthBodyMeta(meta: WbHealthBodyMeta | null): void {
+  try {
+    if (!meta) localStorage.removeItem(HEALTH_BODY_META_KEY)
+    else localStorage.setItem(HEALTH_BODY_META_KEY, JSON.stringify(meta))
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function putHealthBodyBlob(dataUrl: string): Promise<void> {
+  const db = await openHealthMediaDb()
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(HEALTH_BODY_STORE, 'readwrite')
+    tx.objectStore(HEALTH_BODY_STORE).put(dataUrl, HEALTH_BODY_BLOB_KEY)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error ?? new Error('health_media_idb_put_failed'))
+  })
+  db.close()
+}
+
+export async function getHealthBodyBlob(): Promise<string | null> {
+  const db = await openHealthMediaDb()
+  const value = await new Promise<string | null>((resolve, reject) => {
+    const tx = db.transaction(HEALTH_BODY_STORE, 'readonly')
+    const req = tx.objectStore(HEALTH_BODY_STORE).get(HEALTH_BODY_BLOB_KEY)
+    req.onsuccess = () => resolve(typeof req.result === 'string' ? req.result : null)
+    req.onerror = () => reject(req.error ?? new Error('health_media_idb_get_failed'))
+  })
+  db.close()
+  return value
+}
+
+export async function clearHealthBodyBlob(): Promise<void> {
+  const db = await openHealthMediaDb()
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(HEALTH_BODY_STORE, 'readwrite')
+    tx.objectStore(HEALTH_BODY_STORE).delete(HEALTH_BODY_BLOB_KEY)
+    tx.oncomplete = () => resolve()
+    tx.onerror = () => reject(tx.error ?? new Error('health_media_idb_delete_failed'))
+  })
+  db.close()
+}
+
 export interface WbHealthRun {
   id: string
   date: string

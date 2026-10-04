@@ -379,6 +379,224 @@ textarea {
   color: var(--muted);
 }
 
+.office-hub {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.office-hub-label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.office-hub-rail {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.office-hub-app {
+  flex: 0 0 108px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.office-hub-app:hover {
+  background: var(--hover);
+}
+
+.office-hub-app-ico {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.office-hub-app strong {
+  font-size: 13px;
+}
+
+.office-hub-app span {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.3;
+}
+
+.office-hub-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.office-hub-empty {
+  margin: 0;
+  padding: 20px;
+  text-align: center;
+  color: var(--muted);
+  border: 1px dashed var(--border);
+  border-radius: 14px;
+}
+
+.btn-primary-lite,
+.btn-secondary-lite {
+  border: none;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary-lite {
+  background: var(--send);
+  color: var(--send-ink);
+}
+
+.btn-secondary-lite {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.office-doc {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.office-doc-back {
+  align-self: flex-start;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 0;
+}
+
+.office-doc-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.office-doc-head h3 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.office-doc-head p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.office-doc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.office-doc-status {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.office-doc-fallback {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.office-doc-fallback p {
+  margin: 0;
+  flex: 1 1 180px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.office-doc-fallback a {
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.office-doc-preview {
+  min-height: 200px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.office-doc-preview-card {
+  padding: 16px;
+}
+
+.office-doc-preview-card strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.office-doc-preview-card p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.office-doc-frame {
+  width: 100%;
+  min-height: min(70vh, 640px);
+  border: none;
+  background: var(--bg);
+}
+
+.office-doc-img {
+  display: block;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.office-doc-text {
+  margin: 0;
+  padding: 14px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text);
+  max-height: min(70vh, 640px);
+  overflow: auto;
+}
+
 /* Tasks / Projects hub */
 .hub-panel {
   display: flex;
@@ -639,7 +857,9 @@ textarea {
 
 .settings-row select,
 .settings-row input[type='text'],
-.settings-row input[type='email'] {
+.settings-row input[type='email'],
+.settings-row input[type='url'],
+.settings-row input[type='password'] {
   border: 1px solid var(--border);
   background: var(--surface);
   color: var(--text);
@@ -648,6 +868,13 @@ textarea {
   font: inherit;
   font-size: 13.5px;
   min-width: 160px;
+}
+
+.settings-row-stack input[type='url'],
+.settings-row-stack input[type='password'] {
+  width: 100%;
+  max-width: 28rem;
+  box-sizing: border-box;
 }
 
 .accent-swatches {

@@ -5,7 +5,6 @@
 
 const STORE_KEY = 'uniai.chats.v1'
 const PREFS_KEY = 'uniai.prefs.v1'
-const OFFICE_DOCS_KEY = 'uniai.officeDocs.v1'
 const TASKS_KEY = 'uniai.tasks.v1'
 const PROJECTS_KEY = 'uniai.projects.v1'
 
@@ -43,7 +42,13 @@ const DEFAULT_PREFS = {
   enterToSend: true,
   saveHistory: true,
   analytics: false,
+  /** UniWork Office Bridge API origin (https://… or http://127.0.0.1:port) */
+  officeApiBase: '',
+  /** User Bearer for POST /api/office/sessions — stored only on this device */
+  officeAccessToken: '',
 }
+
+const Office = () => window.UniAIOffice
 
 const SUGGESTIONS = [
   {
@@ -254,29 +259,13 @@ function savePrefs(prefs) {
   localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
 }
 
-function seedOfficeDocs() {
-  return [
-    { id: 'd1', name: 'Báo cáo tuần.docx', kind: 'docs', color: '#2b579a' },
-    { id: 'd2', name: 'Ngân sách Q2.xlsx', kind: 'sheets', color: '#217346' },
-    { id: 'd3', name: 'Pitch sản phẩm.pptx', kind: 'slides', color: '#b7472a' },
-    { id: 'd4', name: 'Hợp đồng mẫu.pdf', kind: 'pdf', color: '#c43e1c' },
-    { id: 'd5', name: 'Ghi chú họp.md', kind: 'markdown', color: '#6b7280' },
-  ]
+function loadOfficeDocs() {
+  return Office()?.loadDocs?.() ?? []
 }
 
-function loadOfficeDocs() {
-  try {
-    const raw = localStorage.getItem(OFFICE_DOCS_KEY)
-    if (!raw) {
-      const seed = seedOfficeDocs()
-      localStorage.setItem(OFFICE_DOCS_KEY, JSON.stringify(seed))
-      return seed
-    }
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : seedOfficeDocs()
-  } catch {
-    return seedOfficeDocs()
-  }
+function persistOfficeDocs(docs) {
+  officeDocs = docs
+  Office()?.saveDocs?.(docs)
 }
 
 let chats = loadChats()
@@ -456,12 +445,19 @@ function intentUrl(tab, summary) {
 }
 
 function openDeepLink(url) {
-  const a = document.createElement('a')
-  a.href = url
-  a.style.display = 'none'
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
+  if (Office()?.openDeepLink) Office().openDeepLink(url)
+  else {
+    const a = document.createElement('a')
+    a.href = url
+    a.style.display = 'none'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  }
+}
+
+function officeAppDeepLink(kind) {
+  return Office()?.officeAppUrl?.(kind) || `uniwork://office/app?kind=${kind}`
 }
 
 function renderChips() {
@@ -566,6 +562,9 @@ function renderPluginPanel() {
       item.addEventListener('click', () =>
         togglePlugin('office', app.id, app.label, app.hint),
       )
+      item.addEventListener('dblclick', () => {
+        openDeepLink(officeAppDeepLink(app.id))
+      })
       rail.appendChild(item)
     }
     suiteSec.appendChild(rail)
@@ -653,7 +652,7 @@ function renderOfficeDocs() {
     const li = document.createElement('li')
     const btn = document.createElement('button')
     btn.type = 'button'
-    btn.className = doc.id === activeDocId && navView === 'office' ? 'active' : ''
+    btn.className = doc.id === activeDocId && (navView === 'office' || navView === 'documents') ? 'active' : ''
     btn.innerHTML = `<span class="office-dot" style="background:${doc.color}"></span><span>${escapeHtml(doc.name)}</span>`
     btn.addEventListener('click', () => {
       activeDocId = doc.id
@@ -665,15 +664,28 @@ function renderOfficeDocs() {
   }
 }
 
+/** @type {(() => void) | null} */
+let officePreviewCleanup = null
+
 function renderLibrary() {
   const titles = {
     knowledge: ['Tri thức', 'Kho kiến thức, skill và ghi chú dùng lại trong uniAI.'],
-    documents: ['Tài liệu', 'Tài liệu đã tải lên hoặc gắn với cuộc trò chuyện.'],
+    documents: [
+      'Tài liệu',
+      'Xem trên PWA (local) hoặc mở bằng UniWork Office trên máy.',
+    ],
     tasks: ['Công việc', 'Việc cần làm — lưu trên thiết bị này.'],
     projects: ['Dự án', 'Theo dõi dự án đang chạy — lưu trên thiết bị này.'],
-    office: ['UniOffice', 'Tài liệu Office trên UniWork — mở bằng Desktop nếu đã cài.'],
+    office: [
+      'UniOffice',
+      'Mở Docs / Sheets / Slides trong UniWork Office · xem trước PDF/MD trên thiết bị.',
+    ],
   }
   const [title, desc] = titles[navView] || titles.documents
+  if (officePreviewCleanup) {
+    officePreviewCleanup()
+    officePreviewCleanup = null
+  }
   el.library.innerHTML = ''
   const card = document.createElement('div')
   card.className = 'library-card'
@@ -683,58 +695,369 @@ function renderLibrary() {
     card.appendChild(renderTasksHub())
   } else if (navView === 'projects') {
     card.appendChild(renderProjectsHub())
-  } else {
+  } else if (navView === 'office' || navView === 'documents') {
+    const selected = officeDocs.find((d) => d.id === activeDocId)
+    if (selected) card.appendChild(renderOfficeDocDetail(selected))
+    else card.appendChild(renderOfficeHub())
+  } else if (navView === 'knowledge') {
     const grid = document.createElement('div')
     grid.className = 'library-grid'
-
-    if (navView === 'office') {
-      for (const doc of officeDocs) {
-        const tile = document.createElement('button')
-        tile.type = 'button'
-        tile.className = 'library-tile'
-        tile.innerHTML = `<strong>${escapeHtml(doc.name)}</strong><span>${escapeHtml(doc.kind.toUpperCase())} · UniWork Office</span>`
-        tile.addEventListener('click', () => {
-          activeDocId = doc.id
-          openDeepLink(intentUrl('desk', `Open ${doc.name}`))
-          renderOfficeDocs()
-        })
-        grid.appendChild(tile)
-      }
-    } else if (navView === 'knowledge') {
-      ;[
-        ['Playbook bán hàng', 'Quy trình & checklist'],
-        ['Thuật ngữ nội bộ', 'Glossary dùng chung'],
-        ['Mẫu email', 'Thư chào / follow-up'],
-      ].forEach(([name, hint]) => {
-        const tile = document.createElement('button')
-        tile.type = 'button'
-        tile.className = 'library-tile'
-        tile.innerHTML = `<strong>${escapeHtml(name)}</strong><span>${escapeHtml(hint)}</span>`
-        tile.addEventListener('click', () => {
-          setNavView('chat')
-          send(`Dùng tri thức: ${name}`)
-        })
-        grid.appendChild(tile)
+    ;[
+      ['Playbook bán hàng', 'Quy trình & checklist'],
+      ['Thuật ngữ nội bộ', 'Glossary dùng chung'],
+      ['Mẫu email', 'Thư chào / follow-up'],
+    ].forEach(([name, hint]) => {
+      const tile = document.createElement('button')
+      tile.type = 'button'
+      tile.className = 'library-tile'
+      tile.innerHTML = `<strong>${escapeHtml(name)}</strong><span>${escapeHtml(hint)}</span>`
+      tile.addEventListener('click', () => {
+        setNavView('chat')
+        send(`Dùng tri thức: ${name}`)
       })
-    } else {
-      ;[
-        ['Đề xuất dự án.pdf', 'Đã tải lên'],
-        ['Ảnh whiteboard.png', 'Từ Camera'],
-        ['Ghi chú họp.txt', 'Tệp cục bộ'],
-      ].forEach(([name, hint]) => {
-        const tile = document.createElement('button')
-        tile.type = 'button'
-        tile.className = 'library-tile'
-        tile.innerHTML = `<strong>${escapeHtml(name)}</strong><span>${escapeHtml(hint)}</span>`
-        grid.appendChild(tile)
-      })
-    }
-
+      grid.appendChild(tile)
+    })
     card.appendChild(grid)
   }
 
   el.library.appendChild(card)
-  el.title.textContent = title
+  el.title.textContent = selectedOfficeTitle(title)
+}
+
+function selectedOfficeTitle(fallback) {
+  if ((navView === 'office' || navView === 'documents') && activeDocId) {
+    const doc = officeDocs.find((d) => d.id === activeDocId)
+    if (doc) return doc.name
+  }
+  return fallback
+}
+
+function renderOfficeHub() {
+  const wrap = document.createElement('div')
+  wrap.className = 'office-hub'
+
+  const apps = document.createElement('div')
+  apps.className = 'office-hub-apps'
+  apps.innerHTML = '<p class="office-hub-label">Mở UniWork Office</p>'
+  const rail = document.createElement('div')
+  rail.className = 'office-hub-rail'
+  for (const app of OFFICE_APPS) {
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'office-hub-app'
+    btn.innerHTML = `
+      <span class="office-hub-app-ico" style="background:${app.color}">${escapeHtml(app.glyph)}</span>
+      <strong>${escapeHtml(app.label)}</strong>
+      <span>${escapeHtml(app.hint)}</span>
+    `
+    btn.addEventListener('click', () => {
+      openDeepLink(officeAppDeepLink(app.id))
+      showOfficeInstallFallback()
+    })
+    rail.appendChild(btn)
+  }
+  apps.appendChild(rail)
+  wrap.appendChild(apps)
+
+  const toolbar = document.createElement('div')
+  toolbar.className = 'office-hub-toolbar'
+  toolbar.innerHTML = `<p class="teacher-hint" style="margin:0">Tài liệu · xem local hoặc mở Desktop</p>`
+  const addBtn = document.createElement('button')
+  addBtn.type = 'button'
+  addBtn.className = 'btn-primary-lite'
+  addBtn.textContent = '+ Thêm tệp (local)'
+  const fileInput = document.createElement('input')
+  fileInput.type = 'file'
+  fileInput.accept =
+    '.docx,.xlsx,.pptx,.pdf,.md,.markdown,.txt,.csv,.html,.htm,image/*,application/pdf'
+  fileInput.multiple = true
+  fileInput.hidden = true
+  addBtn.addEventListener('click', () => fileInput.click())
+  fileInput.addEventListener('change', () => {
+    void ingestOfficeFiles(fileInput.files)
+    fileInput.value = ''
+  })
+  const cloudBtn = document.createElement('button')
+  cloudBtn.type = 'button'
+  cloudBtn.className = 'btn-secondary-lite'
+  cloudBtn.textContent = '+ Gắn Work Product ID'
+  cloudBtn.addEventListener('click', () => addCloudWorkProduct())
+  toolbar.appendChild(addBtn)
+  toolbar.appendChild(cloudBtn)
+  toolbar.appendChild(fileInput)
+  wrap.appendChild(toolbar)
+
+  const grid = document.createElement('div')
+  grid.className = 'library-grid'
+  if (officeDocs.length === 0) {
+    const empty = document.createElement('p')
+    empty.className = 'office-hub-empty'
+    empty.textContent = 'Chưa có tài liệu. Tải tệp lên máy này hoặc gắn ID UniWork.'
+    wrap.appendChild(empty)
+  } else {
+    for (const doc of officeDocs) {
+      const tile = document.createElement('button')
+      tile.type = 'button'
+      tile.className = 'library-tile'
+      const badge = doc.workProductId
+        ? 'Cloud · Bridge'
+        : doc.localBlobId
+          ? 'Local preview'
+          : 'Demo'
+      tile.innerHTML = `<strong>${escapeHtml(doc.name)}</strong><span>${escapeHtml(doc.kind.toUpperCase())} · ${badge}</span>`
+      tile.addEventListener('click', () => {
+        activeDocId = doc.id
+        renderLibrary()
+        renderOfficeDocs()
+      })
+      grid.appendChild(tile)
+    }
+    wrap.appendChild(grid)
+  }
+  return wrap
+}
+
+/** @param {{ id: string, name: string, kind: string, color: string, workProductId?: string, localBlobId?: string, mime?: string }} doc */
+function renderOfficeDocDetail(doc) {
+  const wrap = document.createElement('div')
+  wrap.className = 'office-doc'
+
+  const back = document.createElement('button')
+  back.type = 'button'
+  back.className = 'office-doc-back'
+  back.textContent = '← Danh sách'
+  back.addEventListener('click', () => {
+    activeDocId = ''
+    renderLibrary()
+    renderOfficeDocs()
+  })
+  wrap.appendChild(back)
+
+  const head = document.createElement('header')
+  head.className = 'office-doc-head'
+  head.innerHTML = `
+    <span class="office-dot" style="background:${doc.color}"></span>
+    <div>
+      <h3>${escapeHtml(doc.name)}</h3>
+      <p>${escapeHtml(doc.kind.toUpperCase())}${
+        doc.workProductId ? ` · ID ${escapeHtml(doc.workProductId)}` : ''
+      }${doc.localBlobId ? ' · lưu trên máy' : ''}</p>
+    </div>
+  `
+  wrap.appendChild(head)
+
+  const actions = document.createElement('div')
+  actions.className = 'office-doc-actions'
+  const openBtn = document.createElement('button')
+  openBtn.type = 'button'
+  openBtn.className = 'btn-primary-lite'
+  openBtn.textContent = 'Mở trong UniWork Office'
+  const status = document.createElement('p')
+  status.className = 'office-doc-status'
+  status.hidden = true
+  const fallback = document.createElement('div')
+  fallback.className = 'office-doc-fallback'
+  fallback.hidden = true
+  fallback.innerHTML = `
+    <p>Chưa mở được UniWork Office? Cài desktop rồi thử lại.</p>
+    <a href="https://github.com/truongnt7/uniwork-office/releases/latest" target="_blank" rel="noopener">Tải UniWork Office</a>
+  `
+  const retry = document.createElement('button')
+  retry.type = 'button'
+  retry.className = 'btn-secondary-lite'
+  retry.textContent = 'Thử lại'
+  fallback.appendChild(retry)
+
+  const runOpen = () => {
+    status.hidden = false
+    status.textContent = 'Đang mở UniWork Office…'
+    fallback.hidden = true
+    void Office()
+      ?.openInUniWorkOffice?.(doc, {
+        apiBase: prefs.officeApiBase,
+        accessToken: prefs.officeAccessToken,
+        onStatus: (s) => {
+          if (s === 'opening') status.textContent = 'Tạo phiên Office Bridge…'
+          if (s === 'app') status.textContent = 'Mở app UniOffice trên máy…'
+          if (s === 'fallback') {
+            status.textContent = 'Nếu app không hiện, có thể chưa cài Office.'
+            fallback.hidden = false
+          }
+          if (s === 'failed') status.textContent = 'Không tạo được phiên (API / quyền / token).'
+        },
+        onFallback: () => {
+          fallback.hidden = false
+        },
+      })
+      .catch(() => {
+        status.textContent =
+          'Bridge lỗi — kiểm tra API + token trong Cài đặt, hoặc mở app trống.'
+        fallback.hidden = false
+        openDeepLink(officeAppDeepLink(doc.kind))
+      })
+  }
+  openBtn.addEventListener('click', runOpen)
+  retry.addEventListener('click', runOpen)
+  actions.appendChild(openBtn)
+
+  if (doc.kind !== 'other') {
+    const appOnly = document.createElement('button')
+    appOnly.type = 'button'
+    appOnly.className = 'btn-secondary-lite'
+    appOnly.textContent = `Mở ${doc.kind} trống`
+    appOnly.addEventListener('click', () => {
+      openDeepLink(officeAppDeepLink(doc.kind))
+      showOfficeInstallFallback()
+    })
+    actions.appendChild(appOnly)
+  }
+
+  const del = document.createElement('button')
+  del.type = 'button'
+  del.className = 'btn-secondary-lite'
+  del.textContent = 'Xoá khỏi máy'
+  del.addEventListener('click', () => {
+    if (!window.confirm(`Xoá «${doc.name}» khỏi danh sách local?`)) return
+    void removeOfficeDoc(doc.id)
+  })
+  actions.appendChild(del)
+  wrap.appendChild(actions)
+  wrap.appendChild(status)
+  wrap.appendChild(fallback)
+
+  const preview = document.createElement('div')
+  preview.className = 'office-doc-preview'
+  preview.innerHTML = '<p class="office-hub-empty">Đang tải xem trước…</p>'
+  wrap.appendChild(preview)
+
+  void (async () => {
+    const hub = Office()
+    if (!hub) {
+      preview.innerHTML =
+        '<p class="office-hub-empty">Module Office chưa sẵn sàng. Tải lại trang.</p>'
+      return
+    }
+    if (!doc.localBlobId) {
+      preview.innerHTML = `
+        <div class="office-doc-preview-card">
+          <strong>Chưa có bản xem trước trên PWA</strong>
+          <p>File demo / cloud: bấm <em>Mở trong UniWork Office</em> để sửa bằng bộ UniOffice.
+          Hoặc tải bản local (+ Thêm tệp) để xem PDF / Markdown / ảnh ngay trên PWA.</p>
+        </div>`
+      return
+    }
+    if (!hub.canPreviewInPwa(doc)) {
+      preview.innerHTML = `
+        <div class="office-doc-preview-card">
+          <strong>Định dạng Office (DOCX / XLSX / PPTX)</strong>
+          <p>PWA lưu tệp trên máy này. Xem &amp; chỉnh sửa đầy đủ bằng UniWork Office desktop
+          (nút phía trên). Preview rich trong PWA sẽ bổ sung dần.</p>
+        </div>`
+      return
+    }
+    try {
+      const payload = await hub.loadPreview(doc)
+      if (!payload) {
+        preview.innerHTML = '<p class="office-hub-empty">Không đọc được bản local.</p>'
+        return
+      }
+      if (payload.revoke) {
+        officePreviewCleanup = () => payload.revoke?.()
+      }
+      preview.innerHTML = ''
+      if (payload.type === 'pdf' && payload.url) {
+        const iframe = document.createElement('iframe')
+        iframe.className = 'office-doc-frame'
+        iframe.title = doc.name
+        iframe.src = payload.url
+        preview.appendChild(iframe)
+      } else if (payload.type === 'image' && payload.url) {
+        const img = document.createElement('img')
+        img.className = 'office-doc-img'
+        img.src = payload.url
+        img.alt = doc.name
+        preview.appendChild(img)
+      } else if (payload.type === 'html' && payload.text != null) {
+        const iframe = document.createElement('iframe')
+        iframe.className = 'office-doc-frame'
+        iframe.title = doc.name
+        iframe.sandbox = ''
+        iframe.srcdoc = payload.text
+        preview.appendChild(iframe)
+      } else if (payload.text != null) {
+        const pre = document.createElement('pre')
+        pre.className = 'office-doc-text'
+        pre.textContent = payload.text
+        preview.appendChild(pre)
+      } else {
+        preview.innerHTML = '<p class="office-hub-empty">Không xem trước được định dạng này.</p>'
+      }
+    } catch {
+      preview.innerHTML = '<p class="office-hub-empty">Lỗi xem trước.</p>'
+    }
+  })()
+
+  return wrap
+}
+
+async function ingestOfficeFiles(fileList) {
+  const hub = Office()
+  if (!hub || !fileList?.length) return
+  const next = [...officeDocs]
+  for (const file of Array.from(fileList)) {
+    try {
+      const doc = await hub.ingestLocalFile(file)
+      next.unshift(doc)
+      activeDocId = doc.id
+    } catch {
+      /* skip */
+    }
+  }
+  persistOfficeDocs(next)
+  setNavView('office')
+  renderOfficeDocs()
+}
+
+function addCloudWorkProduct() {
+  const id = window.prompt('Work Product / documentId trên UniWork (UUID):', '')?.trim()
+  if (!id) return
+  const name =
+    window.prompt('Tên hiển thị:', 'Tài liệu UniWork')?.trim() || 'Tài liệu UniWork'
+  const kindGuess =
+    Office()?.kindFromFileName?.(name) ||
+    (/\.xlsx$/i.test(name) ? 'sheets' : /\.pptx$/i.test(name) ? 'slides' : 'docs')
+  const doc = {
+    id: Office()?.uid?.() || `c-${Date.now()}`,
+    name: /\./.test(name) ? name : `${name}.docx`,
+    kind: kindGuess,
+    color: Office()?.KIND_COLOR?.[kindGuess] || '#2b579a',
+    workProductId: id,
+    source: 'cloud',
+    addedAt: new Date().toISOString(),
+  }
+  persistOfficeDocs([doc, ...officeDocs])
+  activeDocId = doc.id
+  setNavView('office')
+  renderOfficeDocs()
+}
+
+async function removeOfficeDoc(id) {
+  const doc = officeDocs.find((d) => d.id === id)
+  if (doc?.localBlobId) {
+    try {
+      await Office()?.deleteBlob?.(doc.localBlobId)
+    } catch {
+      /* ignore */
+    }
+  }
+  persistOfficeDocs(officeDocs.filter((d) => d.id !== id))
+  activeDocId = ''
+  renderLibrary()
+  renderOfficeDocs()
+}
+
+function showOfficeInstallFallback() {
+  /* lightweight: status is per-doc; hub app open uses toast-less delay */
 }
 
 /** @returns {HTMLElement} */
@@ -1013,6 +1336,24 @@ function renderSettings() {
     </section>
 
     <section class="settings-group">
+      <h3>UniWork Office Bridge</h3>
+      <div class="settings-row settings-row-stack">
+        <div>
+          <label for="setOfficeApi">API origin</label>
+          <small>HTTPS UniWork hoặc http://127.0.0.1 — dùng để Mở trong Office (session token)</small>
+        </div>
+        <input id="setOfficeApi" type="url" placeholder="https://uniwork.app" value="${escapeHtml(prefs.officeApiBase || '')}" />
+      </div>
+      <div class="settings-row settings-row-stack">
+        <div>
+          <label for="setOfficeToken">Access token</label>
+          <small>Bearer user — chỉ lưu trên thiết bị này, không đưa vào deep link</small>
+        </div>
+        <input id="setOfficeToken" type="password" autocomplete="off" placeholder="eyJ…" value="${escapeHtml(prefs.officeAccessToken || '')}" />
+      </div>
+    </section>
+
+    <section class="settings-group">
       <h3>Cài đặt chung</h3>
       <div class="settings-row">
         <div><span class="settings-label">Enter để gửi</span><small>Shift+Enter xuống dòng</small></div>
@@ -1099,6 +1440,14 @@ function renderSettings() {
   })
   el.settingsBody.querySelector('#setEmail')?.addEventListener('change', (e) => {
     prefs.email = /** @type {HTMLInputElement} */ (e.target).value.trim()
+    persistPrefs()
+  })
+  el.settingsBody.querySelector('#setOfficeApi')?.addEventListener('change', (e) => {
+    prefs.officeApiBase = /** @type {HTMLInputElement} */ (e.target).value.trim()
+    persistPrefs()
+  })
+  el.settingsBody.querySelector('#setOfficeToken')?.addEventListener('change', (e) => {
+    prefs.officeAccessToken = /** @type {HTMLInputElement} */ (e.target).value.trim()
     persistPrefs()
   })
   el.settingsBody.querySelector('#btnUpgrade')?.addEventListener('click', () => {

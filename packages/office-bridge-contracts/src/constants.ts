@@ -6,6 +6,17 @@ export const OFFICE_SESSION_CREDENTIAL_TTL_MS = 8 * 60 * 60 * 1000
 
 export const OFFICE_LAUNCH_SCHEME = 'uniwork'
 export const OFFICE_LAUNCH_PATH = '/office/open'
+/** Open a blank / new editor tab in UniWork Office (no file path in the URL). */
+export const OFFICE_APP_PATH = '/office/app'
+export const OFFICE_APP_KINDS = [
+  'docs',
+  'sheets',
+  'slides',
+  'pdf',
+  'markdown',
+  'html',
+] as const
+export type OfficeAppKind = (typeof OFFICE_APP_KINDS)[number]
 
 /** Obsolete extract scheme. Live session operations use Bearer <sessionToken>. */
 export const OFFICE_AUTH_SCHEME = 'Office'

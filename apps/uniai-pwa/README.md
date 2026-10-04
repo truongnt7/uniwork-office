@@ -1,6 +1,12 @@
 # uniAI PWA
 
-Standalone ChatGPT-style shell for UniWork AI (Token Hub + optional Office deep links).
+Standalone ChatGPT-style shell for UniWork AI (Token Hub + UniOffice hub).
+
+**Office roadmap (in this PWA):**
+
+1. **Open UniWork Office** — `uniwork://office/app?kind=docs|sheets|…` or Bridge `uniwork://office/open?token=…` when API + Work Product ID are set (Settings → Office Bridge).
+2. **On-device preview** — upload PDF / Markdown / HTML / images (IndexedDB); DOCX/XLSX/PPTX open via desktop UniOffice.
+3. **Hybrid** — detail view = preview (when possible) + primary CTA **Mở trong UniWork Office**.
 
 ## Production / staging URL
 
@@ -17,7 +23,7 @@ npm run start -w @uniwork/uniai-pwa
 
 ## Deploy
 
-Copy static assets (`index.html`, `fonts.css`, `styles.css`, `app.js`, `sw.js`, `manifest.webmanifest`, `fonts/`, `icons/`) to the CDN/origin path `/app/` with HTTPS. Service worker and installability require a secure origin. Self-hosted Inter + Be Vietnam Pro (OFL) cover English and Vietnamese offline.
+Copy static assets (`index.html`, `fonts.css`, `styles.css`, `office-hub.js`, `app.js`, `sw.js`, `manifest.webmanifest`, `fonts/`, `icons/`) to the CDN/origin path `/app/` with HTTPS. Service worker and installability require a secure origin. Self-hosted Inter + Be Vietnam Pro (OFL) cover English and Vietnamese offline.
 
 ## Install (users)
 

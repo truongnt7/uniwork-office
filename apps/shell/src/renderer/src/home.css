@@ -3376,10 +3376,56 @@ body.vib .home {
   gap: 8px;
 }
 
+.wb-hdash-body-stage {
+  position: relative;
+  width: min(240px, 100%);
+  aspect-ratio: 3 / 4;
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background:
+    radial-gradient(
+      ellipse 70% 50% at 50% 18%,
+      color-mix(in srgb, var(--accent) 16%, transparent),
+      transparent 60%
+    ),
+    var(--bg-content, var(--surface));
+}
+
+.wb-hdash-body-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+  display: block;
+  user-select: none;
+  pointer-events: none;
+}
+
+.wb-hdash-body-nodes {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
 .wb-hdash-body {
   width: min(220px, 100%);
   height: auto;
   display: block;
+}
+
+.wb-hdash-body-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+}
+
+.wb-hdash-body-actions .btn {
+  font-size: 12px;
+  padding: 6px 10px;
 }
 
 .wb-hdash-body-cap {

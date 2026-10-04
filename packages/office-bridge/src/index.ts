@@ -1,4 +1,10 @@
-export { parseOfficeLaunchUrl, extractLaunchUrlFromArgv } from './protocol'
+export {
+  parseOfficeLaunchUrl,
+  parseOfficeAppUrl,
+  isOfficeAppUrl,
+  buildOfficeAppUrl,
+  extractLaunchUrlFromArgv,
+} from './protocol'
 export { assertSafeApiOrigin } from './origin'
 export {
   createOfficeBridgeClient,

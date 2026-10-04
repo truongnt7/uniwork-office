@@ -56,8 +56,8 @@ export const WORKBENCH_MODULES: readonly WorkbenchModuleDef[] = [
     id: 'tasks',
     labelVi: 'Công việc',
     labelEn: 'Tasks',
-    hintVi: 'Việc cần làm gắn workbench',
-    hintEn: 'To-dos for this workbench',
+    hintVi: 'Tự quản trị việc cá nhân — List, Kanban, Lịch, Dashboard',
+    hintEn: 'Personal task board — list, kanban, calendar, dashboard',
     available: true,
   },
   {

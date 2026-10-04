@@ -55,7 +55,19 @@ function addItem(
   if (!moduleSupportsAddItem(moduleId)) return null
 
   if (moduleId === 'tasks') {
-    writeTasks(practiceId, [{ id: newId(), title, done: false }, ...readTasks(practiceId)])
+    const now = new Date().toISOString()
+    writeTasks(practiceId, [
+      {
+        id: newId(),
+        title,
+        done: false,
+        status: 'todo',
+        priority: 'medium',
+        createdAt: now,
+        updatedAt: now,
+      },
+      ...readTasks(practiceId),
+    ])
     return { vi: `Đã thêm việc: ${title}`, en: `Added task: ${title}` }
   }
   if (moduleId === 'notes') {

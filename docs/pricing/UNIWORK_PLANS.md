@@ -41,8 +41,9 @@ Giá dưới đây là **đề xuất go-to-market** (có thể chỉnh trước
 
 ## Gợi ý triển khai sản phẩm
 
-1. Catalog nguồn sự thật: `apps/uniai-pwa/plans.js` (PWA Settings).  
-2. Desktop shell sau này đọc cùng schema (hoặc API billing) — tránh hardcode lệch giá.  
+1. Catalog nguồn sự thật: `apps/uniai-pwa/plans.js` (PWA Settings) + `license-entitlements.ts` (desktop).  
+2. Quản lý license / thiết bị: xem `LICENSE_ENTITLEMENTS.md`.  
+2b. Thanh toán VietQR: xem `VIETQR_PAYMENT.md`.  
 3. Free mặc định khi chưa đăng nhập / chưa thanh toán.  
 4. Bridge API từ chối save cloud nếu plan &lt; Personal (server enforce; client chỉ hiển thị).
 

@@ -28,6 +28,8 @@ import type { StringKey, TFunc } from './locale'
 import type { AccountStatus, AiCatalogEntry, UiTheme } from '../../shared/home-api'
 import { ProviderLogo } from './provider-logos'
 import { BackupStoragePane } from './BackupStoragePane'
+import { BillingPaymentPane } from './BillingPaymentPane'
+import { LicenseDevicesPane } from './LicenseDevicesPane'
 import { UniAiPwaPane } from './UniAiPwaPane'
 import { IntegrationsPane, skillUpdateDue } from './IntegrationsPane'
 import './settings.css'
@@ -1229,6 +1231,8 @@ export function SettingsModal({
                     </>
                   )}
                 </div>
+                <LicenseDevicesPane lang={lang} loggedIn={loggedIn} />
+                <BillingPaymentPane lang={lang} />
               </>
             )}
             {section === 'aiModel' && <AiModelPane t={t} />}

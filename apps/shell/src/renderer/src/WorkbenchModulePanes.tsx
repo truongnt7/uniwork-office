@@ -8,6 +8,7 @@ import { FinancePane } from './FinancePane'
 import { FriendsPane } from './FriendsPane'
 import { HealthPane } from './HealthPane'
 import { PetsPane } from './PetsPane'
+import { TasksPane } from './TasksPane'
 import {
   readClients,
   readContracts,
@@ -18,7 +19,6 @@ import {
   readMatters,
   readNotes,
   readPersonal,
-  readTasks,
   readTravel,
   writeClients,
   writeContracts,
@@ -28,7 +28,6 @@ import {
   writeMatters,
   writeNotes,
   writePersonal,
-  writeTasks,
   writeTravel,
   type WbClientItem,
   type WbContractItem,
@@ -37,7 +36,6 @@ import {
   type WbGrowthItem,
   type WbMatterItem,
   type WbPersonalProfile,
-  type WbTaskItem,
   type WbTravelTrip,
 } from './workbench-pins'
 
@@ -113,76 +111,6 @@ export function WorkbenchModulePane({
         <MattersPane practiceId={practiceId} vi={vi} packId={packId} onPackLinked={onPackLinked} />
       )}
     </section>
-  )
-}
-
-function TasksPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }): ReactElement {
-  const label = (a: string, b: string) => (vi ? a : b)
-  const [items, setItems] = useState<WbTaskItem[]>(() => readTasks(practiceId))
-  const [title, setTitle] = useState('')
-
-  useEffect(() => {
-    setItems(readTasks(practiceId))
-  }, [practiceId])
-
-  const persist = (next: WbTaskItem[]) => {
-    setItems(next)
-    writeTasks(practiceId, next)
-  }
-
-  const add = () => {
-    const t = title.trim()
-    if (!t) return
-    persist([{ id: newId(), title: t, done: false }, ...items])
-    setTitle('')
-  }
-
-  return (
-    <>
-      <div className="wb-module-form">
-        <label className="teacher-form-wide">
-          <span>{label('Việc mới', 'New task')}</span>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder={label('VD: Soạn phiếu kiểm tra', 'e.g. Draft quiz sheet')}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') add()
-            }}
-          />
-        </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm', 'Add')}
-        </button>
-      </div>
-      <ul className="wb-module-list">
-        {items.length === 0 ? (
-          <li className="teacher-empty">{label('Chưa có việc.', 'No tasks yet.')}</li>
-        ) : (
-          items.map((it) => (
-            <li key={it.id} className={`wb-module-row${it.done ? ' is-done' : ''}`}>
-              <label className="wb-task-check">
-                <input
-                  type="checkbox"
-                  checked={it.done}
-                  onChange={() =>
-                    persist(items.map((x) => (x.id === it.id ? { ...x, done: !x.done } : x)))
-                  }
-                />
-                <span>{it.title}</span>
-              </label>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => persist(items.filter((x) => x.id !== it.id))}
-              >
-                {label('Xóa', 'Delete')}
-              </button>
-            </li>
-          ))
-        )}
-      </ul>
-    </>
   )
 }
 

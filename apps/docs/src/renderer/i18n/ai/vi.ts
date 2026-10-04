@@ -8,7 +8,7 @@ export const vi = {
   aiStarterPolishAll: 'Chỉnh sửa toàn bộ tài liệu theo giọng chuyên nghiệp hơn',
   aiStarterContinue: 'Viết tiếp từ chỗ tài liệu đang dừng',
   aiStarterFillTemplate: 'Tìm và điền các chỗ trống trong tài liệu này',
-  aiGskLoginBtn: 'Đăng nhập Genspark',
+  aiGskLoginBtn: 'Đăng nhập UniWork',
   aiPanelTitle: 'uniAI',
   aiOpenAssistant: 'Mở trợ lý AI',
   aiSummarizeBtn: 'AI Tóm tắt',
@@ -105,7 +105,7 @@ export const vi = {
   aiNetworkError:
     'Lỗi mạng: không kết nối được dịch vụ AI. Kiểm tra kết nối rồi thử lại',
   aiCreditsExhausted:
-    'Tín dụng Genspark của bạn đã hết. Truy cập genspark.ai/pricing để nạp thêm, rồi thử lại',
+    'Tín dụng UniWork của bạn đã hết. Truy cập uniwork.app/pricing để nạp thêm, rồi thử lại',
   aiSumReadAttachment: 'Đọc tệp đính kèm',
   aiSumImageAttachment: 'Ảnh đính kèm {name}',
   aiSumRead: 'Đọc {name}',

@@ -53,7 +53,7 @@ export const AI_PROVIDERS: AiProviderMeta[] = [
       'gpt-5.6-luna',
     ],
     defaultModel: 'claude-opus-4-7',
-    keyPlaceholder: 'Not required - sign in to Genspark',
+    keyPlaceholder: 'Not required - sign in to UniWork',
   },
   {
     id: 'codex',

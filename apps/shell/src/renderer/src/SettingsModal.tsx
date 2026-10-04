@@ -28,6 +28,7 @@ import type { StringKey, TFunc } from './locale'
 import type { AccountStatus, AiCatalogEntry, UiTheme } from '../../shared/home-api'
 import { ProviderLogo } from './provider-logos'
 import { BackupStoragePane } from './BackupStoragePane'
+import { UniAiPwaPane } from './UniAiPwaPane'
 import { IntegrationsPane, skillUpdateDue } from './IntegrationsPane'
 import './settings.css'
 
@@ -144,6 +145,7 @@ export type SettingsSectionId =
   | 'account'
   | 'aiModel'
   | 'aiMedia'
+  | 'uniai'
   | 'general'
   | 'backup'
   | 'integrations'
@@ -155,6 +157,7 @@ const SECTIONS: readonly { id: SectionId; labelKey: StringKey }[] = [
   { id: 'account', labelKey: 'setSecAccount' },
   { id: 'aiModel', labelKey: 'setSecAiModel' },
   { id: 'aiMedia', labelKey: 'setSecAiMedia' },
+  { id: 'uniai', labelKey: 'setSecUniAi' },
   { id: 'general', labelKey: 'setSecGeneral' },
   { id: 'backup', labelKey: 'setSecBackup' },
   { id: 'integrations', labelKey: 'setSecIntegrations' },
@@ -247,6 +250,20 @@ function SectionIcon({ id }: { id: SectionId }) {
         />
         <path
           d="M8 7.5v4M6.5 10 8 11.5 9.5 10"
+          stroke="currentColor"
+          strokeWidth="1.3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    )
+  }
+  if (id === 'uniai') {
+    return (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+        <rect x="2.5" y="2.5" width="11" height="11" rx="3" stroke="currentColor" strokeWidth="1.3" />
+        <path
+          d="M5.2 10.2 6.4 5.8h1.3L9 10.2M5.7 8.6h2.6M11 5.8v4.4"
           stroke="currentColor"
           strokeWidth="1.3"
           strokeLinecap="round"
@@ -1219,6 +1236,7 @@ export function SettingsModal({
             {section === 'backup' && (
               <BackupStoragePane lang={lang} loggedIn={loggedIn} onLogin={onLogin} />
             )}
+            {section === 'uniai' && <UniAiPwaPane lang={lang} />}
             {section === 'general' && (
               <>
                 <h3 className="set-pane-title">{t('setSecGeneral')}</h3>

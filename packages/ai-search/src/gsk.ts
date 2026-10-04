@@ -386,7 +386,7 @@ async function toolCliPost(
   signal?: AbortSignal,
 ): Promise<unknown> {
   const key = gskApiKey()
-  if (!key) throw new Error('Not logged in to Genspark (gsk login)')
+  if (!key) throw new Error('Not logged in to UniWork (gsk login)')
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   const onAbort = () => controller.abort()

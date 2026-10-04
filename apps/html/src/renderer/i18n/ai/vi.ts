@@ -4,7 +4,7 @@ export const vi = {
   aiCollapsePanel: 'Thu gọn bảng',
   aiComposerPlaceholder: 'Yêu cầu AI viết hoặc chỉnh tài liệu…',
   aiCopyReplyTitle: 'Sao chép câu trả lời',
-  aiCreditsExhausted: 'Hết credit — nạp thêm tại genspark.ai',
+  aiCreditsExhausted: 'Hết credit — nạp thêm tại uniwork.app',
   aiEmptyTitle: 'Thiết kế trang bằng AI',
   aiEmptyBody:
     'Landing page, báo cáo, poster — nói mục đích và đối tượng; AI đề xuất brief trước, rồi dựng trang',

@@ -18,7 +18,7 @@ export const cs = {
   aiQcPageSkipped: 'Stránka {n}: automatická kontrola rozložení přeskočena',
   aiQcStopped: 'Kontrola rozložení zastavena',
   aiQcCapped: 'Dalších {count} stránek nebylo zkontrolováno (limit na jedno spuštění)',
-  aiGskLoginBtn: 'Přihlásit se ke Genspark',
+  aiGskLoginBtn: 'Přihlásit se ke UniWork',
   aiPanelTitle: 'uniAI',
   aiOpenAssistant: 'Otevřít asistenta AI',
   aiFactCheckBtn: 'Ověření faktů AI',
@@ -115,7 +115,7 @@ export const cs = {
   aiErrNetwork:
     'Problém se sítí: službu AI se nepodařilo kontaktovat. Zkontrolujte připojení a zkuste to znovu',
   aiCreditsExhausted:
-    'Vaše kredity Genspark byly vyčerpány. Navštivte genspark.ai/pricing, dobijte je a zkuste to znovu',
+    'Vaše kredity UniWork byly vyčerpány. Navštivte uniwork.app/pricing, dobijte je a zkuste to znovu',
   aiErrRequestFailed: 'Odeslání požadavku se nezdařilo: {msg}',
   aiErrGenerateFailed: 'Generování se nezdařilo',
   aiErrRegenFailed: 'Přepracování snímku se nezdařilo',

@@ -17,7 +17,7 @@ export const vi = {
   aiQcPageSkipped: 'Trang {n}: đã bỏ qua kiểm tra bố cục tự động',
   aiQcStopped: 'Đã dừng kiểm tra bố cục',
   aiQcCapped: 'Còn {count} trang chưa kiểm tra (giới hạn mỗi lần chạy)',
-  aiGskLoginBtn: 'Đăng nhập Genspark',
+  aiGskLoginBtn: 'Đăng nhập UniWork',
   aiPanelTitle: 'uniAI',
   aiOpenAssistant: 'Mở trợ lý AI',
   aiFactCheckBtn: 'AI Kiểm tra sự thật',
@@ -114,7 +114,7 @@ export const vi = {
   aiErrNetwork:
     'Lỗi mạng: không kết nối được dịch vụ AI. Kiểm tra kết nối rồi thử lại',
   aiCreditsExhausted:
-    'Credit Genspark của bạn đã hết. Truy cập genspark.ai/pricing để nạp thêm rồi thử lại',
+    'Credit UniWork của bạn đã hết. Truy cập uniwork.app/pricing để nạp thêm rồi thử lại',
   aiErrRequestFailed: 'Gửi yêu cầu thất bại: {msg}',
   aiErrGenerateFailed: 'Tạo thất bại',
   aiErrRegenFailed: 'Làm lại trang chiếu thất bại',

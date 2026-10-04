@@ -8,7 +8,7 @@ export const ru = {
   aiStarterPolishAll: 'Отшлифуй весь документ, сделав тон более профессиональным',
   aiStarterContinue: 'Продолжи текст с того места, где он обрывается',
   aiStarterFillTemplate: 'Найди и заполни местозаполнители в документе',
-  aiGskLoginBtn: 'Войти в Genspark',
+  aiGskLoginBtn: 'Войти в UniWork',
   aiPanelTitle: 'uniAI',
   aiOpenAssistant: 'Открыть ИИ-помощника',
   aiSummarizeBtn: 'ИИ-резюме',
@@ -107,7 +107,7 @@ export const ru = {
   aiNetworkError:
     'Проблема с сетью: не удалось подключиться к сервису ИИ. Проверьте подключение и повторите попытку',
   aiCreditsExhausted:
-    'Кредиты Genspark исчерпаны. Пополните баланс на genspark.ai/pricing и повторите попытку',
+    'Кредиты UniWork исчерпаны. Пополните баланс на uniwork.app/pricing и повторите попытку',
   aiSumReadAttachment: 'Чтение вложения',
   aiSumImageAttachment: 'Вложенное изображение {name}',
   aiSumRead: 'Чтение {name}',

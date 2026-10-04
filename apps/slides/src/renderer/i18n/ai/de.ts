@@ -18,7 +18,7 @@ export const de = {
   aiQcPageSkipped: 'Seite {n}: automatische Layoutprüfung übersprungen',
   aiQcStopped: 'Layoutprüfung gestoppt',
   aiQcCapped: '{count} weitere Seite(n) nicht geprüft (Limit pro Lauf)',
-  aiGskLoginBtn: 'Bei Genspark anmelden',
+  aiGskLoginBtn: 'Bei UniWork anmelden',
   aiPanelTitle: 'uniAI',
   aiOpenAssistant: 'KI-Assistenten öffnen',
   aiFactCheckBtn: 'KI-Faktencheck',
@@ -118,7 +118,7 @@ export const de = {
   aiErrNetwork:
     'Netzwerkproblem: Der KI-Dienst ist nicht erreichbar. Prüfe deine Verbindung und versuche es erneut',
   aiCreditsExhausted:
-    'Deine Genspark-Credits sind aufgebraucht. Lade unter genspark.ai/pricing auf und versuche es erneut',
+    'Deine UniWork-Credits sind aufgebraucht. Lade unter uniwork.app/pricing auf und versuche es erneut',
   aiErrRequestFailed: 'Senden der Anfrage fehlgeschlagen: {msg}',
   aiErrGenerateFailed: 'Generierung fehlgeschlagen',
   aiErrRegenFailed: 'Neuerstellung der Folie fehlgeschlagen',

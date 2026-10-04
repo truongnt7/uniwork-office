@@ -2172,7 +2172,7 @@ export function Home() {
               />
             </svg>
             <span className="nav-label">
-              {lang === 'vi' ? 'Chat mới' : lang === 'zh' || lang === 'zh-TW' ? '新对话' : 'New chat'}
+              {lang === 'vi' ? 'Trợ lý của bạn' : lang === 'zh' || lang === 'zh-TW' ? '我的 AI' : 'My AI'}
             </span>
           </button>
           <button

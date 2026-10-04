@@ -253,10 +253,10 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
   const empty = messages.length === 0
 
   return (
-    <main className="new-chat" aria-label={label('Chat mới', 'New chat')}>
+    <main className="new-chat" aria-label={label('Trợ lý của bạn', 'My AI')}>
       <header className="new-chat-bar">
         <div>
-          <strong>{label('Chat mới', 'New chat')}</strong>
+          <strong>{label('Trợ lý của bạn', 'My AI')}</strong>
           <span>
             {label(
               'Bắt đầu công việc bằng ngôn ngữ tự nhiên trên máy này.',
@@ -265,7 +265,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
           </span>
         </div>
         <button type="button" className="btn" onClick={resetChat} disabled={busy && empty}>
-          {label('Làm mới', 'Reset')}
+          {label('Chat mới', 'New chat')}
         </button>
       </header>
 

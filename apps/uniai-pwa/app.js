@@ -4,6 +4,45 @@
  */
 
 const STORE_KEY = 'uniai.chats.v1'
+const PREFS_KEY = 'uniai.prefs.v1'
+const OFFICE_DOCS_KEY = 'uniai.officeDocs.v1'
+
+const ACCENTS = [
+  { id: 'blue', value: '#5b8cff' },
+  { id: 'teal', value: '#14b8a6' },
+  { id: 'violet', value: '#8b5cf6' },
+  { id: 'rose', value: '#f43f5e' },
+  { id: 'amber', value: '#f59e0b' },
+]
+
+/** Selectable uniAI avatars for new-chat hero + assistant bubbles. */
+const AVATARS = [
+  { id: 'ai', label: 'Classic AI', glyph: 'AI', from: '#5b8cff', to: '#1d4ed8' },
+  { id: 'spark', label: 'Spark', glyph: '✦', from: '#a78bfa', to: '#6d28d9' },
+  { id: 'orb', label: 'Orb', glyph: '◎', from: '#22d3ee', to: '#0284c7' },
+  { id: 'leaf', label: 'Leaf', glyph: '☘', from: '#34d399', to: '#047857' },
+  { id: 'sun', label: 'Sun', glyph: '☀', from: '#fbbf24', to: '#d97706' },
+  { id: 'flame', label: 'Flame', glyph: '✧', from: '#fb7185', to: '#e11d48' },
+  { id: 'night', label: 'Night', glyph: '☾', from: '#818cf8', to: '#312e81' },
+  { id: 'mono', label: 'Mono', glyph: '◆', from: '#a3a3a3', to: '#404040' },
+]
+
+const DEFAULT_PREFS = {
+  lang: 'vi',
+  theme: 'dark',
+  accent: 'blue',
+  fontSize: 'default',
+  avatarId: 'ai',
+  accountName: 'Người dùng uniAI',
+  email: '',
+  plan: 'Free',
+  usageTokens: 1240,
+  usageLimit: 10000,
+  enterToSend: true,
+  saveHistory: true,
+  analytics: false,
+}
+
 const SUGGESTIONS = [
   {
     title: 'Plan my week',
@@ -23,35 +62,143 @@ const SUGGESTIONS = [
   },
 ]
 
-/** Office suite plugins (connect context + open Desktop when installed). */
-const OFFICE_PLUGINS = [
-  { id: 'docs', label: 'Docs', hint: 'Word / văn bản', app: 'docs' },
-  { id: 'sheets', label: 'Sheets', hint: 'Excel / bảng tính', app: 'sheets' },
-  { id: 'slides', label: 'Slides', hint: 'PowerPoint', app: 'slides' },
-  { id: 'pdf', label: 'PDF', hint: 'Xem & chú thích PDF', app: 'pdf' },
-  { id: 'markdown', label: 'Markdown', hint: 'Ghi chú .md', app: 'markdown' },
-  { id: 'html', label: 'HTML', hint: 'Trang web tĩnh', app: 'html' },
+/**
+ * Bộ cài đặt — Office apps in a horizontal scroll row.
+ * @type {readonly { id: string, label: string, hint: string, color: string, glyph: string }[]}
+ */
+const OFFICE_APPS = [
+  { id: 'docs', label: 'Docs', hint: 'Word / văn bản', color: '#2b579a', glyph: 'W' },
+  { id: 'sheets', label: 'Sheets', hint: 'Excel / bảng tính', color: '#217346', glyph: 'X' },
+  { id: 'slides', label: 'Slides', hint: 'PowerPoint', color: '#b7472a', glyph: 'P' },
+  { id: 'pdf', label: 'PDF', hint: 'Xem & chú thích', color: '#c43e1c', glyph: 'PDF' },
+  { id: 'markdown', label: 'Markdown', hint: 'Ghi chú .md', color: '#6b7280', glyph: 'MD' },
+  { id: 'html', label: 'HTML', hint: 'Trang web tĩnh', color: '#e34f26', glyph: '</>' },
 ]
 
-/** Workbench tabs — deep-linked via uniwork://agent/intent */
+/**
+ * Workbench — “Phổ biến” directory rows.
+ * @type {readonly { id: string, label: string, hint: string, color: string, icon: string }[]}
+ */
 const WORKBENCH_TABS = [
-  { id: 'desk', label: 'Không gian của tôi', hint: 'My Space' },
-  { id: 'calendar', label: 'Lịch', hint: 'Calendar' },
-  { id: 'tasks', label: 'Công việc', hint: 'Tasks' },
-  { id: 'notes', label: 'Ghi chú', hint: 'Notes' },
-  { id: 'assistant', label: 'Trợ lý AI', hint: 'AI Assistant' },
-  { id: 'forms', label: 'Biểu mẫu', hint: 'Forms' },
-  { id: 'personal', label: 'Cá nhân', hint: 'Personal' },
-  { id: 'personal-finance', label: 'Tài chính cá nhân', hint: 'Finance' },
-  { id: 'events', label: 'Sự kiện', hint: 'Events' },
-  { id: 'health', label: 'Sức khoẻ', hint: 'Health' },
-  { id: 'self-growth', label: 'Phát triển bản thân', hint: 'Self-growth' },
-  { id: 'family', label: 'Gia đình tôi', hint: 'Family' },
-  { id: 'friends', label: 'Bạn bè', hint: 'Friends' },
-  { id: 'travel', label: 'Du lịch', hint: 'Travel' },
-  { id: 'clients', label: 'Khách hàng', hint: 'Clients' },
-  { id: 'contracts', label: 'Hợp đồng', hint: 'Contracts' },
-  { id: 'matters', label: 'Vụ việc', hint: 'Matters' },
+  {
+    id: 'desk',
+    label: 'Không gian của tôi',
+    hint: 'Tổng quan việc làm & đời sống',
+    color: '#3b82f6',
+    icon: '<path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
+  },
+  {
+    id: 'calendar',
+    label: 'Lịch',
+    hint: 'Lịch & danh sách mốc hạn',
+    color: '#ef4444',
+    icon: '<rect x="4" y="5" width="16" height="15" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 3v4M16 3v4M4 10h16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  },
+  {
+    id: 'tasks',
+    label: 'Công việc',
+    hint: 'Việc cần làm trên Workbench',
+    color: '#22c55e',
+    icon: '<path d="M5 7h14M5 12h10M5 17h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="m15 11 2 2 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
+  },
+  {
+    id: 'notes',
+    label: 'Ghi chú',
+    hint: 'Ghi chú nhanh tại máy',
+    color: '#eab308',
+    icon: '<path d="M7 4h8l4 4v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M15 4v4h4M8 13h8M8 17h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  },
+  {
+    id: 'assistant',
+    label: 'Trợ lý AI',
+    hint: 'Lối tắt vào uniAI',
+    color: '#8b5cf6',
+    icon: '<path d="M12 3 13.8 8.2 19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>',
+  },
+  {
+    id: 'forms',
+    label: 'Biểu mẫu',
+    hint: 'Mẫu giấy tờ hay dùng',
+    color: '#06b6d4',
+    icon: '<rect x="5" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  },
+  {
+    id: 'personal',
+    label: 'Cá nhân',
+    hint: 'Hồ sơ dùng khi soạn thảo',
+    color: '#f97316',
+    icon: '<circle cx="12" cy="8" r="3.2" stroke="currentColor" stroke-width="1.6"/><path d="M5 19.5a7 7 0 0 1 14 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  },
+  {
+    id: 'personal-finance',
+    label: 'Tài chính cá nhân',
+    hint: 'Mục tiêu · chi tiêu · đầu tư',
+    color: '#10b981',
+    icon: '<circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.6"/><path d="M12 7v10M9.5 9.5c0-1 1.1-1.8 2.5-1.8s2.5.8 2.5 1.8-1.1 1.7-2.5 1.7-2.5.8-2.5 1.8 1.1 1.8 2.5 1.8 2.5-.8 2.5-1.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+  },
+  {
+    id: 'events',
+    label: 'Sự kiện',
+    hint: 'Họp, hội thảo sắp tới',
+    color: '#ec4899',
+    icon: '<path d="M5 8h14v11a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V8Z" stroke="currentColor" stroke-width="1.6"/><path d="M5 8V6a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v2M9 12h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  },
+  {
+    id: 'health',
+    label: 'Sức khoẻ',
+    hint: 'Chỉ số, tập luyện, dinh dưỡng',
+    color: '#f43f5e',
+    icon: '<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.5A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>',
+  },
+  {
+    id: 'self-growth',
+    label: 'Phát triển bản thân',
+    hint: 'Mục tiêu học tập & thói quen',
+    color: '#a855f7',
+    icon: '<path d="M12 3v18M7 8l5-4 5 4M7 16l5 4 5-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+  },
+  {
+    id: 'family',
+    label: 'Gia đình tôi',
+    hint: 'Thành viên, thuốc, cột mốc',
+    color: '#fb7185',
+    icon: '<circle cx="8" cy="9" r="2.4" stroke="currentColor" stroke-width="1.5"/><circle cx="16" cy="9" r="2.4" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 19a4.5 4.5 0 0 1 9 0M11.5 19a4.5 4.5 0 0 1 9 0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+  },
+  {
+    id: 'friends',
+    label: 'Bạn bè',
+    hint: 'Hồ sơ, sự kiện, kỷ niệm',
+    color: '#38bdf8',
+    icon: '<circle cx="9" cy="9" r="2.6" stroke="currentColor" stroke-width="1.5"/><path d="M4 19a5 5 0 0 1 10 0M16 8a2.4 2.4 0 1 1 0 4.8M14.5 19a4.2 4.2 0 0 1 5.5-3.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>',
+  },
+  {
+    id: 'travel',
+    label: 'Du lịch',
+    hint: 'Chuyến đi & hành trình',
+    color: '#0ea5e9',
+    icon: '<path d="M3.5 12.5 20 5l-3.5 14-4.2-4.2L8 17.5l-1.2-3.3L3.5 12.5Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>',
+  },
+  {
+    id: 'clients',
+    label: 'Khách hàng',
+    hint: 'Danh bạ khách & đối tác',
+    color: '#64748b',
+    icon: '<rect x="4" y="6" width="16" height="13" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M8 6V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v1M4 11h16" stroke="currentColor" stroke-width="1.6"/>',
+  },
+  {
+    id: 'contracts',
+    label: 'Hợp đồng',
+    hint: 'Theo dõi hiệu lực hợp đồng',
+    color: '#78716c',
+    icon: '<path d="M8 3h7l4 4v13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" stroke="currentColor" stroke-width="1.6"/><path d="M15 3v4h4M9 13h6M9 17h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  },
+  {
+    id: 'matters',
+    label: 'Vụ việc',
+    hint: 'Hồ sơ pháp lý / luật sư',
+    color: '#57534e',
+    icon: '<path d="M12 3v18M7 7h5l3 3v7H7V7Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M7 20h10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  },
 ]
 
 /** @typedef {{ id: string, title: string, messages: { role: 'user'|'assistant', text: string }[] }} Chat */
@@ -82,12 +229,60 @@ function newChat() {
   return { id: uid(), title: 'New chat', messages: [] }
 }
 
+/** @returns {typeof DEFAULT_PREFS} */
+function loadPrefs() {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY)
+    if (!raw) return { ...DEFAULT_PREFS }
+    return { ...DEFAULT_PREFS, ...JSON.parse(raw) }
+  } catch {
+    return { ...DEFAULT_PREFS }
+  }
+}
+
+/** @param {typeof DEFAULT_PREFS} prefs */
+function savePrefs(prefs) {
+  localStorage.setItem(PREFS_KEY, JSON.stringify(prefs))
+}
+
+function seedOfficeDocs() {
+  return [
+    { id: 'd1', name: 'Báo cáo tuần.docx', kind: 'docs', color: '#2b579a' },
+    { id: 'd2', name: 'Ngân sách Q2.xlsx', kind: 'sheets', color: '#217346' },
+    { id: 'd3', name: 'Pitch sản phẩm.pptx', kind: 'slides', color: '#b7472a' },
+    { id: 'd4', name: 'Hợp đồng mẫu.pdf', kind: 'pdf', color: '#c43e1c' },
+    { id: 'd5', name: 'Ghi chú họp.md', kind: 'markdown', color: '#6b7280' },
+  ]
+}
+
+function loadOfficeDocs() {
+  try {
+    const raw = localStorage.getItem(OFFICE_DOCS_KEY)
+    if (!raw) {
+      const seed = seedOfficeDocs()
+      localStorage.setItem(OFFICE_DOCS_KEY, JSON.stringify(seed))
+      return seed
+    }
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : seedOfficeDocs()
+  } catch {
+    return seedOfficeDocs()
+  }
+}
+
 let chats = loadChats()
 if (chats.length === 0) {
   chats = [newChat()]
   saveChats(chats)
 }
 let activeId = chats[0].id
+/** @type {typeof DEFAULT_PREFS} */
+let prefs = loadPrefs()
+let officeDocs = loadOfficeDocs()
+/** @type {'chat'|'knowledge'|'documents'|'office'} */
+let navView = 'chat'
+let officeExpanded = true
+let activeDocId = ''
 
 /** @type {Attachment[]} */
 let attachments = []
@@ -95,12 +290,19 @@ let attachments = []
 const el = {
   list: document.getElementById('chatList'),
   thread: document.getElementById('thread'),
+  library: document.getElementById('libraryView'),
+  composerDock: document.getElementById('composerDock'),
   title: document.getElementById('threadTitle'),
   form: document.getElementById('composer'),
   input: document.getElementById('input'),
   btnSend: document.getElementById('btnSend'),
   btnNew: document.getElementById('btnNew'),
   btnInstall: document.getElementById('btnInstall'),
+  btnSettings: document.getElementById('btnSettings'),
+  accountName: document.getElementById('accountName'),
+  accountEmail: document.getElementById('accountEmail'),
+  officeDocs: document.getElementById('officeDocs'),
+  navOffice: document.getElementById('navOffice'),
   suggestions: document.getElementById('suggestions'),
   sidebar: document.getElementById('sidebar'),
   btnMenu: document.getElementById('btnMenu'),
@@ -115,6 +317,47 @@ const el = {
   pluginScrim: document.getElementById('pluginScrim'),
   pluginBody: document.getElementById('pluginBody'),
   btnPluginClose: document.getElementById('btnPluginClose'),
+  pluginSearch: document.getElementById('pluginSearch'),
+  settingsModal: document.getElementById('settingsModal'),
+  settingsScrim: document.getElementById('settingsScrim'),
+  settingsBody: document.getElementById('settingsBody'),
+  btnSettingsClose: document.getElementById('btnSettingsClose'),
+}
+
+let pluginQuery = ''
+
+function getAvatar() {
+  return AVATARS.find((a) => a.id === prefs.avatarId) || AVATARS[0]
+}
+
+/** @param {HTMLElement} node */
+function paintAvatar(node, size = 'md') {
+  const av = getAvatar()
+  node.dataset.avatar = av.id
+  node.style.background = `linear-gradient(145deg, ${av.from}, ${av.to})`
+  node.textContent = av.glyph
+  node.classList.toggle('is-emoji', av.id !== 'ai')
+  if (size === 'lg') node.classList.add('empty-mark')
+}
+
+function applyPrefs() {
+  const theme = prefs.theme === 'system'
+    ? window.matchMedia('(prefers-color-scheme: light)').matches
+      ? 'light'
+      : 'dark'
+    : prefs.theme
+  document.documentElement.dataset.theme = theme
+  const accent = ACCENTS.find((a) => a.id === prefs.accent)?.value || ACCENTS[0].value
+  document.documentElement.style.setProperty('--accent', accent)
+  const fontMap = { small: '14px', default: '16px', large: '18px', xlarge: '20px' }
+  document.documentElement.style.setProperty('--font-size', fontMap[prefs.fontSize] || '16px')
+  document.body.style.fontSize = fontMap[prefs.fontSize] || '16px'
+  if (el.accountName) el.accountName.textContent = prefs.accountName || 'uniAI'
+  if (el.accountEmail) {
+    el.accountEmail.textContent = prefs.email || 'Cá nhân hoá & tài khoản'
+  }
+  const sideMark = document.querySelector('.brand-mark')
+  if (sideMark instanceof HTMLElement) paintAvatar(sideMark)
 }
 
 function activeChat() {
@@ -138,7 +381,12 @@ function setAttachMenuOpen(open) {
 function setPluginOpen(open) {
   el.pluginPanel.hidden = !open
   el.pluginScrim.hidden = !open
-  if (open) renderPluginPanel()
+  if (open) {
+    pluginQuery = ''
+    if (el.pluginSearch) el.pluginSearch.value = ''
+    renderPluginPanel()
+    el.pluginSearch?.focus()
+  }
 }
 
 function intentUrl(tab, summary) {
@@ -203,7 +451,7 @@ function togglePlugin(kind, id, label, detail) {
       kind: 'plugin',
       pluginKind: kind,
       pluginId: id,
-      label: kind === 'office' ? `Office · ${label}` : `Workbench · ${label}`,
+      label: kind === 'office' ? label : `Workbench · ${label}`,
       detail,
     })
   }
@@ -211,74 +459,102 @@ function togglePlugin(kind, id, label, detail) {
   renderPluginPanel()
 }
 
+function matchesPluginQuery(label, hint) {
+  const q = pluginQuery.trim().toLowerCase()
+  if (!q) return true
+  return `${label} ${hint}`.toLowerCase().includes(q)
+}
+
+function makeAddButton(on, onClick) {
+  const btn = document.createElement('button')
+  btn.type = 'button'
+  btn.className = `plugin-add${on ? ' is-on' : ''}`
+  btn.setAttribute('aria-label', on ? 'Đã thêm' : 'Thêm plugin')
+  btn.title = on ? 'Bỏ plugin' : 'Thêm'
+  btn.innerHTML = on
+    ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m5 12 5 5L19 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`
+    : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    onClick()
+  })
+  return btn
+}
+
 function renderPluginPanel() {
   if (el.pluginPanel.hidden) return
   el.pluginBody.innerHTML = ''
 
-  const officeSec = document.createElement('section')
-  officeSec.className = 'plugin-section'
-  officeSec.innerHTML = '<h3>Bộ Office</h3>'
-  const grid = document.createElement('div')
-  grid.className = 'plugin-grid'
-  for (const p of OFFICE_PLUGINS) {
-    const btn = document.createElement('button')
-    btn.type = 'button'
-    btn.className = `plugin-card${isPluginOn('office', p.id) ? ' is-on' : ''}`
-    btn.innerHTML = `<strong>${escapeHtml(p.label)}</strong><span>${escapeHtml(p.hint)}</span>`
-    btn.addEventListener('click', () => togglePlugin('office', p.id, p.label, p.hint))
-    grid.appendChild(btn)
+  const officeFiltered = OFFICE_APPS.filter((a) => matchesPluginQuery(a.label, a.hint))
+  if (officeFiltered.length > 0 || !pluginQuery.trim()) {
+    const suiteSec = document.createElement('section')
+    suiteSec.innerHTML =
+      '<h3 class="plugin-section-title">Bộ cài đặt</h3><p class="plugin-section-sub">Vuốt ngang · chọn app Office gắn vào chat</p>'
+    const rail = document.createElement('div')
+    rail.className = 'plugin-suite-rail'
+    rail.setAttribute('role', 'list')
+    const apps = pluginQuery.trim() ? officeFiltered : OFFICE_APPS
+    for (const app of apps) {
+      const on = isPluginOn('office', app.id)
+      const item = document.createElement('button')
+      item.type = 'button'
+      item.className = `plugin-suite-app${on ? ' is-on' : ''}`
+      item.setAttribute('role', 'listitem')
+      item.title = `${app.label} — ${app.hint}`
+      item.setAttribute('aria-pressed', on ? 'true' : 'false')
+      item.innerHTML = `
+        <span class="plugin-suite-app-icon" style="background:${app.color}" aria-hidden="true">${escapeHtml(app.glyph)}</span>
+        <span class="plugin-suite-app-label">${escapeHtml(app.label)}</span>
+        <span class="plugin-suite-app-check" aria-hidden="true">${on ? '✓' : '+'}</span>
+      `
+      item.addEventListener('click', () =>
+        togglePlugin('office', app.id, app.label, app.hint),
+      )
+      rail.appendChild(item)
+    }
+    suiteSec.appendChild(rail)
+    el.pluginBody.appendChild(suiteSec)
   }
-  officeSec.appendChild(grid)
 
-  const wbSec = document.createElement('section')
-  wbSec.className = 'plugin-section'
-  wbSec.innerHTML = '<h3>Workbench</h3>'
+  const filtered = WORKBENCH_TABS.filter((t) => matchesPluginQuery(t.label, t.hint))
+  const popularSec = document.createElement('section')
+  popularSec.innerHTML = '<h3 class="plugin-section-title">Phổ biến</h3>'
   const list = document.createElement('div')
-  list.className = 'plugin-list'
-  for (const t of WORKBENCH_TABS) {
-    const row = document.createElement('div')
-    row.className = `plugin-row${isPluginOn('workbench', t.id) ? ' is-on' : ''}`
-    row.innerHTML = `
-      <span class="plugin-dot" aria-hidden="true"></span>
-      <span class="plugin-row-text">
-        <strong>${escapeHtml(t.label)}</strong>
-        <span>${escapeHtml(t.hint)}</span>
-      </span>
-    `
-    const connect = document.createElement('button')
-    connect.type = 'button'
-    connect.className = 'plugin-open'
-    connect.textContent = isPluginOn('workbench', t.id) ? 'Bỏ' : 'Kết nối'
-    connect.addEventListener('click', (e) => {
-      e.stopPropagation()
-      togglePlugin('workbench', t.id, t.label, t.hint)
-    })
-    const open = document.createElement('button')
-    open.type = 'button'
-    open.className = 'plugin-open'
-    open.textContent = 'Mở'
-    open.title = 'Mở tab trên UniWork Office (máy này)'
-    open.addEventListener('click', (e) => {
-      e.stopPropagation()
-      if (!isPluginOn('workbench', t.id)) {
-        togglePlugin('workbench', t.id, t.label, t.hint)
-      }
-      openDeepLink(intentUrl(t.id, `Open ${t.label}`))
-    })
-    row.append(connect, open)
-    row.addEventListener('click', () => togglePlugin('workbench', t.id, t.label, t.hint))
-    list.appendChild(row)
+  list.className = 'plugin-popular'
+
+  if (filtered.length === 0) {
+    const empty = document.createElement('p')
+    empty.className = 'plugin-empty'
+    empty.textContent = 'Không tìm thấy plugin phù hợp.'
+    popularSec.appendChild(empty)
+  } else {
+    for (const t of filtered) {
+      const on = isPluginOn('workbench', t.id)
+      const row = document.createElement('div')
+      row.className = 'plugin-item'
+      row.innerHTML = `
+        <div class="plugin-item-icon" style="background:${t.color}" aria-hidden="true">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">${t.icon}</svg>
+        </div>
+        <div class="plugin-item-meta">
+          <strong>${escapeHtml(t.label)}</strong>
+          <span>${escapeHtml(t.hint)}</span>
+        </div>
+      `
+      row.appendChild(
+        makeAddButton(on, () => togglePlugin('workbench', t.id, t.label, t.hint)),
+      )
+      // Long-press style: double-click / alt-click opens deep link
+      row.addEventListener('dblclick', () => {
+        if (!on) togglePlugin('workbench', t.id, t.label, t.hint)
+        openDeepLink(intentUrl(t.id, `Open ${t.label}`))
+      })
+      list.appendChild(row)
+    }
+    popularSec.appendChild(list)
   }
-  wbSec.appendChild(list)
 
-  const tip = document.createElement('p')
-  tip.className = 'fineprint'
-  tip.style.textAlign = 'left'
-  tip.style.margin = '0 4px'
-  tip.textContent =
-    'Plugin gắn ngữ cảnh vào chat. “Mở” gọi UniWork Office qua deep link nếu app đã cài trên máy.'
-
-  el.pluginBody.append(officeSec, wbSec, tip)
+  el.pluginBody.appendChild(popularSec)
 }
 
 function addFiles(fileList) {
@@ -296,22 +572,301 @@ function addFiles(fileList) {
   renderChips()
 }
 
+function setNavView(view) {
+  navView = view
+  document.querySelectorAll('.nav-item[data-nav]').forEach((node) => {
+    node.classList.toggle('active', node.getAttribute('data-nav') === view)
+  })
+  const showChat = view === 'chat'
+  el.thread.hidden = !showChat
+  el.composerDock.hidden = !showChat
+  el.library.hidden = showChat
+  if (!showChat) renderLibrary()
+  else {
+    renderThread()
+    el.input.focus()
+  }
+  setSidebarOpen(false)
+}
+
+function renderOfficeDocs() {
+  el.officeDocs.innerHTML = ''
+  el.navOffice?.parentElement?.classList.toggle('collapsed', !officeExpanded)
+  el.navOffice?.setAttribute('aria-expanded', officeExpanded ? 'true' : 'false')
+  for (const doc of officeDocs) {
+    const li = document.createElement('li')
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = doc.id === activeDocId && navView === 'office' ? 'active' : ''
+    btn.innerHTML = `<span class="office-dot" style="background:${doc.color}"></span><span>${escapeHtml(doc.name)}</span>`
+    btn.addEventListener('click', () => {
+      activeDocId = doc.id
+      setNavView('office')
+      renderOfficeDocs()
+    })
+    li.appendChild(btn)
+    el.officeDocs.appendChild(li)
+  }
+}
+
+function renderLibrary() {
+  const titles = {
+    knowledge: ['Tri thức', 'Kho kiến thức, skill và ghi chú dùng lại trong uniAI.'],
+    documents: ['Tài liệu', 'Tài liệu đã tải lên hoặc gắn với cuộc trò chuyện.'],
+    office: ['UniOffice', 'Tài liệu Office trên UniWork — mở bằng Desktop nếu đã cài.'],
+  }
+  const [title, desc] = titles[navView] || titles.documents
+  el.library.innerHTML = ''
+  const card = document.createElement('div')
+  card.className = 'library-card'
+  card.innerHTML = `<h2>${escapeHtml(title)}</h2><p>${escapeHtml(desc)}</p>`
+  const grid = document.createElement('div')
+  grid.className = 'library-grid'
+
+  if (navView === 'office') {
+    for (const doc of officeDocs) {
+      const tile = document.createElement('button')
+      tile.type = 'button'
+      tile.className = 'library-tile'
+      tile.innerHTML = `<strong>${escapeHtml(doc.name)}</strong><span>${escapeHtml(doc.kind.toUpperCase())} · UniWork Office</span>`
+      tile.addEventListener('click', () => {
+        activeDocId = doc.id
+        openDeepLink(intentUrl('desk', `Open ${doc.name}`))
+        renderOfficeDocs()
+      })
+      grid.appendChild(tile)
+    }
+  } else if (navView === 'knowledge') {
+    ;[
+      ['Playbook bán hàng', 'Quy trình & checklist'],
+      ['Thuật ngữ nội bộ', 'Glossary dùng chung'],
+      ['Mẫu email', 'Thư chào / follow-up'],
+    ].forEach(([name, hint]) => {
+      const tile = document.createElement('button')
+      tile.type = 'button'
+      tile.className = 'library-tile'
+      tile.innerHTML = `<strong>${escapeHtml(name)}</strong><span>${escapeHtml(hint)}</span>`
+      tile.addEventListener('click', () => {
+        setNavView('chat')
+        send(`Dùng tri thức: ${name}`)
+      })
+      grid.appendChild(tile)
+    })
+  } else {
+    ;[
+      ['Đề xuất dự án.pdf', 'Đã tải lên'],
+      ['Ảnh whiteboard.png', 'Từ Camera'],
+      ['Ghi chú họp.txt', 'Tệp cục bộ'],
+    ].forEach(([name, hint]) => {
+      const tile = document.createElement('button')
+      tile.type = 'button'
+      tile.className = 'library-tile'
+      tile.innerHTML = `<strong>${escapeHtml(name)}</strong><span>${escapeHtml(hint)}</span>`
+      grid.appendChild(tile)
+    })
+  }
+
+  card.appendChild(grid)
+  el.library.appendChild(card)
+  el.title.textContent = title
+}
+
 function renderList() {
   el.list.innerHTML = ''
-  for (const c of chats) {
+  const visible = prefs.saveHistory ? chats : chats.slice(0, 1)
+  for (const c of visible) {
     const li = document.createElement('li')
     const btn = document.createElement('button')
     btn.type = 'button'
     btn.textContent = c.title
-    btn.className = c.id === activeId ? 'active' : ''
+    btn.className = c.id === activeId && navView === 'chat' ? 'active' : ''
     btn.addEventListener('click', () => {
       activeId = c.id
-      setSidebarOpen(false)
+      setNavView('chat')
       render()
     })
     li.appendChild(btn)
     el.list.appendChild(li)
   }
+}
+
+function setSettingsOpen(open) {
+  el.settingsModal.hidden = !open
+  el.settingsScrim.hidden = !open
+  if (open) renderSettings()
+}
+
+function renderSettings() {
+  const pct = Math.min(100, Math.round((prefs.usageTokens / prefs.usageLimit) * 100))
+  el.settingsBody.innerHTML = `
+    <section class="settings-group">
+      <h3>Tùy chỉnh</h3>
+      <div class="settings-row">
+        <div><label for="setLang">Ngôn ngữ</label><small>Ngôn ngữ giao diện uniAI</small></div>
+        <select id="setLang">
+          <option value="vi">Tiếng Việt</option>
+          <option value="en">English</option>
+          <option value="zh">中文</option>
+          <option value="ja">日本語</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <div><label for="setTheme">Giao diện</label><small>Sáng / tối / theo hệ thống</small></div>
+        <select id="setTheme">
+          <option value="dark">Tối</option>
+          <option value="light">Sáng</option>
+          <option value="system">Hệ thống</option>
+        </select>
+      </div>
+      <div class="settings-row">
+        <div><span class="settings-label">Màu nhấn</span><small>Màu nhấn cho nút và điểm nhấn UI</small></div>
+        <div class="accent-swatches" id="accentSwatches"></div>
+      </div>
+      <div class="settings-row">
+        <div><label for="setFont">Cỡ chữ</label><small>Kích thước chữ trong chat</small></div>
+        <select id="setFont">
+          <option value="small">Nhỏ</option>
+          <option value="default">Mặc định</option>
+          <option value="large">Lớn</option>
+          <option value="xlarge">Rất lớn</option>
+        </select>
+      </div>
+      <div class="settings-row settings-row-stack">
+        <div><span class="settings-label">Avatar uniAI</span><small>Hiện trên trang New chat và tin nhắn trợ lý</small></div>
+        <div class="avatar-picker" id="settingsAvatarPicker"></div>
+      </div>
+    </section>
+
+    <section class="settings-group">
+      <h3>Tài khoản</h3>
+      <div class="settings-row">
+        <div><label for="setName">Tài khoản</label><small>Tên hiển thị</small></div>
+        <input id="setName" type="text" value="${escapeHtml(prefs.accountName)}" />
+      </div>
+      <div class="settings-row">
+        <div><label for="setEmail">Email</label><small>Đăng nhập UniWork / Token Hub</small></div>
+        <input id="setEmail" type="email" placeholder="you@uniwork.app" value="${escapeHtml(prefs.email)}" />
+      </div>
+      <div class="settings-row">
+        <div><span class="settings-label">Gói đăng ký</span><small>${escapeHtml(prefs.plan)} · nâng cấp trên UniWork</small></div>
+        <button type="button" class="settings-link" id="btnUpgrade">Nâng cấp</button>
+      </div>
+      <div class="settings-row">
+        <div>
+          <span class="settings-label">Mức sử dụng &amp; giới hạn</span>
+          <small>${prefs.usageTokens.toLocaleString()} / ${prefs.usageLimit.toLocaleString()} token tháng này</small>
+        </div>
+        <div class="usage-bar" title="${pct}%"><i style="width:${pct}%"></i></div>
+      </div>
+    </section>
+
+    <section class="settings-group">
+      <h3>Cài đặt chung</h3>
+      <div class="settings-row">
+        <div><span class="settings-label">Enter để gửi</span><small>Shift+Enter xuống dòng</small></div>
+        <button type="button" class="settings-toggle${prefs.enterToSend ? ' is-on' : ''}" data-pref="enterToSend" aria-pressed="${prefs.enterToSend}"></button>
+      </div>
+      <div class="settings-row">
+        <div><span class="settings-label">Lưu lịch sử chat</span><small>Hiện danh sách Gần đây trên sidebar</small></div>
+        <button type="button" class="settings-toggle${prefs.saveHistory ? ' is-on' : ''}" data-pref="saveHistory" aria-pressed="${prefs.saveHistory}"></button>
+      </div>
+      <div class="settings-row">
+        <div><span class="settings-label">Chia sẻ dữ liệu cải thiện</span><small>Tuỳ chọn, có thể tắt bất cứ lúc nào</small></div>
+        <button type="button" class="settings-toggle${prefs.analytics ? ' is-on' : ''}" data-pref="analytics" aria-pressed="${prefs.analytics}"></button>
+      </div>
+    </section>
+
+    <section class="settings-group">
+      <h3>Trợ giúp</h3>
+      <div class="settings-row">
+        <div><span class="settings-label">Trung tâm trợ giúp</span><small>Hướng dẫn uniAI &amp; Token Hub</small></div>
+        <a class="settings-link" href="https://uniwork.app" target="_blank" rel="noopener">Mở</a>
+      </div>
+      <div class="settings-row">
+        <div><span class="settings-label">Cài UniWork Office</span><small>Desktop để mở Workbench &amp; file Office</small></div>
+        <a class="settings-link" href="https://github.com/truongnt7/uniwork-office/releases/latest" target="_blank" rel="noopener">Tải</a>
+      </div>
+      <div class="settings-row">
+        <div><span class="settings-label">Phản hồi</span><small>Góp ý sản phẩm</small></div>
+        <a class="settings-link" href="mailto:hello@uniwork.app">Email</a>
+      </div>
+    </section>
+  `
+
+  /** @type {HTMLSelectElement|null} */
+  const lang = el.settingsBody.querySelector('#setLang')
+  /** @type {HTMLSelectElement|null} */
+  const theme = el.settingsBody.querySelector('#setTheme')
+  /** @type {HTMLSelectElement|null} */
+  const font = el.settingsBody.querySelector('#setFont')
+  if (lang) lang.value = prefs.lang
+  if (theme) theme.value = prefs.theme
+  if (font) font.value = prefs.fontSize
+
+  const swatches = el.settingsBody.querySelector('#accentSwatches')
+  if (swatches) {
+    for (const a of ACCENTS) {
+      const b = document.createElement('button')
+      b.type = 'button'
+      b.className = `accent-swatch${prefs.accent === a.id ? ' is-on' : ''}`
+      b.style.background = a.value
+      b.title = a.id
+      b.addEventListener('click', () => {
+        prefs.accent = a.id
+        persistPrefs()
+        renderSettings()
+      })
+      swatches.appendChild(b)
+    }
+  }
+
+  const settingsAvatars = el.settingsBody.querySelector('#settingsAvatarPicker')
+  if (settingsAvatars) {
+    fillAvatarPicker(settingsAvatars, () => {
+      persistPrefs()
+      renderSettings()
+      if (navView === 'chat') renderThread()
+    })
+  }
+
+  lang?.addEventListener('change', () => {
+    prefs.lang = lang.value
+    persistPrefs()
+  })
+  theme?.addEventListener('change', () => {
+    prefs.theme = theme.value
+    persistPrefs()
+  })
+  font?.addEventListener('change', () => {
+    prefs.fontSize = font.value
+    persistPrefs()
+  })
+  el.settingsBody.querySelector('#setName')?.addEventListener('change', (e) => {
+    prefs.accountName = /** @type {HTMLInputElement} */ (e.target).value.trim() || DEFAULT_PREFS.accountName
+    persistPrefs()
+  })
+  el.settingsBody.querySelector('#setEmail')?.addEventListener('change', (e) => {
+    prefs.email = /** @type {HTMLInputElement} */ (e.target).value.trim()
+    persistPrefs()
+  })
+  el.settingsBody.querySelector('#btnUpgrade')?.addEventListener('click', () => {
+    window.open('https://uniwork.app', '_blank', 'noopener,noreferrer')
+  })
+  el.settingsBody.querySelectorAll('.settings-toggle').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const key = btn.getAttribute('data-pref')
+      if (!key) return
+      prefs[key] = !prefs[key]
+      persistPrefs()
+      renderSettings()
+      if (key === 'saveHistory') renderList()
+    })
+  })
+}
+
+function persistPrefs() {
+  savePrefs(prefs)
+  applyPrefs()
 }
 
 function renderSuggestions(show) {
@@ -335,6 +890,30 @@ function escapeHtml(s) {
     .replaceAll('"', '&quot;')
 }
 
+/**
+ * @param {HTMLElement} host
+ * @param {() => void} [onPicked]
+ */
+function fillAvatarPicker(host, onPicked) {
+  host.innerHTML = ''
+  for (const a of AVATARS) {
+    const b = document.createElement('button')
+    b.type = 'button'
+    b.className = `avatar-opt${prefs.avatarId === a.id ? ' is-on' : ''}`
+    b.title = a.label
+    b.setAttribute('aria-label', a.label)
+    b.setAttribute('aria-pressed', prefs.avatarId === a.id ? 'true' : 'false')
+    b.innerHTML = `<span style="background:linear-gradient(145deg,${a.from},${a.to})">${escapeHtml(a.glyph)}</span>`
+    b.addEventListener('click', () => {
+      prefs.avatarId = a.id
+      savePrefs(prefs)
+      applyPrefs()
+      onPicked?.()
+    })
+    host.appendChild(b)
+  }
+}
+
 function renderThread() {
   const chat = activeChat()
   el.title.textContent = chat.messages.length === 0 ? 'uniAI' : chat.title
@@ -344,11 +923,24 @@ function renderThread() {
   if (chat.messages.length === 0) {
     const empty = document.createElement('div')
     empty.className = 'empty'
-    empty.innerHTML = `
-      <div class="empty-mark" aria-hidden="true">AI</div>
-      <h2>Where should we begin?</h2>
-      <p>uniAI is your independent UniWork assistant — Token Hub on the web, optional Office deep links on this device.</p>
-    `
+    const mark = document.createElement('div')
+    mark.className = 'empty-mark'
+    mark.setAttribute('aria-hidden', 'true')
+    paintAvatar(mark, 'lg')
+    const h2 = document.createElement('h2')
+    h2.textContent = 'Where should we begin?'
+    const p = document.createElement('p')
+    p.textContent =
+      'uniAI is your independent UniWork assistant — Token Hub on the web, optional Office deep links on this device.'
+    const pickerLabel = document.createElement('p')
+    pickerLabel.className = 'avatar-picker-label'
+    pickerLabel.textContent = 'Chọn avatar'
+    const picker = document.createElement('div')
+    picker.className = 'avatar-picker'
+    picker.setAttribute('role', 'listbox')
+    picker.setAttribute('aria-label', 'Chọn avatar uniAI')
+    fillAvatarPicker(picker, () => renderThread())
+    empty.append(mark, h2, p, pickerLabel, picker)
     el.thread.appendChild(empty)
     renderSuggestions(true)
     return
@@ -361,8 +953,8 @@ function renderThread() {
     if (m.role === 'assistant') {
       const av = document.createElement('div')
       av.className = 'msg-avatar'
-      av.textContent = 'AI'
       av.setAttribute('aria-hidden', 'true')
+      paintAvatar(av)
       row.appendChild(av)
     }
     const body = document.createElement('div')
@@ -375,8 +967,11 @@ function renderThread() {
 }
 
 function render() {
+  applyPrefs()
   renderList()
-  renderThread()
+  renderOfficeDocs()
+  if (navView === 'chat') renderThread()
+  else renderLibrary()
   renderChips()
   syncSendEnabled()
 }
@@ -472,7 +1067,7 @@ el.input.addEventListener('input', () => {
 })
 
 el.input.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  if (e.key === 'Enter' && !e.shiftKey && prefs.enterToSend) {
     e.preventDefault()
     send(el.input.value)
   }
@@ -484,12 +1079,36 @@ el.btnNew.addEventListener('click', () => {
   activeId = c.id
   attachments = []
   saveChats(chats)
-  setSidebarOpen(false)
   setAttachMenuOpen(false)
   setPluginOpen(false)
+  setSettingsOpen(false)
+  setNavView('chat')
   render()
   el.input.focus()
 })
+
+document.querySelectorAll('.nav-item[data-nav]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const view = btn.getAttribute('data-nav')
+    if (view === 'office') {
+      // First click expands; if already on office, toggle collapse.
+      if (navView === 'office') {
+        officeExpanded = !officeExpanded
+        renderOfficeDocs()
+        return
+      }
+      officeExpanded = true
+      setNavView('office')
+      renderOfficeDocs()
+      return
+    }
+    if (view === 'knowledge' || view === 'documents') setNavView(view)
+  })
+})
+
+el.btnSettings?.addEventListener('click', () => setSettingsOpen(true))
+el.btnSettingsClose?.addEventListener('click', () => setSettingsOpen(false))
+el.settingsScrim?.addEventListener('click', () => setSettingsOpen(false))
 
 el.btnMenu.addEventListener('click', () => setSidebarOpen(true))
 el.scrim.addEventListener('click', () => setSidebarOpen(false))
@@ -529,6 +1148,11 @@ el.inputFile.addEventListener('change', () => {
 el.btnPluginClose.addEventListener('click', () => setPluginOpen(false))
 el.pluginScrim.addEventListener('click', () => setPluginOpen(false))
 
+el.pluginSearch?.addEventListener('input', () => {
+  pluginQuery = el.pluginSearch.value
+  renderPluginPanel()
+})
+
 document.addEventListener(
   'pointerdown',
   (e) => {
@@ -550,6 +1174,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     setAttachMenuOpen(false)
     setPluginOpen(false)
+    setSettingsOpen(false)
   }
 })
 

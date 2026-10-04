@@ -1,5 +1,5 @@
 /* uniAI PWA — offline shell cache (UI only; chat needs network). */
-const CACHE = 'uniai-shell-v4'
+const CACHE = 'uniai-shell-v9'
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest']
 
 self.addEventListener('install', (event) => {

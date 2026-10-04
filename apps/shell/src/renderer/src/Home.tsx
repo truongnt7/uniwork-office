@@ -25,6 +25,7 @@ import { SettingsModal, type SettingsSectionId } from './SettingsModal'
 import { skillUpdateDue } from './IntegrationsPane'
 import { getPractice, isPracticeId, listPractices, type PracticeId } from '@uniwork/practice-core'
 import { AgentIntentBanner } from './AgentIntentBanner'
+import { NewChatPane } from './NewChatPane'
 import { PracticeHome } from './PracticeHome'
 import { TeacherHome } from './TeacherHome'
 
@@ -1133,6 +1134,8 @@ export function Home() {
   const [view, setView] = useState<'recent' | 'starred'>('recent')
   // Genspark web projects take over the content area (like a selected project)
   const [cloudMode, setCloudMode] = useState(false)
+  /** Natural-language start surface (desktop New chat). */
+  const [chatMode, setChatMode] = useState(true)
   // Profession practice workbench (teacher / legal / …)
   const [eduMode, setEduMode] = useState(false)
   const [eduSelectedId, setEduSelectedId] = useState<string | null>(null)
@@ -1180,6 +1183,23 @@ export function Home() {
     const name = on ? (s?.email ?? '').split('@')[0] : ''
     setAccountName(name ? name[0].toUpperCase() + name.slice(1) : '')
   }, [])
+
+  const goHomeList = (next: 'recent' | 'starred' = 'recent') => {
+    changeView(next)
+    setSelectedProjectId(null)
+    setCloudMode(false)
+    setEduMode(false)
+    setChatMode(false)
+  }
+
+  const goNewChat = () => {
+    setChatMode(true)
+    setCloudMode(false)
+    setEduMode(false)
+    setSelectedProjectId(null)
+    setSelected(new Set())
+    setRowMenu(null)
+  }
   const [greetAskKey] = useState(
     () => GREET_ASK_KEYS[Math.floor(Math.random() * GREET_ASK_KEYS.length)]!,
   )
@@ -2134,13 +2154,30 @@ export function Home() {
 
         <nav className="sidebar-nav">
           <button
-            className={`nav-item${view === 'recent' && !selectedProjectId && !cloudMode && !eduMode ? ' active' : ''}`}
-            onClick={() => {
-              changeView('recent')
-              setSelectedProjectId(null)
-              setCloudMode(false)
-              setEduMode(false)
-            }}
+            className={`nav-item${chatMode && !selectedProjectId && !cloudMode && !eduMode ? ' active' : ''}`}
+            onClick={goNewChat}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path
+                d="M3.5 3.5h9A1.5 1.5 0 0 1 14 5v5a1.5 1.5 0 0 1-1.5 1.5H8l-3 2.2V11.5H3.5A1.5 1.5 0 0 1 2 10V5a1.5 1.5 0 0 1 1.5-1.5z"
+                stroke="currentColor"
+                strokeWidth="1.3"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M5.5 7h5M5.5 9h3.2"
+                stroke="currentColor"
+                strokeWidth="1.3"
+                strokeLinecap="round"
+              />
+            </svg>
+            <span className="nav-label">
+              {lang === 'vi' ? 'Chat mới' : lang === 'zh' || lang === 'zh-TW' ? '新对话' : 'New chat'}
+            </span>
+          </button>
+          <button
+            className={`nav-item${view === 'recent' && !selectedProjectId && !cloudMode && !eduMode && !chatMode ? ' active' : ''}`}
+            onClick={() => goHomeList('recent')}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <circle cx="8" cy="8" r="6.2" stroke="currentColor" strokeWidth="1.3" />
@@ -2155,13 +2192,8 @@ export function Home() {
             <span className="nav-count">{navCounts.recent}</span>
           </button>
           <button
-            className={`nav-item${view === 'starred' && !selectedProjectId && !cloudMode && !eduMode ? ' active' : ''}`}
-            onClick={() => {
-              changeView('starred')
-              setSelectedProjectId(null)
-              setCloudMode(false)
-              setEduMode(false)
-            }}
+            className={`nav-item${view === 'starred' && !selectedProjectId && !cloudMode && !eduMode && !chatMode ? ' active' : ''}`}
+            onClick={() => goHomeList('starred')}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path
@@ -2180,6 +2212,7 @@ export function Home() {
               onClick={() => {
                 setEduMode(true)
                 setCloudMode(false)
+                setChatMode(false)
                 setSelectedProjectId(null)
                 setSelected(new Set())
                 setRowMenu(null)
@@ -2202,6 +2235,7 @@ export function Home() {
               onClick={() => {
                 setCloudMode(true)
                 setEduMode(false)
+                setChatMode(false)
                 setSelectedProjectId(null)
                 setSelected(new Set())
                 setRowMenu(null)
@@ -2246,6 +2280,7 @@ export function Home() {
               onSelect={(id) => {
                 setSelectedProjectId(id)
                 setEduMode(false)
+                setChatMode(false)
                 // reset list-selection state on any project switch (paths are
                 // shared between the plain view and project views)
                 setSelected(new Set())
@@ -2269,6 +2304,7 @@ export function Home() {
             onSelectPack={setEduSelectedId}
             onOpenPackFiles={(id) => {
               setEduMode(false)
+              setChatMode(false)
               setSelectedProjectId(id)
               setSelected(new Set())
               setRowMenu(null)
@@ -2285,6 +2321,7 @@ export function Home() {
             onSelectPack={setEduSelectedId}
             onOpenPackFiles={(id) => {
               setEduMode(false)
+              setChatMode(false)
               setSelectedProjectId(id)
               setSelected(new Set())
               setRowMenu(null)
@@ -2295,6 +2332,16 @@ export function Home() {
         )
       ) : cloudMode ? (
         <CloudProjectsView />
+      ) : chatMode ? (
+        <NewChatPane
+          practiceId={activePracticeId}
+          ensureWorkbench={() => {
+            setEduMode(true)
+            setCloudMode(false)
+            setChatMode(false)
+            setSelectedProjectId(null)
+          }}
+        />
       ) : (
         renderGlobalContent()
       )}
@@ -2305,6 +2352,7 @@ export function Home() {
           ensureWorkbench={() => {
             setEduMode(true)
             setCloudMode(false)
+            setChatMode(false)
             setSelectedProjectId(null)
           }}
         />

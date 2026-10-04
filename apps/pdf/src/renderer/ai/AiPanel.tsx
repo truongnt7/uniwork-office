@@ -78,6 +78,7 @@ export function AiPanel({
   preset,
   onRunDone,
   onClearSelection,
+  open = true,
 }: {
   api: PdfAppDeps
   /** Absolute path of the open PDF (chat history is keyed to it) */
@@ -89,7 +90,9 @@ export function AiPanel({
   onRunDone?: () => void
   /** The × on the scope chip: drop the cached selection so runs target the whole document */
   onClearSelection?: () => void
-}): ReactElement {
+  /** false keeps the instance mounted (chat state) but skips panel render work */
+  open?: boolean
+}): ReactElement | null {
   const { lang, t } = useI18n()
   const [chat, setChat] = useState<ChatEntry[]>([])
   const [prompt, setPrompt] = useState('')
@@ -574,7 +577,7 @@ export function AiPanel({
     phase === 'replying' ? t('aiReplying') : phase === 'working' ? t('aiWorking') : t('aiThinking')
 
   // scope chip data, read per render (App re-renders on every selection change)
-  const scopeSel = api.selection()
+  const scopeSel = open ? api.selection() : null
   const hasScopeSelection = !!scopeSel && scopeSel.text.trim().length > 0
 
   const selectionScopeQuote = (): AiScopeQuoteData | undefined => {
@@ -603,6 +606,10 @@ export function AiPanel({
       if (page !== null) apiRef.current.gotoPage(page)
     },
   }
+
+  // Collapsed: rail is owned by App; keep this instance mounted for chat state
+  // but skip building the heavy panel tree on every App re-render.
+  if (!open) return null
 
   return (
     <aside

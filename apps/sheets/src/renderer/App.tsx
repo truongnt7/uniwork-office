@@ -3609,33 +3609,40 @@ export function App(): React.JSX.Element {
     setAiScopeDismissed(false)
   }
 
+  // SelectionChanged can fire many times while dragging — coalesce ribbon/AI
+  // scope echo onto one rAF so React isn't updating every pointer sample.
+  const selectionFormatRafRef = useRef(0)
   refreshSelectionFormatRef.current = () => {
-    let range: ReturnType<ActiveWorkbook['getActiveRange']> | undefined
-    try {
-      range = univerRef.current?.univerAPI.getActiveWorkbook()?.getActiveRange()
-    } catch {
-      // Sheet changes briefly retain the previous sheet's selection. If that
-      // row or column is outside the new sheet, Univer rejects the stale
-      // range; the next selection event will refresh the ribbon normally.
-      return
-    }
-    if (!range) {
-      setSelectionFormat(null)
-      setActiveCellA1('')
-      clearAiScope()
-      return
-    }
-    setActiveCellA1(`${columnLetter(range.getColumn())}${range.getRow() + 1}`)
-    refreshAiScope(range)
-    let pattern: string
-    try {
-      pattern = range.getNumberFormat()
-    } catch {
-      // A disposing workbook can race the read; keep the last echo.
-      return
-    }
-    const next = toSelectionFormat(selectionStyle(range), pattern, selectionLinkTarget(range))
-    setSelectionFormat((previous) => (selectionFormatEquals(previous, next) ? previous : next))
+    if (selectionFormatRafRef.current) return
+    selectionFormatRafRef.current = requestAnimationFrame(() => {
+      selectionFormatRafRef.current = 0
+      let range: ReturnType<ActiveWorkbook['getActiveRange']> | undefined
+      try {
+        range = univerRef.current?.univerAPI.getActiveWorkbook()?.getActiveRange()
+      } catch {
+        // Sheet changes briefly retain the previous sheet's selection. If that
+        // row or column is outside the new sheet, Univer rejects the stale
+        // range; the next selection event will refresh the ribbon normally.
+        return
+      }
+      if (!range) {
+        setSelectionFormat(null)
+        setActiveCellA1('')
+        clearAiScope()
+        return
+      }
+      setActiveCellA1(`${columnLetter(range.getColumn())}${range.getRow() + 1}`)
+      refreshAiScope(range)
+      let pattern: string
+      try {
+        pattern = range.getNumberFormat()
+      } catch {
+        // A disposing workbook can race the read; keep the last echo.
+        return
+      }
+      const next = toSelectionFormat(selectionStyle(range), pattern, selectionLinkTarget(range))
+      setSelectionFormat((previous) => (selectionFormatEquals(previous, next) ? previous : next))
+    })
   }
 
   function selectionLinkTarget(

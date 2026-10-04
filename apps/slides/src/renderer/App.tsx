@@ -2460,7 +2460,8 @@ export function App() {
       setSelRtl(null)
       return
     }
-    const update = () => {
+    let raf = 0
+    const updateNow = () => {
       const focus = window.getSelection()?.focusNode
       const el = focus instanceof HTMLElement ? focus : focus?.parentElement
       if (!el?.isContentEditable) return
@@ -2482,9 +2483,19 @@ export function App() {
       const sizePt = Math.round(((parseFloat(cs.fontSize) * 72) / (96 * norm)) * 2) / 2
       setSelFont((v) => (v && v.family === family && v.sizePt === sizePt ? v : { family, sizePt }))
     }
-    update()
+    const update = () => {
+      if (raf) return
+      raf = requestAnimationFrame(() => {
+        raf = 0
+        updateNow()
+      })
+    }
+    updateNow()
     document.addEventListener('selectionchange', update)
-    return () => document.removeEventListener('selectionchange', update)
+    return () => {
+      if (raf) cancelAnimationFrame(raf)
+      document.removeEventListener('selectionchange', update)
+    }
   }, [inTextEdit])
 
   const onTextColor = useCallback((hex: string) => {

@@ -6524,6 +6524,7 @@ export default function App() {
             api={aiApi}
             filePath={filePath}
             preset={aiPreset}
+            open={!aiCollapsed}
             onCollapse={() => setAiCollapsed(true)}
             onRunDone={() => void autoSaveAfterAiRun()}
             onClearSelection={() => setAiSelection(null)}

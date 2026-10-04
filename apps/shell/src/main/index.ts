@@ -105,6 +105,7 @@ import {
   isOfficeAppUrl,
   parseOfficeAppUrl,
 } from '@uniwork/office-bridge'
+import { OFFICE_APP_KINDS } from '@uniwork/office-bridge-contracts'
 import {
   createAgentIntent,
   resolveAgentIntentFromText,
@@ -3062,11 +3063,21 @@ function handleOfficeAppUrl(raw: string): boolean {
 }
 
 async function openUniWorkUrl(raw: string): Promise<boolean> {
-  if (isAgentIntentUrl(raw)) {
-    return handleAgentIntentUrl(raw)
-  }
   if (isOfficeAppUrl(raw)) {
     return handleOfficeAppUrl(raw)
+  }
+  // Compat: uniwork://agent/intent?tab=docs|sheets|… → open UniOffice editor tab
+  if (isAgentIntentUrl(raw)) {
+    try {
+      const url = new URL(raw.trim())
+      const tab = (url.searchParams.get('tab') || '').toLowerCase()
+      if ((OFFICE_APP_KINDS as readonly string[]).includes(tab)) {
+        return handleOfficeAppUrl(`uniwork://office/app?kind=${tab}`)
+      }
+    } catch {
+      /* fall through to normal agent intent */
+    }
+    return handleAgentIntentUrl(raw)
   }
   revealShellWindow()
   return handleOfficeLaunchUrl(raw, officeBridgeDeps())

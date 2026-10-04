@@ -57,14 +57,33 @@
     return `uniwork://office/app?kind=${k}`
   }
 
+  /**
+   * Launch a custom-protocol URL. Prefer <a> click (keeps user gesture);
+   * iframe is a fallback for browsers that ignore programmatic <a> on custom schemes.
+   * Avoid assigning window.location — that unloads the PWA.
+   */
   function openDeepLink(url) {
-    const a = document.createElement('a')
-    a.href = url
-    a.rel = 'noopener'
-    a.style.display = 'none'
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
+    if (!url || typeof url !== 'string') return
+    try {
+      const a = document.createElement('a')
+      a.href = url
+      a.rel = 'noopener'
+      a.style.display = 'none'
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+    } catch {
+      /* ignore */
+    }
+    try {
+      const iframe = document.createElement('iframe')
+      iframe.style.cssText = 'display:none;width:0;height:0;border:0'
+      iframe.src = url
+      document.body.appendChild(iframe)
+      window.setTimeout(() => iframe.remove(), 2500)
+    } catch {
+      /* ignore */
+    }
   }
 
   function openMediaDb() {
@@ -240,6 +259,15 @@
 
     onStatus('app')
     openDeepLink(officeAppUrl(doc.kind))
+    // Compat second shot: agent/intent?tab=docs|sheets|… (shell maps to editor)
+    window.setTimeout(() => {
+      const k = ['docs', 'sheets', 'slides', 'pdf', 'markdown', 'html'].includes(doc.kind)
+        ? doc.kind
+        : 'docs'
+      openDeepLink(
+        `uniwork://agent/intent?tab=${encodeURIComponent(k)}&action=open&source=pwa&summary=${encodeURIComponent(`Open ${k}`)}`,
+      )
+    }, 350)
     window.setTimeout(() => {
       onStatus('fallback')
       prefs.onFallback?.()

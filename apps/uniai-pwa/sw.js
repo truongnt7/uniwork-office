@@ -1,10 +1,11 @@
 /* uniAI PWA — offline shell cache (UI only; chat needs network). */
-const CACHE = 'uniai-shell-v14'
+const CACHE = 'uniai-shell-v16'
 const ASSETS = [
   './',
   './index.html',
   './fonts.css',
   './styles.css',
+  './plans.js',
   './office-hub.js',
   './app.js',
   './manifest.webmanifest',

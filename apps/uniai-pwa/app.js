@@ -36,7 +36,8 @@ const DEFAULT_PREFS = {
   avatarId: 'ai',
   accountName: 'Người dùng uniAI',
   email: '',
-  plan: 'Free',
+  /** @type {'free'|'personal'|'pro'|'team'} */
+  plan: 'free',
   usageTokens: 1240,
   usageLimit: 10000,
   enterToSend: true,
@@ -248,7 +249,11 @@ function loadPrefs() {
   try {
     const raw = localStorage.getItem(PREFS_KEY)
     if (!raw) return { ...DEFAULT_PREFS }
-    return { ...DEFAULT_PREFS, ...JSON.parse(raw) }
+    const merged = { ...DEFAULT_PREFS, ...JSON.parse(raw) }
+    merged.plan = normalizePlanId(merged.plan)
+    const catalog = window.UniAIPlans?.getPlan?.(merged.plan)
+    if (catalog) merged.usageLimit = catalog.tokensMonth
+    return merged
   } catch {
     return { ...DEFAULT_PREFS }
   }
@@ -445,19 +450,77 @@ function intentUrl(tab, summary) {
 }
 
 function openDeepLink(url) {
-  if (Office()?.openDeepLink) Office().openDeepLink(url)
-  else {
+  if (!url) return
+  if (Office()?.openDeepLink) {
+    Office().openDeepLink(url)
+    return
+  }
+  try {
     const a = document.createElement('a')
     a.href = url
+    a.rel = 'noopener'
     a.style.display = 'none'
     document.body.appendChild(a)
     a.click()
     a.remove()
+  } catch {
+    /* ignore */
+  }
+  try {
+    const iframe = document.createElement('iframe')
+    iframe.style.cssText = 'display:none;width:0;height:0;border:0'
+    iframe.src = url
+    document.body.appendChild(iframe)
+    window.setTimeout(() => iframe.remove(), 2500)
+  } catch {
+    /* ignore */
   }
 }
 
 function officeAppDeepLink(kind) {
-  return Office()?.officeAppUrl?.(kind) || `uniwork://office/app?kind=${kind}`
+  const k = ['docs', 'sheets', 'slides', 'pdf', 'markdown', 'html'].includes(kind)
+    ? kind
+    : 'docs'
+  // Prefer office/app; agent/intent?tab=<kind> is also accepted by updated shell.
+  return Office()?.officeAppUrl?.(k) || `uniwork://office/app?kind=${k}`
+}
+
+/** Fire both protocol forms so slightly older handlers still have a chance. */
+function launchOfficeApp(kind) {
+  const k = ['docs', 'sheets', 'slides', 'pdf', 'markdown', 'html'].includes(kind)
+    ? kind
+    : 'docs'
+  openDeepLink(`uniwork://office/app?kind=${k}`)
+  window.setTimeout(() => {
+    openDeepLink(
+      `uniwork://agent/intent?tab=${encodeURIComponent(k)}&action=open&source=pwa&summary=${encodeURIComponent(`Open ${k}`)}`,
+    )
+  }, 350)
+}
+
+/**
+ * Open UniOffice for a library doc — never no-op if office-hub.js failed to load.
+ * @param {{ kind: string, workProductId?: string, name?: string }} doc
+ * @param {{ onStatus?: (s: string) => void, onFallback?: () => void }} [hooks]
+ */
+async function openOfficeForDoc(doc, hooks = {}) {
+  const onStatus = hooks.onStatus || (() => {})
+  const hub = Office()
+  if (hub?.openInUniWorkOffice) {
+    return hub.openInUniWorkOffice(doc, {
+      apiBase: prefs.officeApiBase,
+      accessToken: prefs.officeAccessToken,
+      onStatus,
+      onFallback: hooks.onFallback,
+    })
+  }
+  onStatus('app')
+  launchOfficeApp(doc.kind)
+  window.setTimeout(() => {
+    onStatus('fallback')
+    hooks.onFallback?.()
+  }, 2500)
+  return { mode: 'app' }
 }
 
 function renderChips() {
@@ -563,7 +626,7 @@ function renderPluginPanel() {
         togglePlugin('office', app.id, app.label, app.hint),
       )
       item.addEventListener('dblclick', () => {
-        openDeepLink(officeAppDeepLink(app.id))
+        launchOfficeApp(app.id)
       })
       rail.appendChild(item)
     }
@@ -751,8 +814,7 @@ function renderOfficeHub() {
       <span>${escapeHtml(app.hint)}</span>
     `
     btn.addEventListener('click', () => {
-      openDeepLink(officeAppDeepLink(app.id))
-      showOfficeInstallFallback()
+      launchOfficeApp(app.id)
     })
     rail.appendChild(btn)
   }
@@ -859,7 +921,7 @@ function renderOfficeDocDetail(doc) {
   fallback.className = 'office-doc-fallback'
   fallback.hidden = true
   fallback.innerHTML = `
-    <p>Chưa mở được UniWork Office? Cài desktop rồi thử lại.</p>
+    <p>Chưa mở được? Cần UniWork Office desktop đã đăng ký protocol <code>uniwork://</code> (bản mới có <code>office/app</code>). Rebuild/cài lại shell rồi thử.</p>
     <a href="https://github.com/truongnt7/uniwork-office/releases/latest" target="_blank" rel="noopener">Tải UniWork Office</a>
   `
   const retry = document.createElement('button')
@@ -872,29 +934,26 @@ function renderOfficeDocDetail(doc) {
     status.hidden = false
     status.textContent = 'Đang mở UniWork Office…'
     fallback.hidden = true
-    void Office()
-      ?.openInUniWorkOffice?.(doc, {
-        apiBase: prefs.officeApiBase,
-        accessToken: prefs.officeAccessToken,
-        onStatus: (s) => {
-          if (s === 'opening') status.textContent = 'Tạo phiên Office Bridge…'
-          if (s === 'app') status.textContent = 'Mở app UniOffice trên máy…'
-          if (s === 'fallback') {
-            status.textContent = 'Nếu app không hiện, có thể chưa cài Office.'
-            fallback.hidden = false
-          }
-          if (s === 'failed') status.textContent = 'Không tạo được phiên (API / quyền / token).'
-        },
-        onFallback: () => {
+    void openOfficeForDoc(doc, {
+      onStatus: (s) => {
+        if (s === 'opening') status.textContent = 'Tạo phiên Office Bridge…'
+        if (s === 'app') status.textContent = 'Mở app UniOffice trên máy…'
+        if (s === 'fallback') {
+          status.textContent =
+            'Nếu app không hiện: cài/cập nhật UniWork Office (cần bản hỗ trợ office/app) rồi thử lại.'
           fallback.hidden = false
-        },
-      })
-      .catch(() => {
-        status.textContent =
-          'Bridge lỗi — kiểm tra API + token trong Cài đặt, hoặc mở app trống.'
+        }
+        if (s === 'failed') status.textContent = 'Không tạo được phiên (API / quyền / token).'
+      },
+      onFallback: () => {
         fallback.hidden = false
-        openDeepLink(officeAppDeepLink(doc.kind))
-      })
+      },
+    }).catch(() => {
+      status.textContent =
+        'Không mở được — kiểm tra API/token hoặc cập nhật UniWork Office desktop.'
+      fallback.hidden = false
+      launchOfficeApp(doc.kind)
+    })
   }
   openBtn.addEventListener('click', runOpen)
   retry.addEventListener('click', runOpen)
@@ -906,8 +965,7 @@ function renderOfficeDocDetail(doc) {
     appOnly.className = 'btn-secondary-lite'
     appOnly.textContent = `Mở ${doc.kind} trống`
     appOnly.addEventListener('click', () => {
-      openDeepLink(officeAppDeepLink(doc.kind))
-      showOfficeInstallFallback()
+      launchOfficeApp(doc.kind)
     })
     actions.appendChild(appOnly)
   }
@@ -1056,9 +1114,6 @@ async function removeOfficeDoc(id) {
   renderOfficeDocs()
 }
 
-function showOfficeInstallFallback() {
-  /* lightweight: status is per-doc; hub app open uses toast-less delay */
-}
 
 /** @returns {HTMLElement} */
 function renderTasksHub() {
@@ -1323,15 +1378,25 @@ function renderSettings() {
         <input id="setEmail" type="email" placeholder="you@uniwork.app" value="${escapeHtml(prefs.email)}" />
       </div>
       <div class="settings-row">
-        <div><span class="settings-label">Gói đăng ký</span><small>${escapeHtml(prefs.plan)} · nâng cấp trên UniWork</small></div>
-        <button type="button" class="settings-link" id="btnUpgrade">Nâng cấp</button>
+        <div>
+          <span class="settings-label">Gói đăng ký</span>
+          <small>${escapeHtml(window.UniAIPlans?.getPlan?.(normalizePlanId(prefs.plan))?.nameVi || prefs.plan)} · chọn gói bên dưới (xem thử local)</small>
+        </div>
+        <a class="settings-link" href="https://uniwork.app" target="_blank" rel="noopener" id="btnUpgrade">Thanh toán</a>
       </div>
       <div class="settings-row">
         <div>
           <span class="settings-label">Mức sử dụng &amp; giới hạn</span>
-          <small>${prefs.usageTokens.toLocaleString()} / ${prefs.usageLimit.toLocaleString()} token tháng này</small>
+          <small>${prefs.usageTokens.toLocaleString('vi-VN')} / ${prefs.usageLimit.toLocaleString('vi-VN')} token tháng này</small>
         </div>
         <div class="usage-bar" title="${pct}%"><i style="width:${pct}%"></i></div>
+      </div>
+      <div class="settings-row settings-row-stack">
+        <div>
+          <span class="settings-label">Bảng giá UniWork Office</span>
+          <small>Desktop trên máy · Bridge cloud từ Personal · Team theo ghế</small>
+        </div>
+        <div class="plan-grid" id="planGrid"></div>
       </div>
     </section>
 
@@ -1450,9 +1515,31 @@ function renderSettings() {
     prefs.officeAccessToken = /** @type {HTMLInputElement} */ (e.target).value.trim()
     persistPrefs()
   })
-  el.settingsBody.querySelector('#btnUpgrade')?.addEventListener('click', () => {
-    window.open('https://uniwork.app', '_blank', 'noopener,noreferrer')
-  })
+  const planGrid = el.settingsBody.querySelector('#planGrid')
+  if (planGrid && window.UniAIPlans?.PLANS) {
+    const current = normalizePlanId(prefs.plan)
+    for (const plan of window.UniAIPlans.PLANS) {
+      const card = document.createElement('button')
+      card.type = 'button'
+      card.className = `plan-card${plan.id === current ? ' is-on' : ''}`
+      card.innerHTML = `
+        <header>
+          <strong>${escapeHtml(plan.nameVi)}</strong>
+          ${plan.id === current ? '<span class="plan-badge">Đang dùng</span>' : ''}
+        </header>
+        <p class="plan-price">${escapeHtml(window.UniAIPlans.priceLabel(plan, 'vi'))}</p>
+        <p class="plan-blurb">${escapeHtml(plan.blurbVi)}</p>
+        <ul>${plan.features.map((f) => `<li>${escapeHtml(f)}</li>`).join('')}</ul>
+      `
+      card.addEventListener('click', () => {
+        applyPlanQuota(plan.id)
+        persistPrefs()
+        renderSettings()
+      })
+      planGrid.appendChild(card)
+    }
+  }
+
   el.settingsBody.querySelectorAll('.settings-toggle').forEach((btn) => {
     btn.addEventListener('click', () => {
       const key = btn.getAttribute('data-pref')
@@ -1468,6 +1555,19 @@ function renderSettings() {
 function persistPrefs() {
   savePrefs(prefs)
   applyPrefs()
+}
+
+function normalizePlanId(raw) {
+  const id = String(raw || 'free').toLowerCase()
+  if (id === 'free' || id === 'personal' || id === 'pro' || id === 'team') return id
+  return 'free'
+}
+
+function applyPlanQuota(planId) {
+  const plan = window.UniAIPlans?.getPlan?.(normalizePlanId(planId))
+  if (!plan) return
+  prefs.plan = plan.id
+  prefs.usageLimit = plan.tokensMonth
 }
 
 function renderSuggestions(show) {

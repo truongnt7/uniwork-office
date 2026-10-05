@@ -52,9 +52,12 @@ export function CalendarPane({
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()))
   const [selected, setSelected] = useState(todayIso)
   const [title, setTitle] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   useEffect(() => {
     setItems(readCalendar(practiceId))
+    setEditingId(null)
+    setTitle('')
   }, [practiceId])
 
   const persist = (next: WbCalendarItem[]) => {
@@ -65,6 +68,18 @@ export function CalendarPane({
   const setViewMode = (mode: CalendarViewMode) => {
     setView(mode)
     writeCalendarView(mode)
+  }
+
+  const clearForm = () => {
+    setEditingId(null)
+    setTitle('')
+  }
+
+  const startEdit = (it: WbCalendarItem) => {
+    setEditingId(it.id)
+    setTitle(it.title)
+    setSelected(it.date)
+    setCursor(startOfMonth(new Date(it.date + 'T12:00:00')))
   }
 
   const byDate = useMemo(() => {
@@ -123,20 +138,46 @@ export function CalendarPane({
     return groups
   }, [items])
 
-  const add = () => {
+  const save = () => {
     const t = title.trim()
     if (!t || !selected) return
-    persist(
-      [{ id: newId(), date: selected, title: t }, ...items].sort((a, b) => a.date.localeCompare(b.date)),
-    )
-    setTitle('')
+    if (editingId) {
+      persist(
+        items
+          .map((x) =>
+            x.id === editingId ? { ...x, date: selected, title: t } : x,
+          )
+          .sort((a, b) => a.date.localeCompare(b.date)),
+      )
+    } else {
+      persist(
+        [{ id: newId(), date: selected, title: t }, ...items].sort((a, b) =>
+          a.date.localeCompare(b.date),
+        ),
+      )
+    }
+    clearForm()
   }
 
   const toggleDone = (id: string) => {
     persist(items.map((x) => (x.id === id ? { ...x, done: !x.done } : x)))
   }
 
-  const remove = (id: string) => persist(items.filter((x) => x.id !== id))
+  const remove = (id: string) => {
+    if (editingId === id) clearForm()
+    persist(items.filter((x) => x.id !== id))
+  }
+
+  const renderItemActions = (it: WbCalendarItem) => (
+    <div className="teacher-chip-row">
+      <button type="button" className="btn btn-secondary" onClick={() => startEdit(it)}>
+        {label('Sửa', 'Edit')}
+      </button>
+      <button type="button" className="btn btn-secondary" onClick={() => remove(it.id)}>
+        {label('Xóa', 'Delete')}
+      </button>
+    </div>
+  )
 
   const openCount = items.filter((i) => !i.done).length
   const monthCount = items.filter((i) => i.date.startsWith(toIso(cursor).slice(0, 7))).length
@@ -225,13 +266,20 @@ export function CalendarPane({
             onChange={(e) => setTitle(e.target.value)}
             placeholder={label('VD: Nộp giáo án tuần 12', 'e.g. Submit week-12 plan')}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') add()
+              if (e.key === 'Enter') save()
             }}
           />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm', 'Add')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={save}>
+            {editingId ? label('Lưu', 'Save') : label('Thêm', 'Add')}
+          </button>
+          {editingId ? (
+            <button type="button" className="btn btn-secondary" onClick={clearForm}>
+              {label('Huỷ sửa', 'Cancel edit')}
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {view === 'calendar' ? (
@@ -327,9 +375,7 @@ export function CalendarPane({
                         <strong>{it.title}</strong>
                       </div>
                     </label>
-                    <button type="button" className="btn btn-secondary" onClick={() => remove(it.id)}>
-                      {label('Xóa', 'Delete')}
-                    </button>
+                    {renderItemActions(it)}
                   </li>
                 ))}
               </ul>
@@ -381,13 +427,7 @@ export function CalendarPane({
                             <strong>{it.title}</strong>
                           </div>
                         </label>
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          onClick={() => remove(it.id)}
-                        >
-                          {label('Xóa', 'Delete')}
-                        </button>
+                        {renderItemActions(it)}
                       </li>
                     ))}
                   </ul>

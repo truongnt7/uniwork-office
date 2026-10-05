@@ -183,6 +183,7 @@ interface ExcelShellProps {
   /** Send the composer text, or the given instruction when provided (Retry also
    *  resends that message's original attachments and passes the failed bubble's
    *  chat index so the send replaces it in place) */
+  readonly aiPreset?: { text: string; nonce: number; autoRun?: boolean } | null
   readonly onSend: (
     instruction?: string,
     attachments?: readonly AttachmentMeta[],
@@ -353,6 +354,7 @@ export function ExcelShell({
   onGetConsolidateDefault,
   onApplyHeaderFooter,
   onPromptChange,
+  aiPreset = null,
   onSend,
   onStop,
   onNewChat,
@@ -392,6 +394,16 @@ export function ExcelShell({
   useEffect(() => {
     localStorage.setItem('ai-sheets-show-ai', isCopilotOpen ? '1' : '0')
   }, [isCopilotOpen])
+  useEffect(() => {
+    if (!aiPreset?.text) return
+    setIsCopilotOpen(true)
+    if (aiPreset.autoRun === false) {
+      onPromptChange(aiPreset.text)
+      return
+    }
+    const timer = window.setTimeout(() => onSend(aiPreset.text), 120)
+    return () => window.clearTimeout(timer)
+  }, [aiPreset?.nonce])
   const [showFormatCells, setShowFormatCells] = useState(false)
   const [axisSizeTarget, setAxisSizeTarget] = useState<'row' | 'col' | null>(null)
   const [showLinkDialog, setShowLinkDialog] = useState(false)

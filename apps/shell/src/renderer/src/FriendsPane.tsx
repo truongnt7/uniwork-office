@@ -68,6 +68,7 @@ export function FriendsPane({ vi }: { vi: boolean }): ReactElement {
 function PeopleSub({ vi }: { vi: boolean }): ReactElement {
   const label = (a: string, b: string) => (vi ? a : b)
   const [items, setItems] = useState<WbFriend[]>(() => readFriends())
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [nickname, setNickname] = useState('')
   const [howMet, setHowMet] = useState('')
@@ -82,23 +83,8 @@ function PeopleSub({ vi }: { vi: boolean }): ReactElement {
     writeFriends(next)
   }
 
-  const add = () => {
-    const n = name.trim()
-    if (!n) return
-    persist([
-      {
-        id: newId(),
-        name: n,
-        ...(nickname.trim() ? { nickname: nickname.trim() } : {}),
-        ...(howMet.trim() ? { howMet: howMet.trim() } : {}),
-        ...(birthday ? { birthday } : {}),
-        ...(phone.trim() ? { phone: phone.trim() } : {}),
-        ...(email.trim() ? { email: email.trim() } : {}),
-        ...(social.trim() ? { social: social.trim() } : {}),
-        ...(note.trim() ? { note: note.trim() } : {}),
-      },
-      ...items,
-    ])
+  const clearForm = () => {
+    setEditingId(null)
     setName('')
     setNickname('')
     setHowMet('')
@@ -107,6 +93,45 @@ function PeopleSub({ vi }: { vi: boolean }): ReactElement {
     setEmail('')
     setSocial('')
     setNote('')
+  }
+
+  const startEdit = (it: WbFriend) => {
+    setEditingId(it.id)
+    setName(it.name)
+    setNickname(it.nickname ?? '')
+    setHowMet(it.howMet ?? '')
+    setBirthday(it.birthday ?? '')
+    setPhone(it.phone ?? '')
+    setEmail(it.email ?? '')
+    setSocial(it.social ?? '')
+    setNote(it.note ?? '')
+  }
+
+  const save = () => {
+    const n = name.trim()
+    if (!n) return
+    const row: WbFriend = {
+      id: editingId ?? newId(),
+      name: n,
+      ...(nickname.trim() ? { nickname: nickname.trim() } : {}),
+      ...(howMet.trim() ? { howMet: howMet.trim() } : {}),
+      ...(birthday ? { birthday } : {}),
+      ...(phone.trim() ? { phone: phone.trim() } : {}),
+      ...(email.trim() ? { email: email.trim() } : {}),
+      ...(social.trim() ? { social: social.trim() } : {}),
+      ...(note.trim() ? { note: note.trim() } : {}),
+    }
+    if (editingId) {
+      persist(items.map((x) => (x.id === editingId ? row : x)))
+    } else {
+      persist([row, ...items])
+    }
+    clearForm()
+  }
+
+  const remove = (id: string) => {
+    if (editingId === id) clearForm()
+    persist(items.filter((x) => x.id !== id))
   }
 
   return (
@@ -125,7 +150,7 @@ function PeopleSub({ vi }: { vi: boolean }): ReactElement {
             onChange={(e) => setName(e.target.value)}
             placeholder={label('VD: Trần Minh', 'e.g. Minh Tran')}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') add()
+              if (e.key === 'Enter') save()
             }}
           />
         </label>
@@ -165,29 +190,50 @@ function PeopleSub({ vi }: { vi: boolean }): ReactElement {
             placeholder={label('Sở thích, món quà hay…', 'Interests, gift ideas…')}
           />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm bạn', 'Add friend')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={save}>
+            {editingId ? label('Lưu bạn', 'Save friend') : label('Thêm bạn', 'Add friend')}
+          </button>
+          {editingId ? (
+            <button type="button" className="btn btn-secondary" onClick={clearForm}>
+              {label('Huỷ sửa', 'Cancel edit')}
+            </button>
+          ) : null}
+        </div>
       </div>
-      <ItemList
-        empty={label('Chưa có bạn bè.', 'No friends yet.')}
-        items={items.map((it) => ({
-          id: it.id,
-          title: it.nickname ? `${it.name} (${it.nickname})` : it.name,
-          meta: [
-            it.howMet,
-            it.birthday ? `${label('SN', 'BD')}: ${it.birthday}` : null,
-            it.phone,
-            it.email,
-            it.social,
-          ]
-            .filter(Boolean)
-            .join(' · '),
-          note: it.note,
-        }))}
-        onDelete={(id) => persist(items.filter((x) => x.id !== id))}
-        vi={vi}
-      />
+      <ul className="wb-module-list">
+        {items.length === 0 ? (
+          <li className="teacher-empty">{label('Chưa có bạn bè.', 'No friends yet.')}</li>
+        ) : (
+          items.map((it) => (
+            <li key={it.id} className="wb-module-row">
+              <div>
+                <strong>{it.nickname ? `${it.name} (${it.nickname})` : it.name}</strong>
+                <span>
+                  {[
+                    it.howMet,
+                    it.birthday ? `${label('SN', 'BD')}: ${it.birthday}` : null,
+                    it.phone,
+                    it.email,
+                    it.social,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </span>
+                {it.note ? <span>{it.note}</span> : null}
+              </div>
+              <div className="teacher-chip-row">
+                <button type="button" className="btn btn-secondary" onClick={() => startEdit(it)}>
+                  {label('Sửa', 'Edit')}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={() => remove(it.id)}>
+                  {label('Xóa', 'Delete')}
+                </button>
+              </div>
+            </li>
+          ))
+        )}
+      </ul>
     </>
   )
 }

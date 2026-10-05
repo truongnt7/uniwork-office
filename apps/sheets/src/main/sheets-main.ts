@@ -1906,6 +1906,19 @@ export function setSheetsNewBlank(): void {
   pendingNewBlank = true
 }
 
+export interface SheetsAiPresetPayload {
+  text: string
+  autoRun?: boolean
+  displayText?: string
+}
+
+/** Home / My AI preset waiting for a sheets tab */
+const pendingSheetsAiPresets = new Map<number, SheetsAiPresetPayload>()
+
+export function queueSheetsAiPreset(wcId: number, preset: SheetsAiPresetPayload): void {
+  pendingSheetsAiPresets.set(wcId, preset)
+}
+
 // capturePage forces a renderer frame even when the window is occluded or on
 // another Space, unlike CDP Page.captureScreenshot / macOS screencapture.
 function startCaptureServer(): void {
@@ -2391,6 +2404,12 @@ export function registerSheetsIpc(): void {
       return true
     }
     return false
+  })
+
+  ipcMain.handle('sheets:consume-ai-preset', (event): SheetsAiPresetPayload | null => {
+    const preset = pendingSheetsAiPresets.get(event.sender.id) ?? null
+    pendingSheetsAiPresets.delete(event.sender.id)
+    return preset
   })
 
   /**

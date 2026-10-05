@@ -270,6 +270,7 @@ export interface DesktopApi {
   consumeAiDocContent(): Promise<AiDocContent | null>
   /** one-shot Teacher / Home AI preset for this tab */
   consumeAiPreset(): Promise<AiPresetPayload | null>
+  onAiPreset(handler: (preset: AiPresetPayload) => void): () => void
   /** Headless export mode: the path and format this hidden renderer must export, null in normal use */
   consumeHeadlessExport(): Promise<HeadlessExportTarget | null>
   /** Headless export mode: report the export outcome so the main process can quit */

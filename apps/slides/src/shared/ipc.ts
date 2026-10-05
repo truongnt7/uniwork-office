@@ -1168,6 +1168,10 @@ export interface SlidesApi {
   consumePendingOpen: (fitWidthPx: number) => Promise<OpenResult | null>
   /** one-shot Teacher / Home AI preset for this slides tab */
   consumeAiPreset: () => Promise<{ text: string; autoRun?: boolean; displayText?: string } | null>
+  /** Live push of an AI preset while the tab is already open */
+  onAiPreset: (
+    handler: (preset: { text: string; autoRun?: boolean; displayText?: string }) => void,
+  ) => () => void
   /** Headless export mode: the PDF path this hidden renderer must export to, null in normal use */
   consumeHeadlessExport: () => Promise<string | null>
   /** Headless export mode: report the export outcome so the main process can quit */

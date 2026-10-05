@@ -1,24 +1,66 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
-import {
-  createAgentIntent,
-  resolveAgentIntentFromText,
-  type AgentIntent,
-  type PracticeId,
-} from '@uniwork/practice-core'
+import type { PracticeId } from '@uniwork/practice-core'
+import { AiTypingIndicator, IconStop } from '@genoffice/ui'
 import { applyAgentIntent } from './agent-intent-apply'
 import { emitAgentIntentNavigate } from './agent-intent-bus'
+import { buildMyAiContextPack, type MyAiContextPack } from './context-manager'
 import { useI18n } from './locale'
+import { appendMyAiAudit } from './my-ai-audit'
+import {
+  collectAttachmentTextBlock,
+  collectImageAttachments,
+  formatAttachmentSize,
+  isImageAttachment,
+  mergeAttachmentResult,
+  type AttachmentMeta,
+} from './my-ai-attachments'
+import { describeConsent, routeNeedsConsent } from './my-ai-consent'
+import { clearMyAiHistory, loadMyAiHistory, saveMyAiHistory } from './my-ai-history'
+import { practiceMyAiChips } from './my-ai-playbooks'
+import {
+  isAmbiguousRecentMatch,
+  officeAppLabel,
+  rankRecents,
+  rankRecentsScored,
+  routeMyAiText,
+  wantsLocalContext,
+  type MyAiRoute,
+  type MyAiStep,
+  type OfficeApp,
+} from './my-ai-router'
+import { streamMyAiReply } from './my-ai-stream'
+import type { RecentEntry } from '../../shared/home-api'
+import { FILE_EXCERPT_MAX_FILES, formatExcerptsForPrompt } from '../../shared/file-excerpt'
 
 type ChatRole = 'user' | 'assistant' | 'system'
+
+interface ChatChoice {
+  id: string
+  label: string
+  /** Path to open, prompt text, or consent decision */
+  kind: 'open_path' | 'prompt' | 'confirm' | 'cancel'
+  value: string
+}
 
 interface ChatMessage {
   id: string
   role: ChatRole
   text: string
+  choices?: ChatChoice[]
+  /** Choices already used / superseded */
+  choicesResolved?: boolean
+  contextUsed?: boolean
+  streaming?: boolean
+  attachments?: AttachmentMeta[]
 }
 
-type FileApp = 'docs' | 'sheets' | 'slides'
+const PASTE_MIME_EXT: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+}
 
 interface Suggestion {
   id: string
@@ -30,25 +72,53 @@ interface Suggestion {
 
 const SUGGESTIONS: readonly Suggestion[] = [
   {
+    id: 'draft-doc',
+    labelVi: 'Soạn Word theo yêu cầu',
+    labelEn: 'Draft Word from brief',
+    promptVi: 'Soạn văn bản Word: thư mời họp khách hàng tuần tới',
+    promptEn: 'Draft a Word doc: client meeting invitation for next week',
+  },
+  {
+    id: 'open-file',
+    labelVi: 'Mở file gần đây',
+    labelEn: 'Open a recent file',
+    promptVi: 'Mở file báo cáo',
+    promptEn: 'Open report file',
+  },
+  {
+    id: 'search',
+    labelVi: 'Tìm file',
+    labelEn: 'Find a file',
+    promptVi: 'Tìm file hợp đồng',
+    promptEn: 'Find contract file',
+  },
+  {
+    id: 'sum',
+    labelVi: 'Tóm tắt file gần đây',
+    labelEn: 'Summarize recents',
+    promptVi: 'Tóm tắt file gần đây',
+    promptEn: 'Summarize recent files',
+  },
+  {
     id: 'task',
     labelVi: 'Thêm việc',
     labelEn: 'Add a task',
-    promptVi: 'Thêm công việc chuẩn bị báo cáo tuần',
-    promptEn: 'Add a task to prepare the weekly report',
+    promptVi: 'Thêm công việc gọi khách lúc 15 giờ',
+    promptEn: 'Add a task to call the client at 3pm',
   },
   {
-    id: 'note',
-    labelVi: 'Ghim ghi chú',
-    labelEn: 'Pin a note',
-    promptVi: 'Ghi chú ý tưởng họp khách hàng ngày mai',
-    promptEn: 'Note ideas for tomorrow’s client meeting',
+    id: 'slide',
+    labelVi: 'Tạo Slide AI',
+    labelEn: 'AI Slides',
+    promptVi: 'Tạo bài thuyết trình về kế hoạch quý',
+    promptEn: 'Create a presentation about the quarterly plan',
   },
   {
-    id: 'email',
-    labelVi: 'Soạn email',
-    labelEn: 'Draft email',
-    promptVi: 'Tạo nháp email follow-up sau buổi demo',
-    promptEn: 'Create an email draft for post-demo follow-up',
+    id: 'pdf',
+    labelVi: 'Tạo PDF',
+    labelEn: 'New PDF',
+    promptVi: 'Tạo file PDF mới',
+    promptEn: 'Create a new PDF file',
   },
   {
     id: 'cal',
@@ -58,32 +128,32 @@ const SUGGESTIONS: readonly Suggestion[] = [
     promptEn: 'Open my calendar tab',
   },
   {
-    id: 'doc',
-    labelVi: 'Tạo Word',
-    labelEn: 'New Word',
-    promptVi: 'Tạo văn bản Word mới',
-    promptEn: 'Create a new Word document',
+    id: 'multi',
+    labelVi: '1 câu = nhiều bước',
+    labelEn: 'One shot, multi-step',
+    promptVi: 'Soạn báo giá Word và thêm công việc follow-up khách, mở tab Clients',
+    promptEn: 'Draft a Word quote and add a follow-up task, open Clients tab',
   },
   {
-    id: 'sheet',
-    labelVi: 'Tạo Excel',
-    labelEn: 'New Excel',
-    promptVi: 'Tạo bảng tính Excel mới',
-    promptEn: 'Create a new Excel spreadsheet',
+    id: 'continue',
+    labelVi: 'Tiếp tục tab đang mở',
+    labelEn: 'Continue open tab',
+    promptVi: 'Tiếp tục trên file đang mở: làm rõ phần kết luận',
+    promptEn: 'Continue on the open file: clarify the conclusion section',
   },
   {
-    id: 'slide',
-    labelVi: 'Tạo Slide',
-    labelEn: 'New Slides',
-    promptVi: 'Tạo bài thuyết trình mới',
-    promptEn: 'Create a new presentation',
+    id: 'sum-active',
+    labelVi: 'Tóm tắt tab đang mở',
+    labelEn: 'Summarize open tab',
+    promptVi: 'Tóm tắt file đang mở',
+    promptEn: 'Summarize the open file',
   },
   {
-    id: 'desk',
-    labelVi: 'Không gian của tôi',
-    labelEn: 'My Space',
-    promptVi: 'Mở không gian của tôi',
-    promptEn: 'Open My Space',
+    id: 'sheet-ai',
+    labelVi: 'Tạo Excel AI',
+    labelEn: 'AI Excel',
+    promptVi: 'Tạo bảng Excel theo dõi doanh số tháng này',
+    promptEn: 'Create an Excel sheet to track this month’s sales',
   },
 ]
 
@@ -91,42 +161,56 @@ function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
 }
 
-function resolveNewFile(text: string): FileApp | null {
-  const lower = text.toLowerCase()
-  const wantsCreate =
-    /\b(tạo|create|new|mở blank|soạn)\b/i.test(lower) ||
-    lower.includes('văn bản mới') ||
-    lower.includes('bảng tính mới') ||
-    lower.includes('thuyết trình mới')
-  if (!wantsCreate) return null
-  if (
-    /\b(excel|xlsx|spreadsheet|sheets?)\b/i.test(lower) ||
-    lower.includes('bảng tính') ||
-    lower.includes('bảng excel')
-  ) {
-    return 'sheets'
+async function loadRecents(limit = 80) {
+  const page = await window.aiOffice.recents({ offset: 0, limit })
+  return page.entries.filter((e) => !e.missing)
+}
+
+async function createOfficeFile(app: OfficeApp, brief?: string): Promise<string> {
+  const preset = brief?.trim()
+    ? { text: brief.trim(), autoRun: true as const, displayText: brief.trim().slice(0, 120) }
+    : undefined
+
+  if (app === 'docs') {
+    if (preset) await window.aiOffice.newDoc({ aiPreset: preset })
+    else await window.aiOffice.newDoc()
+    return preset ? 'docs+ai' : 'docs'
   }
-  if (
-    /\b(pptx|powerpoint|slides?|deck)\b/i.test(lower) ||
-    lower.includes('thuyết trình') ||
-    lower.includes('bài giảng slide')
-  ) {
-    return 'slides'
+  if (app === 'slides') {
+    if (preset) await window.aiOffice.newSlide({ aiPreset: preset })
+    else await window.aiOffice.newSlide()
+    return preset ? 'slides+ai' : 'slides'
   }
-  if (
-    /\b(word|docx|document|docs?)\b/i.test(lower) ||
-    lower.includes('văn bản') ||
-    lower.includes('tài liệu word')
-  ) {
-    return 'docs'
+  if (app === 'sheets') {
+    if (preset) await window.aiOffice.newSheet({ aiPreset: preset })
+    else await window.aiOffice.newSheet()
+    return preset ? 'sheets+ai' : 'sheets'
   }
-  return null
+  if (preset) await window.aiOffice.newPdf({ aiPreset: preset })
+  else await window.aiOffice.newPdf()
+  return preset ? 'pdf+ai' : 'pdf'
+}
+
+function enrichBrief(brief: string, pack: MyAiContextPack, userText: string): string {
+  if (!wantsLocalContext(userText) && !wantsLocalContext(brief)) return brief
+  const ctx = pack.plainText.slice(0, 1_800)
+  return `${brief}\n\n---\nLocal context (on-device):\n${ctx}`
+}
+
+function contextFootnote(vi: boolean, excerpts = false): string {
+  if (excerpts) {
+    return vi
+      ? '\n\n_(Đã đọc excerpt trên máy + ngữ cảnh Workbench. Không bịa nội dung ngoài excerpt.)_'
+      : '\n\n_(Used on-device file excerpts + Workbench context. Did not invent text beyond excerpts.)_'
+  }
+  return vi
+    ? '\n\n_(Đã dùng ngữ cảnh máy: việc / ghi chú / email / lịch / Recent.)_'
+    : '\n\n_(Used on-device context: tasks / notes / email / calendar / Recents.)_'
 }
 
 interface Props {
   practiceId: PracticeId
   ensureWorkbench: () => void
-  onOpenRecents?: () => void
 }
 
 export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElement {
@@ -135,9 +219,29 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
   const label = (a: string, b: string) => (vi ? a : b)
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [attachments, setAttachments] = useState<AttachmentMeta[]>([])
+  const [attachNotice, setAttachNotice] = useState<string | null>(null)
+  const [attachmentPreviews, setAttachmentPreviews] = useState<Record<string, string>>({})
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    loadMyAiHistory(practiceId).map((m) => ({
+      ...m,
+      choicesResolved: true as const,
+      streaming: false,
+    })),
+  )
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const pendingConsentRef = useRef<{ route: MyAiRoute; userText: string } | null>(null)
+  const pendingResumeRef = useRef<{
+    steps: MyAiStep[]
+    userText: string
+    consentGranted: boolean
+  } | null>(null)
+  const turnAttachmentsRef = useRef<AttachmentMeta[]>([])
+  const streamCancelRef = useRef<(() => void) | null>(null)
+  const skipPersistRef = useRef(false)
+  const practiceChips = useMemo(() => practiceMyAiChips(practiceId), [practiceId])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
@@ -147,110 +251,1005 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     inputRef.current?.focus()
   }, [])
 
-  const push = (role: ChatRole, text: string) => {
-    setMessages((prev) => [...prev, { id: newId(), role, text }])
+  useEffect(() => {
+    skipPersistRef.current = true
+    pendingConsentRef.current = null
+    pendingResumeRef.current = null
+    streamCancelRef.current?.()
+    streamCancelRef.current = null
+    turnAttachmentsRef.current = []
+    setAttachments([])
+    setAttachNotice(null)
+    setMessages(
+      loadMyAiHistory(practiceId).map((m) => ({
+        ...m,
+        choicesResolved: true,
+        streaming: false,
+      })),
+    )
+    setInput('')
+    setBusy(false)
+  }, [practiceId])
+
+  useEffect(() => {
+    if (skipPersistRef.current) {
+      skipPersistRef.current = false
+      return
+    }
+    saveMyAiHistory(
+      practiceId,
+      messages
+        .filter((m) => !m.streaming)
+        .map((m) => ({
+          id: m.id,
+          role: m.role,
+          text: m.text,
+          contextUsed: m.contextUsed,
+          attachments: m.attachments,
+        })),
+    )
+  }, [practiceId, messages])
+
+  useEffect(() => {
+    let cancelled = false
+    const allAtts = [
+      ...attachments,
+      ...messages.flatMap((m) => m.attachments ?? []),
+    ]
+    const wanted = new Set(allAtts.filter(isImageAttachment).map((a) => a.path))
+    const loadPreviews = async () => {
+      const next: Record<string, string> = { ...attachmentPreviews }
+      let changed = false
+      for (const path of wanted) {
+        if (next[path]) continue
+        const res = await window.aiOffice.readAttachmentImage?.(path)
+        if (cancelled) return
+        if (res?.ok && res.base64 && res.mime) {
+          next[path] = `data:${res.mime};base64,${res.base64}`
+          changed = true
+        }
+      }
+      for (const path of Object.keys(next)) {
+        if (!wanted.has(path)) {
+          delete next[path]
+          changed = true
+        }
+      }
+      if (changed) setAttachmentPreviews(next)
+    }
+    void loadPreviews()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    attachments.map((a) => a.path).join('|'),
+    messages.map((m) => (m.attachments ?? []).map((a) => a.path).join(',')).join('|'),
+  ])
+
+  const push = (msg: Omit<ChatMessage, 'id'> & { id?: string }) => {
+    const id = msg.id ?? newId()
+    setMessages((prev) => {
+      const cleared = prev.map((m) =>
+        m.choices && !m.choicesResolved ? { ...m, choicesResolved: true } : m,
+      )
+      return [...cleared, { ...msg, id }]
+    })
+    return id
+  }
+
+  const patchMessage = (id: string, patch: Partial<ChatMessage>) => {
+    setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, ...patch } : m)))
+  }
+
+  const stopStream = () => {
+    streamCancelRef.current?.()
+    streamCancelRef.current = null
+  }
+
+  const applyAttachResult = (
+    result: Parameters<typeof mergeAttachmentResult>[1],
+  ) => {
+    const { next, notice } = mergeAttachmentResult(attachments, result)
+    setAttachments(next)
+    if (notice) {
+      setAttachNotice(notice)
+      window.setTimeout(() => setAttachNotice(null), 4000)
+    }
+  }
+
+  const pickFiles = async () => {
+    const result = (await window.aiOffice.pickAttachments?.()) ?? null
+    applyAttachResult(result)
+  }
+
+  const removeAttachment = (path: string) => {
+    setAttachments((prev) => prev.filter((a) => a.path !== path))
+  }
+
+  const runStreamedAi = async (opts: {
+    system: string
+    user: string
+    messageId?: string
+    images?: Awaited<ReturnType<typeof collectImageAttachments>>
+    /** When false, stream without leaving a chat bubble (plan aggregation). */
+    showBubble?: boolean
+  }): Promise<{ ok: boolean; content?: string; error?: string; messageId?: string }> => {
+    const api = window.aiOffice
+    const showBubble = opts.showBubble !== false
+    if (!api.getAiSettings) return { ok: false, error: 'AI unavailable' }
+    const settings = await api.getAiSettings()
+
+    if (!api.aiStream) {
+      if (!api.aiChat) return { ok: false, error: 'AI unavailable' }
+      const res = await api.aiChat({ settings, system: opts.system, user: opts.user })
+      if (!showBubble) return res
+      const msgId =
+        opts.messageId ??
+        push({
+          role: res.ok ? 'assistant' : 'system',
+          text: res.content?.trim() || res.error || '',
+          streaming: false,
+        })
+      if (opts.messageId) {
+        patchMessage(msgId, {
+          text: res.content?.trim() || res.error || '',
+          streaming: false,
+          role: res.ok ? 'assistant' : 'system',
+        })
+      }
+      return { ...res, messageId: msgId }
+    }
+
+    const msgId = showBubble
+      ? opts.messageId ?? push({ role: 'assistant', text: '', streaming: true })
+      : undefined
+    if (opts.messageId && showBubble) patchMessage(msgId!, { text: '', streaming: true })
+    try {
+      const result = await streamMyAiReply({
+        system: opts.system,
+        user: opts.user,
+        images: opts.images,
+        settings,
+        onDelta: (text) => {
+          if (msgId) patchMessage(msgId, { text, streaming: true })
+        },
+        onReady: (cancel) => {
+          streamCancelRef.current = cancel
+        },
+      })
+      streamCancelRef.current = null
+      const text = result.content?.trim() || result.error || ''
+      if (msgId) {
+        patchMessage(msgId, {
+          text,
+          streaming: false,
+          ...(result.ok ? {} : { role: 'system' as const }),
+        })
+      }
+      return { ...result, messageId: msgId }
+    } catch (err) {
+      streamCancelRef.current = null
+      const error = err instanceof Error ? err.message : String(err)
+      if (msgId) patchMessage(msgId, { text: error, streaming: false, role: 'system' })
+      return { ok: false, error, messageId: msgId }
+    }
   }
 
   const resetChat = () => {
+    stopStream()
+    pendingConsentRef.current = null
+    pendingResumeRef.current = null
+    turnAttachmentsRef.current = []
+    clearMyAiHistory(practiceId)
+    skipPersistRef.current = true
     setMessages([])
+    setAttachments([])
+    setAttachNotice(null)
     setInput('')
     setBusy(false)
     requestAnimationFrame(() => inputRef.current?.focus())
   }
 
-  const runFile = async (app: FileApp, userText: string) => {
-    push('user', userText)
+  const describeCreate = (app: OfficeApp, mode: string, brief?: string, usedCtx?: boolean) => {
+    const name = officeAppLabel(app, vi)
+    let body: string
+    if (mode.endsWith('+ai') && brief) {
+      const shown = brief.split('\n---\n')[0]!.trim()
+      body = label(
+        `Đã mở ${name} mới và gửi yêu cầu cho AI trong tab: “${shown.slice(0, 160)}${shown.length > 160 ? '…' : ''}”.`,
+        `Opened a new ${name} tab and queued AI with: “${shown.slice(0, 160)}${shown.length > 160 ? '…' : ''}”.`,
+      )
+    } else if (app === 'pdf' && !mode.endsWith('+ai')) {
+      body = label('Đã tạo và mở PDF mới.', 'Created and opened a new PDF.')
+    } else {
+      body = label(
+        `Đã mở ${name} mới — tiếp tục trong tab vừa tạo.`,
+        `Opened a new ${name} — continue in the new tab.`,
+      )
+    }
+    return usedCtx ? body + contextFootnote(vi) : body
+  }
+
+  const openPathChoice = async (path: string, name: string) => {
     setBusy(true)
     try {
-      if (app === 'docs') await window.aiOffice.newDoc()
-      else if (app === 'sheets') await window.aiOffice.newSheet()
-      else await window.aiOffice.newSlide()
-      push(
-        'assistant',
-        app === 'docs'
-          ? label('Đã mở Word mới — tiếp tục soạn trong tab vừa tạo.', 'Opened a new Word doc — continue in the new tab.')
-          : app === 'sheets'
-            ? label('Đã mở Excel mới — tiếp tục trong tab vừa tạo.', 'Opened a new Excel workbook — continue in the new tab.')
-            : label('Đã mở Slides mới — tiếp tục trong tab vừa tạo.', 'Opened a new Slides deck — continue in the new tab.'),
-      )
+      await window.aiOffice.openPath(path)
+      const resume = pendingResumeRef.current
+      pendingResumeRef.current = null
+      if (resume && resume.steps.length > 0) {
+        push({
+          role: 'assistant',
+          text: label(
+            `Đã mở file: ${name}\n▶ Tiếp tục ${resume.steps.length} bước còn lại của plan…`,
+            `Opened: ${name}\n▶ Resuming ${resume.steps.length} remaining plan step(s)…`,
+          ),
+        })
+        const resumeRoute: MyAiRoute = {
+          kind: 'plan',
+          steps: resume.steps,
+          summaryVi: `Tiếp tục plan (${resume.steps.length} bước)`,
+          summaryEn: `Resume plan (${resume.steps.length} steps)`,
+        }
+        await runRoute(resumeRoute, resume.userText, {
+          consentGranted: resume.consentGranted,
+          skipUserPush: true,
+          resumeMode: true,
+        })
+        return
+      }
+      push({
+        role: 'assistant',
+        text: label(`Đã mở file: ${name}`, `Opened: ${name}`),
+      })
     } catch (err) {
-      push(
-        'system',
-        label(
-          `Không mở được file: ${err instanceof Error ? err.message : String(err)}`,
-          `Could not open file: ${err instanceof Error ? err.message : String(err)}`,
+      pendingResumeRef.current = null
+      push({
+        role: 'system',
+        text: label(
+          `Lỗi: ${err instanceof Error ? err.message : String(err)}`,
+          `Error: ${err instanceof Error ? err.message : String(err)}`,
         ),
-      )
+      })
     } finally {
       setBusy(false)
     }
   }
 
-  const runIntent = (intent: AgentIntent, userText: string) => {
-    push('user', userText)
+  const onChoice = (msgId: string, choice: ChatChoice) => {
+    if (busy) return
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msgId ? { ...m, choicesResolved: true } : m)),
+    )
+    if (choice.kind === 'open_path') {
+      void openPathChoice(choice.value, choice.label)
+      return
+    }
+    if (choice.kind === 'cancel') {
+      const pending = pendingConsentRef.current
+      pendingConsentRef.current = null
+      pendingResumeRef.current = null
+      if (pending) {
+        appendMyAiAudit({
+          practiceId,
+          userText: pending.userText,
+          routeKind: pending.route.kind,
+          summary: 'User dismissed consent',
+          ok: false,
+          consented: false,
+        })
+      }
+      push({
+        role: 'assistant',
+        text: label('Đã hủy — không chạy thao tác cần xác nhận.', 'Canceled — consent action not run.'),
+      })
+      return
+    }
+    if (choice.kind === 'confirm') {
+      const pending = pendingConsentRef.current
+      pendingConsentRef.current = null
+      if (!pending) return
+      void runRoute(pending.route, pending.userText, { consentGranted: true, skipUserPush: true })
+      return
+    }
+    submit(choice.value)
+  }
+
+  type StepOutcome = {
+    text: string
+    choices?: ChatChoice[]
+    contextUsed?: boolean
+    /** Ambiguous open/search — pause remaining plan steps */
+    pausePlan?: boolean
+    /** Reply already streamed into this message id — skip duplicate push */
+    streamedMessageId?: string
+  }
+
+  const executeStep = async (
+    step: MyAiStep,
+    userText: string,
+    entries: RecentEntry[],
+    pack: MyAiContextPack,
+    opts?: { showAiBubble?: boolean },
+  ): Promise<StepOutcome> => {
+    if (step.kind === 'create_file') {
+      const rawBrief = step.blank ? undefined : step.brief
+      let brief = rawBrief ? enrichBrief(rawBrief, pack, userText) : undefined
+      const attachBlock = await collectAttachmentTextBlock(turnAttachmentsRef.current)
+      if (brief && attachBlock) {
+        brief = `${brief}\n\n---\nAttached files (on-device):\n${attachBlock}`
+      } else if (!brief && attachBlock && !step.blank) {
+        brief = attachBlock.slice(0, 1_800)
+      }
+      const usedCtx = Boolean(
+        (brief && brief !== rawBrief) || (attachBlock && brief),
+      )
+      const mode = await createOfficeFile(step.app, brief)
+      return {
+        text: describeCreate(step.app, mode, brief, usedCtx),
+        contextUsed: usedCtx,
+      }
+    }
+
+    if (step.kind === 'open_file') {
+      const scored = rankRecentsScored(entries, step.query, 5)
+      if (scored.length === 0) {
+        return {
+          text: label(
+            `Không thấy file gần đây khớp “${step.query}”. Thử tên ngắn hơn hoặc “Tìm file …”.`,
+            `No recent file matched “${step.query}”. Try a shorter name or “Find file …”.`,
+          ),
+          choices: [
+            {
+              id: 'search',
+              label: label(`Tìm file ${step.query}`, `Find file ${step.query}`),
+              kind: 'prompt',
+              value: label(`Tìm file ${step.query}`, `Find file ${step.query}`),
+            },
+          ],
+          pausePlan: true,
+        }
+      }
+      if (isAmbiguousRecentMatch(scored)) {
+        return {
+          text: label(
+            `Có vài file khớp “${step.query}”. Chọn file cần mở:`,
+            `A few files match “${step.query}”. Pick one to open:`,
+          ),
+          choices: scored.map((s) => ({
+            id: s.entry.path,
+            label: s.entry.name,
+            kind: 'open_path' as const,
+            value: s.entry.path,
+          })),
+          pausePlan: true,
+        }
+      }
+      const best = scored[0]!.entry
+      await window.aiOffice.openPath(best.path)
+      const rest = scored.slice(1)
+      return {
+        text: label(`Đã mở file: ${best.name}`, `Opened: ${best.name}`),
+        choices:
+          rest.length > 0
+            ? rest.map((s) => ({
+                id: s.entry.path,
+                label: label(`Mở ${s.entry.name}`, `Open ${s.entry.name}`),
+                kind: 'open_path' as const,
+                value: s.entry.path,
+              }))
+            : undefined,
+      }
+    }
+
+    if (step.kind === 'search_files') {
+      const scored = rankRecentsScored(entries, step.query, 8)
+      if (scored.length === 0) {
+        return {
+          text: label(
+            `Không tìm thấy file khớp “${step.query}” trong danh sách gần đây.`,
+            `No recent files matched “${step.query}”.`,
+          ),
+          pausePlan: true,
+        }
+      }
+      const lines = scored
+        .map((s, i) => `${i + 1}. ${s.entry.name} (.${s.entry.ext})`)
+        .join('\n')
+      return {
+        text: label(
+          `Kết quả tìm (Recent):\n${lines}\n\nChọn file bên dưới để mở.`,
+          `Search results (Recent):\n${lines}\n\nPick a file below to open.`,
+        ),
+        choices: scored.map((s) => ({
+          id: s.entry.path,
+          label: s.entry.name,
+          kind: 'open_path' as const,
+          value: s.entry.path,
+        })),
+        pausePlan: true,
+      }
+    }
+
+    if (step.kind === 'summarize_recents') {
+      const pool = step.query
+        ? rankRecents(entries, step.query, step.limit)
+        : entries.slice(0, step.limit)
+      if (pool.length === 0) {
+        return {
+          text: label('Chưa có file gần đây để tóm tắt.', 'No recent files to summarize.'),
+        }
+      }
+      const toRead = pool.slice(0, FILE_EXCERPT_MAX_FILES)
+      const excerpts = (await window.aiOffice.fileExcerpts?.(toRead.map((e) => e.path))) ?? []
+      const excerptBlock = formatExcerptsForPrompt(excerpts)
+      const okCount = excerpts.filter((e) => e.status === 'ok').length
+      const listing = pool
+        .map((e, i) => `${i + 1}. ${e.name} (.${e.ext}) — ${new Date(e.mtimeMs).toLocaleString()}`)
+        .join('\n')
+
+      let summary = ''
+      if (okCount > 0) {
+        summary = excerpts
+          .filter((e) => e.status === 'ok' && e.excerpt)
+          .map((e) => `• ${e.name}: ${e.excerpt!.slice(0, 280)}${e.excerpt!.length > 280 ? '…' : ''}`)
+          .join('\n')
+      } else {
+        summary = listing
+      }
+
+      let usedAi = false
+      let streamedMessageId: string | undefined
+      const attachBlock = await collectAttachmentTextBlock(turnAttachmentsRef.current)
+      const images = await collectImageAttachments(turnAttachmentsRef.current)
+      const choices: ChatChoice[] = pool.slice(0, 5).map((e) => ({
+        id: e.path,
+        label: label(`Mở ${e.name}`, `Open ${e.name}`),
+        kind: 'open_path' as const,
+        value: e.path,
+      }))
+      try {
+        if (okCount > 0 || listing || attachBlock) {
+          const system = vi
+            ? `Bạn là trợ lý desktop UniWork. Tóm tắt nội dung thật từ excerpt file (tiếng Việt, gạch đầu dòng theo từng file: chủ đề, điểm chính, việc có thể làm tiếp). Chỉ dùng excerpt / tệp đính kèm — không bịa. Nếu excerpt trống, nói rõ không đọc được.\n\nNgữ cảnh máy:\n${pack.plainText.slice(0, 1_800)}`
+            : `You are a UniWork desktop assistant. Summarize real content from the file excerpts (bullets per file: topic, key points, suggested next actions). Use only excerpts / attachments — do not invent. If an excerpt is missing, say so.\n\nOn-device context:\n${pack.plainText.slice(0, 1_800)}`
+          const user = [
+            excerptBlock
+              ? `Files:\n${listing}\n\nExcerpts:\n${excerptBlock}`
+              : `Files (no excerpts):\n${listing}`,
+            attachBlock ? `\n\nUser attachments:\n${attachBlock}` : '',
+          ].join('')
+          const res = await runStreamedAi({
+            system,
+            user,
+            images,
+            showBubble: opts?.showAiBubble !== false,
+          })
+          if (res.ok && res.content?.trim()) {
+            summary = res.content.trim()
+            usedAi = true
+            streamedMessageId = res.messageId
+          }
+        }
+      } catch {
+        /* keep local excerpt digest */
+      }
+
+      const unread = excerpts.filter((e) => e.status !== 'ok')
+      const unreadNote =
+        unread.length > 0
+          ? label(
+              `\nKhông đọc được: ${unread.map((e) => `${e.name} (${e.status})`).join(', ')}.`,
+              `\nCould not read: ${unread.map((e) => `${e.name} (${e.status})`).join(', ')}.`,
+            )
+          : ''
+
+      const text =
+        label(
+          `Tóm tắt file gần đây (${pool.length}, đọc ${okCount} excerpt):\n${summary}${unreadNote}`,
+          `Recent files summary (${pool.length}, ${okCount} excerpts read):\n${summary}${unreadNote}`,
+        ) + contextFootnote(vi, okCount > 0 || usedAi)
+
+      if (streamedMessageId) {
+        patchMessage(streamedMessageId, {
+          text,
+          contextUsed: true,
+          choices,
+          streaming: false,
+        })
+      }
+
+      return {
+        text,
+        contextUsed: true,
+        streamedMessageId,
+        choices,
+      }
+    }
+
+    if (step.kind === 'continue_active') {
+      const tab = await window.aiOffice.activeOfficeTab?.()
+      if (!tab) {
+        return {
+          text: label(
+            'Chưa có tab Office đang mở để tiếp tục. Hãy mở Word/Excel/Slides/PDF trước.',
+            'No open Office tab to continue. Open Word/Excel/Slides/PDF first.',
+          ),
+          pausePlan: true,
+        }
+      }
+      const brief =
+        step.brief?.trim() ||
+        (vi
+          ? 'Tiếp tục chỉnh sửa tài liệu này theo ngữ cảnh hiện tại.'
+          : 'Continue editing this document with the current context.')
+      const pushed = await window.aiOffice.pushAiPreset?.({
+        text: brief,
+        autoRun: true,
+        displayText: brief.slice(0, 120),
+        tabId: tab.id,
+      })
+      if (!pushed?.ok) {
+        return {
+          text: label(
+            `Không gửi được yêu cầu tới tab “${tab.title}”.`,
+            `Could not send the request to tab “${tab.title}”.`,
+          ),
+          pausePlan: true,
+        }
+      }
+      return {
+        text: label(
+          `Đã chuyển tới “${tab.title}” (${tab.kind}) và gửi yêu cầu cho AI trong tab.`,
+          `Switched to “${tab.title}” (${tab.kind}) and queued AI in that tab.`,
+        ),
+        contextUsed: true,
+      }
+    }
+
+    if (step.kind === 'summarize_active') {
+      const tab = await window.aiOffice.activeOfficeTab?.()
+      if (!tab) {
+        return {
+          text: label(
+            'Chưa có tab Office đang mở để tóm tắt.',
+            'No open Office tab to summarize.',
+          ),
+          pausePlan: true,
+        }
+      }
+      if (tab.path) {
+        const excerpts = (await window.aiOffice.fileExcerpts?.([tab.path])) ?? []
+        const excerptBlock = formatExcerptsForPrompt(excerpts)
+        const ok = excerpts.some((e) => e.status === 'ok')
+        let summary = ok
+          ? excerpts
+              .filter((e) => e.status === 'ok' && e.excerpt)
+              .map((e) => e.excerpt!.slice(0, 600))
+              .join('\n')
+          : label('(Không đọc được excerpt — sẽ hỏi AI trong tab.)', '(No excerpt — will ask AI in-tab.)')
+        let streamedMessageId: string | undefined
+        const attachBlock = await collectAttachmentTextBlock(turnAttachmentsRef.current)
+        const images = await collectImageAttachments(turnAttachmentsRef.current)
+        if (ok || attachBlock || images.length > 0) {
+          try {
+            const res = await runStreamedAi({
+              system: vi
+                ? `Tóm tắt ngắn nội dung file đang mở (tiếng Việt, gạch đầu dòng). Chỉ dùng excerpt / tệp đính kèm — không bịa.\n\n${pack.plainText.slice(0, 1_200)}`
+                : `Briefly summarize the open file (bullets). Use only the excerpt / attachments — do not invent.\n\n${pack.plainText.slice(0, 1_200)}`,
+              user: [
+                `File: ${tab.title}\n\n${excerptBlock}`,
+                attachBlock ? `\n\nAttachments:\n${attachBlock}` : '',
+              ].join(''),
+              images,
+              showBubble: opts?.showAiBubble !== false,
+            })
+            if (res.ok && res.content?.trim()) {
+              summary = res.content.trim()
+              streamedMessageId = res.messageId
+            }
+          } catch {
+            /* keep excerpt */
+          }
+        } else {
+          await window.aiOffice.pushAiPreset?.({
+            text: vi ? 'Tóm tắt nội dung tài liệu này.' : 'Summarize this document.',
+            autoRun: true,
+            tabId: tab.id,
+          })
+        }
+        const choices: ChatChoice[] = [
+          {
+            id: 'open-active',
+            label: label(`Mở lại ${tab.title}`, `Re-open ${tab.title}`),
+            kind: 'prompt',
+            value: label('Tiếp tục trên file đang mở', 'Continue on the open file'),
+          },
+        ]
+        const text =
+          label(
+            `Tóm tắt “${tab.title}”:\n${summary}`,
+            `Summary of “${tab.title}”:\n${summary}`,
+          ) + contextFootnote(vi, ok)
+        if (streamedMessageId) {
+          patchMessage(streamedMessageId, { text, contextUsed: true, choices, streaming: false })
+        }
+        return {
+          text,
+          contextUsed: true,
+          streamedMessageId,
+          choices,
+        }
+      }
+      await window.aiOffice.pushAiPreset?.({
+        text: vi ? 'Tóm tắt nội dung tài liệu này.' : 'Summarize this document.',
+        autoRun: true,
+        tabId: tab.id,
+      })
+      return {
+        text: label(
+          `Đã mở “${tab.title}” và nhờ AI trong tab tóm tắt (file chưa có đường dẫn trên đĩa).`,
+          `Opened “${tab.title}” and asked in-tab AI to summarize (untitled / no path yet).`,
+        ),
+        contextUsed: true,
+      }
+    }
+
+    // workbench
+    ensureWorkbench()
+    const result = applyAgentIntent(step.intent, practiceId)
+    emitAgentIntentNavigate(result.tabId, step.intent)
+    return {
+      text: label(
+        `${vi ? result.messageVi : result.messageEn}\n→ Workbench: ${result.tabId}`,
+        `${vi ? result.messageVi : result.messageEn}\n→ Workbench: ${result.tabId}`,
+      ),
+      contextUsed: true,
+    }
+  }
+
+  const runRoute = async (
+    route: MyAiRoute,
+    userText: string,
+    opts?: {
+      consentGranted?: boolean
+      skipUserPush?: boolean
+      resumeMode?: boolean
+      attachments?: AttachmentMeta[]
+    },
+  ) => {
+    if (!opts?.skipUserPush) {
+      push({
+        role: 'user',
+        text: userText,
+        ...(opts?.attachments && opts.attachments.length > 0
+          ? { attachments: opts.attachments }
+          : {}),
+      })
+    }
     setBusy(true)
     try {
-      ensureWorkbench()
-      const result = applyAgentIntent(intent, practiceId)
-      emitAgentIntentNavigate(result.tabId, intent)
-      push('assistant', vi ? result.messageVi : result.messageEn)
-      if (!result.ok) {
-        push(
-          'system',
-          label(
-            'Lệnh chưa áp dụng hết — mở Workbench để hoàn tất.',
-            'Intent only partly applied — finish in Workbench if needed.',
+      const needs = routeNeedsConsent(route)
+      if (needs.length > 0 && !opts?.consentGranted) {
+        pendingConsentRef.current = { route, userText }
+        const tokenish = needs.some((n) => n.reason === 'ai_token' || n.reason === 'deep_read')
+        push({
+          role: 'assistant',
+          text:
+            describeConsent(route, vi) +
+            label(
+              tokenish
+                ? '\n\nCho phép trên máy / dùng Token AI để tiếp tục?'
+                : '\n\nCho phép trên máy để tiếp tục? (Thêm mục Workbench cần xác nhận.)',
+              tokenish
+                ? '\n\nAllow on this device / use AI Tokens to continue?'
+                : '\n\nAllow on this device to continue? (Workbench adds need confirmation.)',
+            ),
+          choices: [
+            {
+              id: 'consent-ok',
+              label: tokenish
+                ? label('Cho phép · dùng Token', 'Allow · use Tokens')
+                : label('Cho phép trên máy', 'Allow on device'),
+              kind: 'confirm',
+              value: 'ok',
+            },
+            {
+              id: 'consent-no',
+              label: label('Hủy', 'Cancel'),
+              kind: 'cancel',
+              value: 'no',
+            },
+          ],
+        })
+        appendMyAiAudit({
+          practiceId,
+          userText,
+          routeKind: route.kind,
+          summary: 'Awaiting consent',
+          ok: true,
+          consented: false,
+        })
+        return
+      }
+
+      const entries = await loadRecents()
+      const pack = buildMyAiContextPack(practiceId, {
+        vi,
+        recents: entries.slice(0, 8).map((e) => ({
+          name: e.name,
+          ext: e.ext,
+          mtimeMs: e.mtimeMs,
+        })),
+      })
+
+      if (route.kind === 'plan') {
+        const lines: string[] = [
+          opts?.resumeMode
+            ? label(
+                `▶ Tiếp tục plan — ${route.steps.length} bước:`,
+                `▶ Resuming plan — ${route.steps.length} step(s):`,
+              )
+            : label(`Đang chạy ${route.steps.length} bước:`, `Running ${route.steps.length} steps:`),
+          vi ? route.summaryVi : route.summaryEn,
+          '',
+        ]
+        let lastChoices: ChatChoice[] | undefined
+        let contextUsed = false
+        let paused = false
+        for (let i = 0; i < route.steps.length; i++) {
+          const step = route.steps[i]!
+          const out = await executeStep(step, userText, entries, pack, { showAiBubble: false })
+          lines.push(`${i + 1}. ${out.text}`)
+          appendMyAiAudit({
+            practiceId,
+            userText,
+            routeKind: 'plan',
+            stepKind: step.kind,
+            summary: out.text.slice(0, 200),
+            ok: !out.pausePlan,
+            consented: opts?.consentGranted === true || needs.length === 0,
+          })
+          if (out.contextUsed) contextUsed = true
+          if (out.choices?.length) lastChoices = out.choices
+          if (out.pausePlan) {
+            paused = true
+            const remaining = route.steps.slice(i + 1)
+            if (remaining.length > 0 && out.choices?.some((c) => c.kind === 'open_path')) {
+              pendingResumeRef.current = {
+                steps: remaining,
+                userText,
+                consentGranted: opts?.consentGranted === true || needs.length === 0,
+              }
+              lines.push(
+                label(
+                  `\n⏸ Dừng plan — còn ${remaining.length} bước. Chọn file bên dưới để mở rồi plan sẽ tự chạy tiếp.`,
+                  `\n⏸ Plan paused — ${remaining.length} step(s) left. Pick a file below; the plan will resume automatically.`,
+                ),
+              )
+            } else if (remaining.length > 0) {
+              pendingResumeRef.current = null
+              lines.push(
+                label(
+                  `\n⏸ Dừng plan — còn ${remaining.length} bước. Gửi lại phần còn lại nếu cần.`,
+                  `\n⏸ Plan paused — ${remaining.length} step(s) left. Re-send the rest if needed.`,
+                ),
+              )
+            } else {
+              pendingResumeRef.current = null
+            }
+            break
+          }
+        }
+        if (!paused) {
+          pendingResumeRef.current = null
+          lines.push(
+            label('\n✓ Đã xong các bước trong một câu.', '\n✓ Finished all steps from one request.'),
+          )
+        }
+        push({
+          role: 'assistant',
+          text: lines.join('\n'),
+          contextUsed,
+          choices: lastChoices,
+        })
+        return
+      }
+
+      if (route.kind !== 'unknown') {
+        const out = await executeStep(route, userText, entries, pack, { showAiBubble: true })
+        appendMyAiAudit({
+          practiceId,
+          userText,
+          routeKind: route.kind,
+          stepKind: route.kind,
+          summary: out.text.slice(0, 200),
+          ok: !out.pausePlan,
+          consented: opts?.consentGranted === true || needs.length === 0,
+        })
+        if (out.streamedMessageId) {
+          // already in thread
+        } else {
+          push({
+            role: 'assistant',
+            text: out.text,
+            contextUsed: out.contextUsed,
+            choices: out.choices,
+          })
+        }
+        return
+      }
+
+      // unknown — local context first; Hub AI only after Token consent
+      let clarify = vi ? route.hintVi : route.hintEn
+      const pulse = pack.chunks
+        .filter((c) => ['tasks-open', 'calendar', 'recents'].includes(c.id))
+        .map((c) => `• ${c.text}`)
+        .join('\n')
+
+      let usedAi = false
+      let streamedMessageId: string | undefined
+      const attachBlock = await collectAttachmentTextBlock(turnAttachmentsRef.current)
+      const images = await collectImageAttachments(turnAttachmentsRef.current)
+      if (opts?.consentGranted) {
+        try {
+          if (userText.length >= 8 || attachBlock || images.length > 0) {
+            const res = await runStreamedAi({
+              system: vi
+                ? `Bạn là Trợ lý UniWork trên desktop. Người dùng hỏi mơ hồ. Trả lời ngắn (≤4 câu) tiếng Việt: đoán ý, hỏi lại 1 câu clarify, đề xuất 2–3 hành động cụ thể (tạo Word / mở file / thêm việc / mở lịch). Chỉ dựa ngữ cảnh máy / tệp đính kèm — không bịa file.\n\n${pack.plainText.slice(0, 2_500)}`
+                : `You are UniWork desktop My AI. The user request is ambiguous. Reply briefly (≤4 sentences): best-guess intent, one clarifying question, and 2–3 concrete next actions (draft Word / open file / add task / open calendar). Use only on-device context / attachments — do not invent files.\n\n${pack.plainText.slice(0, 2_500)}`,
+              user: [userText, attachBlock ? `\n\nAttachments:\n${attachBlock}` : ''].join(''),
+              images,
+              showBubble: true,
+            })
+            if (res.ok && res.content?.trim()) {
+              clarify = res.content.trim()
+              usedAi = true
+              streamedMessageId = res.messageId
+            }
+          }
+        } catch {
+          /* keep static hint */
+        }
+      }
+
+      const clarifyChoices: ChatChoice[] = [
+        {
+          id: 'draft',
+          label: label('Soạn Word…', 'Draft Word…'),
+          kind: 'prompt',
+          value: label('Soạn văn bản Word: ', 'Draft a Word doc: '),
+        },
+        {
+          id: 'open',
+          label: label('Mở file…', 'Open file…'),
+          kind: 'prompt',
+          value: label('Mở file ', 'Open file '),
+        },
+        {
+          id: 'task',
+          label: label('Thêm việc…', 'Add a task…'),
+          kind: 'prompt',
+          value: label('Thêm công việc ', 'Add a task '),
+        },
+        {
+          id: 'cal',
+          label: label('Mở lịch', 'Open calendar'),
+          kind: 'prompt',
+          value: label('Mở tab lịch của tôi', 'Open my calendar tab'),
+        },
+        {
+          id: 'multi',
+          label: label('1 câu nhiều bước…', 'Multi-step…'),
+          kind: 'prompt',
+          value: label(
+            'Soạn báo giá Word và thêm công việc follow-up, mở tab Clients',
+            'Draft a Word quote and add a follow-up task, open Clients tab',
           ),
-        )
+        },
+      ]
+      if (!usedAi && (userText.length >= 8 || turnAttachmentsRef.current.length > 0)) {
+        pendingConsentRef.current = { route, userText }
+        clarifyChoices.unshift({
+          id: 'ai-clarify',
+          label: label('Làm rõ bằng AI (Token)', 'Clarify with AI (Tokens)'),
+          kind: 'confirm',
+          value: 'ai',
+        })
+      }
+
+      const text =
+        clarify +
+        (pulse
+          ? label(`\n\nNgữ cảnh hiện tại:\n${pulse}`, `\n\nCurrent context:\n${pulse}`)
+          : '') +
+        (usedAi
+          ? contextFootnote(vi)
+          : label(
+              '\n\n_(Gợi ý cục bộ — chưa gọi Hub AI. Bấm “Làm rõ bằng AI” nếu muốn dùng Token.)_',
+              '\n\n_(Local hint — Hub AI not called. Tap “Clarify with AI” to spend Tokens.)_',
+            ))
+
+      if (streamedMessageId) {
+        patchMessage(streamedMessageId, {
+          text,
+          contextUsed: true,
+          choices: clarifyChoices,
+          streaming: false,
+        })
+      } else {
+        push({
+          role: 'assistant',
+          text,
+          contextUsed: true,
+          choices: clarifyChoices,
+        })
       }
     } catch (err) {
-      push(
-        'system',
-        label(
+      push({
+        role: 'system',
+        text: label(
           `Lỗi: ${err instanceof Error ? err.message : String(err)}`,
           `Error: ${err instanceof Error ? err.message : String(err)}`,
         ),
-      )
+      })
     } finally {
       setBusy(false)
     }
   }
 
   const submit = (raw?: string) => {
-    const text = (raw ?? input).trim()
-    if (!text || busy) return
-    setInput('')
-
-    const fileApp = resolveNewFile(text)
-    if (fileApp) {
-      void runFile(fileApp, text)
+    if (busy) return
+    const sentAtts = [...attachments]
+    let text = (raw ?? input).trim()
+    if (!text && sentAtts.length === 0) return
+    // Prompt chips that end with trailing space / colon: put into composer for user to finish
+    if (
+      raw !== undefined &&
+      (text.endsWith(':') ||
+        text.endsWith(' ') ||
+        /^(Soạn văn bản Word:|Draft a Word doc:|Mở file|Open file|Thêm công việc|Add a task)\s*$/i.test(
+          text,
+        ))
+    ) {
+      setInput(text)
+      requestAnimationFrame(() => {
+        inputRef.current?.focus()
+        const el = inputRef.current
+        if (el) {
+          const n = el.value.length
+          el.setSelectionRange(n, n)
+        }
+      })
       return
     }
-
-    const resolved = resolveAgentIntentFromText(text, 'desktop')
-    if (!resolved) {
-      push('user', text)
-      push(
-        'assistant',
-        label(
-          'Chưa nhận ra lệnh. Thử: “Thêm công việc…”, “Mở lịch”, “Tạo văn bản Word”, “Ghim ghi chú…”.',
-          'I couldn’t map that yet. Try: “Add a task…”, “Open calendar”, “Create a Word doc”, “Pin a note…”.',
-        ),
+    if (!text && sentAtts.length > 0) {
+      text = label(
+        'Hãy xem các tệp đính kèm và đề xuất việc nên làm tiếp.',
+        'Please review the attached files and suggest next steps.',
       )
-      return
     }
-
-    // User already sent from New Chat — apply without a second consent banner.
-    const intent = createAgentIntent({
-      ...resolved,
-      source: 'desktop',
-      requireConsent: false,
-      text,
-    })
-    runIntent(intent, text)
+    pendingConsentRef.current = null
+    pendingResumeRef.current = null
+    turnAttachmentsRef.current = sentAtts
+    setAttachments([])
+    setInput('')
+    const route = routeMyAiText(text, { practiceId })
+    void runRoute(route, text, { attachments: sentAtts })
   }
 
+  useEffect(() => {
+    const onExternal = (ev: Event) => {
+      const text = (ev as CustomEvent<{ text?: string }>).detail?.text?.trim()
+      if (!text || busy) return
+      submit(text)
+    }
+    window.addEventListener('uniwork:my-ai-submit', onExternal)
+    return () => window.removeEventListener('uniwork:my-ai-submit', onExternal)
+  }, [busy, practiceId, attachments, input])
+
   const empty = messages.length === 0
+  const canSend = !busy && (Boolean(input.trim()) || attachments.length > 0)
 
   return (
     <main className="new-chat" aria-label={label('Trợ lý của bạn', 'My AI')}>
@@ -259,8 +1258,8 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
           <strong>{label('Trợ lý của bạn', 'My AI')}</strong>
           <span>
             {label(
-              'Bắt đầu công việc bằng ngôn ngữ tự nhiên trên máy này.',
-              'Start work with natural language on this device.',
+              'Lưu theo vai · resume plan · xác nhận Token / đọc sâu / thêm mục.',
+              'Saved per role · resume plans · confirm Tokens / deep-read / adds.',
             )}
           </span>
         </div>
@@ -273,16 +1272,26 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
         {empty ? (
           <div className="new-chat-hero">
             <p className="new-chat-kicker">uniAI · UniWork Office</p>
-            <h1>
-              {label('Bạn muốn làm gì hôm nay?', 'What do you want to get done?')}
-            </h1>
+            <h1>{label('Bạn muốn làm gì hôm nay?', 'What do you want to get done?')}</h1>
             <p className="new-chat-sub">
               {label(
-                'Gõ tiếng Việt hoặc English — mở tab Workbench, thêm việc, ghim note, soạn email, hoặc tạo Word/Excel/Slide.',
-                'Type in Vietnamese or English — open Workbench tabs, add tasks, pin notes, draft email, or create Word/Excel/Slides.',
+                'Ví dụ: “Soạn báo giá Word và thêm việc follow-up, mở Clients”, “Tóm tắt file gần đây”.',
+                'e.g. “Draft a Word quote and add a follow-up task, open Clients”, “Summarize recent files”.',
               )}
             </p>
             <div className="new-chat-suggestions" role="list">
+              {practiceChips.map((s) => (
+                <button
+                  key={`p-${s.id}`}
+                  type="button"
+                  className="new-chat-chip is-practice"
+                  role="listitem"
+                  disabled={busy}
+                  onClick={() => submit(vi ? s.promptVi : s.promptEn)}
+                >
+                  {vi ? s.labelVi : s.labelEn}
+                </button>
+              ))}
               {SUGGESTIONS.map((s) => (
                 <button
                   key={s.id}
@@ -302,7 +1311,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
             {messages.map((m) => (
               <article
                 key={m.id}
-                className={`new-chat-msg is-${m.role}`}
+                className={`new-chat-msg is-${m.role}${m.streaming ? ' is-streaming' : ''}`}
                 data-role={m.role}
               >
                 <span className="new-chat-msg-role">
@@ -312,11 +1321,57 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
                       ? 'uniAI'
                       : label('Hệ thống', 'System')}
                 </span>
-                <p>{m.text}</p>
+                {m.attachments && m.attachments.length > 0 ? (
+                  <div className="new-chat-msg-atts" aria-label={label('Tệp đính kèm', 'Attachments')}>
+                    {m.attachments.map((a) =>
+                      isImageAttachment(a) ? (
+                        <span key={a.path} className="new-chat-att-thumb" title={a.name}>
+                          {attachmentPreviews[a.path] ? (
+                            <img src={attachmentPreviews[a.path]} alt={a.name} />
+                          ) : (
+                            <span className="new-chat-att-thumb-fallback">{a.ext.toUpperCase()}</span>
+                          )}
+                        </span>
+                      ) : (
+                        <span key={a.path} className="new-chat-att-card" title={a.name}>
+                          <span className="new-chat-att-card-ext">{a.ext.toUpperCase()}</span>
+                          <span className="new-chat-att-card-meta">
+                            <span className="new-chat-att-card-name">{a.name}</span>
+                            <span className="new-chat-att-card-size">
+                              {formatAttachmentSize(a.sizeBytes)}
+                            </span>
+                          </span>
+                        </span>
+                      ),
+                    )}
+                  </div>
+                ) : null}
+                {m.streaming && !m.text ? (
+                  <AiTypingIndicator label={label('Đang suy nghĩ', 'Thinking')} />
+                ) : (
+                  <p className={m.streaming ? 'is-streaming-text' : undefined}>{m.text}</p>
+                )}
+                {m.choices && m.choices.length > 0 && !m.choicesResolved ? (
+                  <div className="new-chat-msg-choices" role="group">
+                    {m.choices.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        className="new-chat-chip"
+                        disabled={busy}
+                        onClick={() => onChoice(m.id, c)}
+                      >
+                        {c.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </article>
             ))}
-            {busy ? (
-              <p className="new-chat-typing">{label('Đang xử lý…', 'Working…')}</p>
+            {busy && !messages.some((m) => m.streaming) ? (
+              <div className="new-chat-typing-row">
+                <AiTypingIndicator label={label('Đang xử lý', 'Working')} />
+              </div>
             ) : null}
             <div ref={bottomRef} />
           </div>
@@ -324,16 +1379,59 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       </div>
 
       <footer className="new-chat-composer">
+        {attachments.length > 0 ? (
+          <div className="new-chat-composer-atts" role="list">
+            {attachments.map((a) => (
+              <div key={a.path} className="new-chat-composer-att" role="listitem">
+                {isImageAttachment(a) && attachmentPreviews[a.path] ? (
+                  <img src={attachmentPreviews[a.path]} alt="" className="new-chat-composer-att-img" />
+                ) : (
+                  <span className="new-chat-composer-att-ext">{a.ext.toUpperCase()}</span>
+                )}
+                <span className="new-chat-composer-att-name" title={a.name}>
+                  {a.name}
+                </span>
+                <button
+                  type="button"
+                  className="new-chat-composer-att-x"
+                  aria-label={label('Gỡ', 'Remove')}
+                  disabled={busy}
+                  onClick={() => removeAttachment(a.path)}
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {attachNotice ? <p className="new-chat-attach-notice">{attachNotice}</p> : null}
         <textarea
           ref={inputRef}
           rows={2}
           value={input}
           disabled={busy}
           placeholder={label(
-            'Ví dụ: Thêm công việc gọi khách lúc 3 giờ · Mở lịch · Tạo Word mới…',
-            'e.g. Add a task to call the client at 3 · Open calendar · Create a new Word doc…',
+            'Soạn Word… · Đính kèm file/ảnh · Tóm tắt Recent…',
+            'Draft Word… · Attach files/images · Summarize Recents…',
           )}
           onChange={(e) => setInput(e.target.value)}
+          onPaste={(e) => {
+            const items = e.clipboardData?.items
+            if (!items) return
+            for (const item of Array.from(items)) {
+              if (!item.type.startsWith('image/')) continue
+              const ext = PASTE_MIME_EXT[item.type]
+              if (!ext) continue
+              e.preventDefault()
+              const blob = item.getAsFile()
+              if (!blob) continue
+              void blob.arrayBuffer().then(async (buf) => {
+                const result = (await window.aiOffice.addPastedImage?.(buf, ext)) ?? null
+                applyAttachResult(result)
+              })
+              break
+            }
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
@@ -341,18 +1439,60 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
             }
           }}
         />
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          hidden
+          onChange={(e) => {
+            const files = Array.from(e.target.files ?? [])
+            e.target.value = ''
+            if (files.length === 0) return
+            const paths = files
+              .map((f) => {
+                try {
+                  return window.aiOffice.getPathForFile?.(f) ?? ''
+                } catch {
+                  return ''
+                }
+              })
+              .filter(Boolean)
+            if (paths.length === 0) return
+            void window.aiOffice.addAttachmentPaths?.(paths).then((result) => {
+              applyAttachResult(result ?? null)
+            })
+          }}
+        />
         <div className="new-chat-composer-actions">
-          <span>
-            {label('Enter gửi · Shift+Enter xuống dòng', 'Enter to send · Shift+Enter for newline')}
-          </span>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={busy || !input.trim()}
-            onClick={() => submit()}
-          >
-            {label('Gửi', 'Send')}
-          </button>
+          <div className="new-chat-composer-left">
+            <button
+              type="button"
+              className="btn new-chat-attach-btn"
+              disabled={busy}
+              onClick={() => void pickFiles()}
+              title={label('Đính kèm file hoặc ảnh', 'Attach files or images')}
+            >
+              {label('Đính kèm', 'Attach')}
+            </button>
+            <span>
+              {label('Enter gửi · Shift+Enter xuống dòng', 'Enter to send · Shift+Enter for newline')}
+            </span>
+          </div>
+          {busy ? (
+            <button type="button" className="btn" onClick={stopStream} title={label('Dừng', 'Stop')}>
+              <IconStop />
+              <span>{label('Dừng', 'Stop')}</span>
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={!canSend}
+              onClick={() => submit()}
+            >
+              {label('Gửi', 'Send')}
+            </button>
+          )}
         </div>
       </footer>
     </main>

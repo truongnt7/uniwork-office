@@ -1200,6 +1200,28 @@ export function Home() {
     setSelected(new Set())
     setRowMenu(null)
   }
+
+  useEffect(() => {
+    const openMyAi = () => goNewChat()
+    const onSummarize = () => {
+      goNewChat()
+      window.setTimeout(() => {
+        window.dispatchEvent(
+          new CustomEvent('uniwork:my-ai-submit', {
+            detail: {
+              text: 'Tóm tắt ngữ cảnh Workbench hôm nay: việc mở, lịch, ghi chú gần đây',
+            },
+          }),
+        )
+      }, 80)
+    }
+    window.addEventListener('uniwork:open-my-ai', openMyAi)
+    window.addEventListener('uniwork:agent-summarize', onSummarize)
+    return () => {
+      window.removeEventListener('uniwork:open-my-ai', openMyAi)
+      window.removeEventListener('uniwork:agent-summarize', onSummarize)
+    }
+  }, [])
   const [greetAskKey] = useState(
     () => GREET_ASK_KEYS[Math.floor(Math.random() * GREET_ASK_KEYS.length)]!,
   )
@@ -2314,7 +2336,11 @@ export function Home() {
           />
         ) : (
           <PracticeHome
-            practice={getPractice(activePracticeId) ?? listPractices()[1]!}
+            practice={
+              getPractice(activePracticeId) ??
+              listPractices().find((p) => p.id !== 'teacher') ??
+              listPractices()[0]!
+            }
             practices={listPractices()}
             projects={projects}
             selectedId={eduSelectedId}

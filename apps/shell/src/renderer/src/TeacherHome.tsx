@@ -1027,7 +1027,7 @@ export function TeacherHome({
           >
             {showHub
               ? label('Ẩn cấu hình Hub', 'Hide Hub settings')
-              : label('Hub Token (tuỳ chọn, anh làm sau)', 'Hub Token (optional, later)')}
+              : label('Hub Token (tuỳ chọn)', 'Hub Token (optional)')}
           </button>
           {showHub && (
             <div className="teacher-hub teacher-hub-nested">

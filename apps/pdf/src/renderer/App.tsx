@@ -1213,8 +1213,21 @@ export default function App() {
         return
       }
       await openPath(path)
+      const preset = await window.pdfApi.consumeAiPreset()
+      if (preset?.text) {
+        setAiCollapsed(false)
+        setAiPreset({ text: preset.text, nonce: Date.now() })
+      }
     })()
   }, [openPath])
+
+  useEffect(() => {
+    return window.pdfApi.onAiPreset?.((preset) => {
+      if (!preset?.text) return
+      setAiCollapsed(false)
+      setAiPreset({ text: preset.text, nonce: Date.now() })
+    })
+  }, [])
 
   /** pdf-lib cannot write encrypted files, including owner-protected files that open without a password. */
   const readOnly = status === 'ready' && (passwordRef.current !== undefined || documentEncrypted)

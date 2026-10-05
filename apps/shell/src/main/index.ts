@@ -231,6 +231,7 @@ import type {
   UiTheme,
 } from '../shared/home-api'
 import { HOME_CHANNELS } from '../shared/home-api'
+import { extractAllowedFileExcerpts } from './file-excerpts'
 import {
   normalizeAiPanelPrefs,
   sameAiPanelPrefs,
@@ -3228,20 +3229,48 @@ function routeDocumentPath(filePath: string): boolean {
  * pipeline, so the file must exist before edits. Falls back to the old blank
  * tab if the write fails.
  */
-async function newSheetTab(): Promise<void> {
+async function newSheetTab(opts?: {
+  aiPreset?: { text: string; autoRun?: boolean; displayText?: string }
+}): Promise<void> {
   try {
     const filePath = uniquePathIn(defaultSaveDir(), `${tm('untitledSheet')}.xlsx`)
     writeFileSync(filePath, await blankXlsxBuffer())
     // eligible for content-derived auto-rename after the first AI generation
     markSheetsUntitledPath(filePath)
+    const preset = opts?.aiPreset?.text
+      ? {
+          text: opts.aiPreset.text,
+          autoRun: opts.aiPreset.autoRun !== false,
+          ...(opts.aiPreset.displayText ? { displayText: opts.aiPreset.displayText } : {}),
+        }
+      : undefined
     // route directly (not via openDocumentPath) so creating a sheet emits
     // only file_new — the file_open event is reserved for opening existing files
+    if (tabManager) {
+      tabManager.openSheetsTab(filePath, preset ? { aiPreset: preset } : undefined)
+      recordStarPromptDocOpen()
+      analytics.track('file_new', { kind: 'xlsx' })
+      return
+    }
     if (routeDocumentPath(filePath)) recordStarPromptDocOpen()
     analytics.track('file_new', { kind: 'xlsx' })
   } catch (err) {
     console.warn('[shell] blank workbook create failed, opening in-memory blank tab:', err)
     try {
-      tabManager?.openSheetsTab(undefined, { newBlank: true })
+      tabManager?.openSheetsTab(undefined, {
+        newBlank: true,
+        ...(opts?.aiPreset?.text
+          ? {
+              aiPreset: {
+                text: opts.aiPreset.text,
+                autoRun: opts.aiPreset.autoRun !== false,
+                ...(opts.aiPreset.displayText
+                  ? { displayText: opts.aiPreset.displayText }
+                  : {}),
+              },
+            }
+          : {}),
+      })
     } catch (fallbackErr) {
       surfaceNewTabError(fallbackErr)
     }
@@ -3305,7 +3334,9 @@ function newHtmlTab(): void {
  * opens it as a regular file tab — the PDF module has no in-memory blank mode
  * (openPdfTab requires a path), same pattern as the blank workbook above.
  */
-async function newPdfTab(): Promise<void> {
+async function newPdfTab(opts?: {
+  aiPreset?: { text: string; autoRun?: boolean; displayText?: string }
+}): Promise<void> {
   try {
     const filePath = uniquePathIn(defaultSaveDir(), `${tm('untitledPdf')}.pdf`)
     writeFileSync(filePath, await blankPdfBuffer())
@@ -3313,6 +3344,19 @@ async function newPdfTab(): Promise<void> {
     markPdfUntitledPath(filePath)
     // PDF has no opened/saved shell hook — assign the pending project right here
     applyPendingProject(filePath)
+    const preset = opts?.aiPreset?.text
+      ? {
+          text: opts.aiPreset.text,
+          autoRun: opts.aiPreset.autoRun !== false,
+          ...(opts.aiPreset.displayText ? { displayText: opts.aiPreset.displayText } : {}),
+        }
+      : undefined
+    if (tabManager) {
+      tabManager.openPdfTab(filePath, preset ? { aiPreset: preset } : undefined)
+      recordStarPromptDocOpen()
+      analytics.track('file_new', { kind: 'pdf' })
+      return
+    }
     // route directly (not via openDocumentPath) so creating a pdf emits only
     // file_new and counts one doc-open — same as the blank workbook above
     if (routeDocumentPath(filePath)) recordStarPromptDocOpen()
@@ -3460,6 +3504,50 @@ function registerHomeIpc(): void {
     if (typeof path === 'string') openDocumentPath(path)
   })
 
+  ipcMain.handle(HOME_CHANNELS.fileExcerpts, (_event, paths: unknown) =>
+    extractAllowedFileExcerpts(paths, tabManager?.openFilePaths() ?? []),
+  )
+
+  ipcMain.handle(HOME_CHANNELS.activeOfficeTab, () => {
+    const tab = tabManager?.activeOfficeTab()
+    if (!tab) return null
+    return {
+      id: tab.id,
+      kind: tab.kind,
+      title: tab.title,
+      ...(tab.path ? { path: tab.path } : {}),
+    }
+  })
+
+  ipcMain.handle(
+    HOME_CHANNELS.pushAiPreset,
+    (
+      _event,
+      input?: {
+        text?: string
+        autoRun?: boolean
+        displayText?: string
+        tabId?: string
+      },
+    ) => {
+      if (!input || typeof input.text !== 'string' || !input.text.trim()) {
+        return { ok: false as const }
+      }
+      return (
+        tabManager?.pushAiPresetToOfficeTab(
+          {
+            text: input.text.trim(),
+            autoRun: input.autoRun !== false,
+            ...(typeof input.displayText === 'string'
+              ? { displayText: input.displayText }
+              : {}),
+          },
+          typeof input.tabId === 'string' ? input.tabId : undefined,
+        ) ?? { ok: false as const }
+      )
+    },
+  )
+
   ipcMain.handle(HOME_CHANNELS.browse, async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender) ?? shellWindow
     if (!win) return
@@ -3534,12 +3622,33 @@ function registerHomeIpc(): void {
     },
   )
 
-  ipcMain.handle(HOME_CHANNELS.newSheet, (_event, opts?: { projectId?: string }) => {
-    if (opts?.projectId && opts.projectId !== 'default') {
-      pendingNewFileProject.set('sheet', opts.projectId)
-    }
-    void newSheetTab()
-  })
+  ipcMain.handle(
+    HOME_CHANNELS.newSheet,
+    (
+      _event,
+      opts?: {
+        projectId?: string
+        aiPreset?: { text: string; autoRun?: boolean; displayText?: string }
+      },
+    ) => {
+      if (opts?.projectId && opts.projectId !== 'default') {
+        pendingNewFileProject.set('sheet', opts.projectId)
+      }
+      void newSheetTab(
+        opts?.aiPreset?.text
+          ? {
+              aiPreset: {
+                text: opts.aiPreset.text,
+                autoRun: opts.aiPreset.autoRun !== false,
+                ...(opts.aiPreset.displayText
+                  ? { displayText: opts.aiPreset.displayText }
+                  : {}),
+              },
+            }
+          : undefined,
+      )
+    },
+  )
 
   ipcMain.handle(
     HOME_CHANNELS.newSlide,
@@ -3581,12 +3690,33 @@ function registerHomeIpc(): void {
     newHtmlTab()
   })
 
-  ipcMain.handle(HOME_CHANNELS.newPdf, (_event, opts?: { projectId?: string }) => {
-    if (opts?.projectId && opts.projectId !== 'default') {
-      pendingNewFileProject.set('pdf', opts.projectId)
-    }
-    void newPdfTab()
-  })
+  ipcMain.handle(
+    HOME_CHANNELS.newPdf,
+    (
+      _event,
+      opts?: {
+        projectId?: string
+        aiPreset?: { text: string; autoRun?: boolean; displayText?: string }
+      },
+    ) => {
+      if (opts?.projectId && opts.projectId !== 'default') {
+        pendingNewFileProject.set('pdf', opts.projectId)
+      }
+      void newPdfTab(
+        opts?.aiPreset?.text
+          ? {
+              aiPreset: {
+                text: opts.aiPreset.text,
+                autoRun: opts.aiPreset.autoRun !== false,
+                ...(opts.aiPreset.displayText
+                  ? { displayText: opts.aiPreset.displayText }
+                  : {}),
+              },
+            }
+          : undefined,
+      )
+    },
+  )
 
   ipcMain.handle(HOME_CHANNELS.removeRecent, (_event, paths: unknown) => {
     const list = stringPaths(paths)

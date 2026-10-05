@@ -525,6 +525,27 @@ const desktopApi: DesktopApi = {
     const result: unknown = await ipcRenderer.invoke('sheets:consume-new-blank')
     return result === true
   },
+  async consumeAiPreset() {
+    const result: unknown = await ipcRenderer.invoke('sheets:consume-ai-preset')
+    if (!result || typeof result !== 'object') return null
+    const text = (result as { text?: unknown }).text
+    if (typeof text !== 'string' || !text.trim()) return null
+    const autoRun = (result as { autoRun?: unknown }).autoRun
+    const displayText = (result as { displayText?: unknown }).displayText
+    return {
+      text,
+      ...(typeof autoRun === 'boolean' ? { autoRun } : {}),
+      ...(typeof displayText === 'string' ? { displayText } : {}),
+    }
+  },
+  onAiPreset(handler) {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      preset: { text: string; autoRun?: boolean; displayText?: string },
+    ) => handler(preset)
+    ipcRenderer.on('my-ai:ai-preset', listener)
+    return () => ipcRenderer.removeListener('my-ai:ai-preset', listener)
+  },
   async hasQueuedWorkbook() {
     const result: unknown = await ipcRenderer.invoke('sheets:has-queued-workbook')
     return result === true

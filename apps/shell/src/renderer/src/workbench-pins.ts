@@ -186,12 +186,34 @@ function writeJson(key: string, value: unknown): void {
   }
 }
 
+/** Guard re-entrant dual-write between Calendar ↔ Events. */
+let calendarEventsSyncing = false
+
 export function readCalendar(practiceId: PracticeId): WbCalendarItem[] {
   return readJson(`uniwork.wb.calendar.${practiceId}`, [])
 }
 
 export function writeCalendar(practiceId: PracticeId, items: WbCalendarItem[]): void {
   writeJson(`uniwork.wb.calendar.${practiceId}`, items)
+  if (calendarEventsSyncing) return
+  calendarEventsSyncing = true
+  try {
+    const events = readJson<WbEventItem[]>(`uniwork.wb.events.${practiceId}`, [])
+    const map = new Map(events.map((e) => [e.id, e]))
+    for (const c of items) {
+      const prev = map.get(c.id)
+      map.set(c.id, {
+        id: c.id,
+        date: c.date,
+        title: c.title,
+        ...(prev?.time ? { time: prev.time } : {}),
+        ...(prev?.place ? { place: prev.place } : {}),
+      })
+    }
+    writeJson(`uniwork.wb.events.${practiceId}`, [...map.values()])
+  } finally {
+    calendarEventsSyncing = false
+  }
 }
 
 export function readTasks(practiceId: PracticeId): WbTaskItem[] {
@@ -1015,6 +1037,24 @@ export function readEvents(practiceId: PracticeId): WbEventItem[] {
 
 export function writeEvents(practiceId: PracticeId, items: WbEventItem[]): void {
   writeJson(`uniwork.wb.events.${practiceId}`, items)
+  if (calendarEventsSyncing) return
+  calendarEventsSyncing = true
+  try {
+    const cal = readJson<WbCalendarItem[]>(`uniwork.wb.calendar.${practiceId}`, [])
+    const map = new Map(cal.map((c) => [c.id, c]))
+    for (const e of items) {
+      const prev = map.get(e.id)
+      map.set(e.id, {
+        id: e.id,
+        date: e.date,
+        title: e.title,
+        ...(prev?.done !== undefined ? { done: prev.done } : {}),
+      })
+    }
+    writeJson(`uniwork.wb.calendar.${practiceId}`, [...map.values()])
+  } finally {
+    calendarEventsSyncing = false
+  }
 }
 
 export function readGrowth(): WbGrowthItem[] {
@@ -1141,9 +1181,14 @@ export interface WbFamilyTreeNode {
   name: string
   generation: number
   side: 'paternal' | 'maternal' | 'self' | 'spouse' | 'other'
+  /** Up to two parent node ids (links for the visual tree). */
+  parentIds?: string[]
+  /** Optional spouse link (pair rendered side-by-side). */
+  spouseId?: string
   parentNames?: string
   birthYear?: string
   note?: string
+  gender?: 'm' | 'f' | 'x'
 }
 
 export function readFamilyTree(): WbFamilyTreeNode[] {

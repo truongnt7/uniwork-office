@@ -282,8 +282,16 @@ export function EmailPane({ practiceId, vi }: { practiceId: PracticeId; vi: bool
             )}
           </span>
         </div>
-        <button type="button" className="btn" disabled title={label('Sắp ra mắt', 'Coming soon')}>
-          {label('Kết nối (sắp có)', 'Connect (soon)')}
+        <button
+          type="button"
+          className="btn"
+          disabled
+          title={label(
+            'OAuth Gmail/Outlook chưa có — hiện chỉ hộp thư local trên máy',
+            'Gmail/Outlook OAuth not available — local mailbox only',
+          )}
+        >
+          {label('Kết nối hộp thư (chưa hỗ trợ)', 'Connect mailbox (unsupported)')}
         </button>
       </aside>
 

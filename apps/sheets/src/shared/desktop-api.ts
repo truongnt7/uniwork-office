@@ -2610,6 +2610,12 @@ export interface DesktopApi {
   /// Returns true once when this tab was opened via "New Spreadsheet" from the
   /// shell home.
   consumeNewBlankWorkbook(): Promise<boolean>
+  /// One-shot AI panel preset queued by Home / My AI when opening a sheet
+  consumeAiPreset(): Promise<{ text: string; autoRun?: boolean; displayText?: string } | null>
+  /// Live push of an AI preset while the tab is already open
+  onAiPreset(
+    handler: (preset: { text: string; autoRun?: boolean; displayText?: string }) => void,
+  ): () => void
   /// Is a shell-queued workbook path still waiting to be opened? (The shell's
   /// 'open' nudge loop can time out on slow cold starts; the renderer pulls.)
   hasQueuedWorkbook(): Promise<boolean>

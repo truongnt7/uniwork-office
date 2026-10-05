@@ -7,10 +7,45 @@ import type {
   AiSearchProviderId,
   AiSearchProviderMeta,
   AiSettings,
+  AiStreamChunk,
+  AiStreamRequest,
   CodexModelCatalog,
 } from '@genoffice/ai-provider'
+
+/** Image attachment extensions — multimodal base64 on send (mirrors docs). */
+export const ATTACHMENT_IMAGE_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp'])
+
+export interface AttachmentMeta {
+  path: string
+  name: string
+  /** lowercased extension without the dot */
+  ext: string
+  sizeBytes: number
+}
+
+export interface AttachmentAddResult {
+  accepted: AttachmentMeta[]
+  rejected: string[]
+}
+
+export interface AttachmentReadResult {
+  ok: boolean
+  error?: string
+  name?: string
+  totalChars?: number
+  text?: string
+  offset?: number
+}
+
+export interface AttachmentImageResult {
+  ok: boolean
+  base64?: string
+  mime?: string
+  error?: string
+}
 import type { UpdateChannel } from './update-api'
 import type { AiPanelPrefs } from '@genoffice/ui/ai-panel-prefs'
+import type { FileExcerpt } from './file-excerpt'
 
 /** UI language; kept self-contained here (mirrors Lang in @genoffice/i18n) */
 export type UiLanguage =
@@ -91,14 +126,30 @@ export interface HomeApi {
   toggleStar(path: string): Promise<void>
   /** open an existing file, routing to the right module by extension */
   openPath(path: string): Promise<void>
+  /**
+   * Budget-capped text excerpts for Recent/Starred files (My AI summarize).
+   * Paths outside recents/starred are skipped.
+   */
+  fileExcerpts(paths: string[]): Promise<FileExcerpt[]>
   /** file picker accepting every supported extension, then routes */
   browse(): Promise<void>
   /** open a docs window at its start screen (optional HTML seed for teacher templates) */
   newDoc(opts?: NewDocOptions): Promise<void>
   /** open a sheets window */
-  newSheet(opts?: { projectId?: string }): Promise<void>
+  newSheet(opts?: NewSheetOptions): Promise<void>
   /** open a slides tab at its start screen (open-a-pptx) */
   newSlide(opts?: NewSlideOptions): Promise<void>
+  /** create a blank PDF (optional AI preset) */
+  newPdf(opts?: NewPdfOptions): Promise<void>
+  /** Best Office tab for My AI continue/summarize (last editor if Home is active) */
+  activeOfficeTab(): Promise<ActiveOfficeTab | null>
+  /** Activate Office tab and push an AI panel preset */
+  pushAiPreset(input: {
+    text: string
+    autoRun?: boolean
+    displayText?: string
+    tabId?: string
+  }): Promise<{ ok: boolean; tabId?: string; kind?: string; title?: string; path?: string }>
   /** Probe OpenAI-compatible Hub (models + optional balance hints) */
   probeAiHub(opts: { baseUrl: string; apiKey: string }): Promise<{
     ok: boolean
@@ -128,8 +179,6 @@ export interface HomeApi {
   newMarkdown(opts?: { projectId?: string }): Promise<void>
   /** open a blank html editor tab */
   newHtml(opts?: { projectId?: string }): Promise<void>
-  /** create a blank single-page PDF in the default save folder and open it */
-  newPdf(opts?: { projectId?: string }): Promise<void>
   /** drop entries from the recent list (does not touch the files) */
   removeRecent(paths: string[]): Promise<void>
   /** reveal the file in Finder / Explorer */
@@ -219,6 +268,17 @@ export interface HomeApi {
   testAiSettings(settings: AiSettings): Promise<AiChatResponse>
   /** one-shot non-streaming chat using saved (or provided) AI settings — Workbench helpers */
   aiChat(input: { system: string; user: string; settings?: AiSettings }): Promise<AiChatResponse>
+  /** streaming chat (same IPC as editor AI panels) */
+  aiStream(request: AiStreamRequest): Promise<void>
+  aiStreamCancel(requestId: string): Promise<void>
+  onAiStream(handler: (chunk: AiStreamChunk) => void): () => void
+  /** local file attachments for My AI (files stay on device) */
+  pickAttachments(): Promise<AttachmentAddResult | null>
+  addAttachmentPaths(paths: string[]): Promise<AttachmentAddResult>
+  addPastedImage(data: ArrayBuffer, ext: string): Promise<AttachmentAddResult>
+  readAttachment(path: string, offset: number, maxChars: number): Promise<AttachmentReadResult>
+  readAttachmentImage(path: string): Promise<AttachmentImageResult>
+  getPathForFile(file: File): string
   /** image generation / media analysis provider catalog */
   getAiMediaProviders(): AiMediaProviderMeta[]
   /** credential check for a (possibly unsaved) media provider; genspark reports the gsk login state */
@@ -468,6 +528,23 @@ export interface NewSlideOptions {
   aiPreset?: HomeAiPreset
 }
 
+export interface NewSheetOptions {
+  projectId?: string
+  aiPreset?: HomeAiPreset
+}
+
+export interface NewPdfOptions {
+  projectId?: string
+  aiPreset?: HomeAiPreset
+}
+
+export interface ActiveOfficeTab {
+  id: string
+  kind: string
+  title: string
+  path?: string
+}
+
 export interface TimelineEntryItem {
   filePath: string
   fileName: string
@@ -563,6 +640,9 @@ export const HOME_CHANNELS = {
   agentIntentAck: 'home:agent-intent-ack',
   resolveAgentIntent: 'home:resolve-agent-intent',
   submitAgentIntent: 'home:submit-agent-intent',
+  fileExcerpts: 'home:file-excerpts',
+  activeOfficeTab: 'home:active-office-tab',
+  pushAiPreset: 'home:push-ai-preset',
 } as const
 
 export const PROJECT_CHANNELS = {

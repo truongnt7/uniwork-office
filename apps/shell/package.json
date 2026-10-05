@@ -41,6 +41,7 @@
     "@uniwork/office-bridge": "*",
     "@uniwork/office-bridge-contracts": "*",
     "@uniwork/practice-core": "*",
+    "@genoffice/file-parse": "*",
     "@vitejs/plugin-react": "^5.0.4",
     "electron": "^43.3.0",
     "electron-builder": "^26.0.12",

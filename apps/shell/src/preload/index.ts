@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 import {
   AI_MEDIA_PROVIDERS,
@@ -7,11 +7,15 @@ import {
   getProviderAdapter,
 } from '@genoffice/ai-provider/browser'
 import type { AiSettings, CodexModelCatalog } from '@genoffice/ai-provider/browser'
+import type { AiStreamChunk, AiStreamRequest } from '@genoffice/ai-provider'
 import { installDropOpenBridge } from '@genoffice/electron-utils/drop-open'
 import { normalizeAiPanelPrefs } from '@genoffice/ui/ai-panel-prefs'
 import type {
   AccountLoginEvent,
   AccountStatus,
+  AttachmentAddResult,
+  AttachmentImageResult,
+  AttachmentReadResult,
   CloudProjectsSnapshot,
   HomeApi,
   RecentEntry,
@@ -87,6 +91,35 @@ const homeApi: HomeApi = {
   async openPath(path) {
     if (typeof path !== 'string' || !path) throw new Error('Invalid path.')
     await ipcRenderer.invoke(HOME_CHANNELS.openPath, path)
+  },
+  async fileExcerpts(paths) {
+    if (!Array.isArray(paths)) return []
+    const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.fileExcerpts, paths)
+    return Array.isArray(result) ? (result as import('../shared/file-excerpt').FileExcerpt[]) : []
+  },
+  async activeOfficeTab() {
+    const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.activeOfficeTab)
+    if (!result || typeof result !== 'object') return null
+    const tab = result as { id?: unknown; kind?: unknown; title?: unknown; path?: unknown }
+    if (typeof tab.id !== 'string' || typeof tab.kind !== 'string' || typeof tab.title !== 'string') {
+      return null
+    }
+    return {
+      id: tab.id,
+      kind: tab.kind,
+      title: tab.title,
+      ...(typeof tab.path === 'string' ? { path: tab.path } : {}),
+    }
+  },
+  async pushAiPreset(input) {
+    const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.pushAiPreset, input)
+    return (result ?? { ok: false }) as {
+      ok: boolean
+      tabId?: string
+      kind?: string
+      title?: string
+      path?: string
+    }
   },
   async browse() {
     await ipcRenderer.invoke(HOME_CHANNELS.browse)
@@ -364,6 +397,35 @@ const homeApi: HomeApi = {
       ok: false,
       error: typeof raw.error === 'string' ? raw.error : 'AI request failed',
     }
+  },
+  aiStream(request: AiStreamRequest) {
+    return ipcRenderer.invoke('ai:stream', request) as Promise<void>
+  },
+  aiStreamCancel(requestId: string) {
+    return ipcRenderer.invoke('ai:stream-cancel', requestId) as Promise<void>
+  },
+  onAiStream(handler: (chunk: AiStreamChunk) => void) {
+    const listener = (_event: IpcRendererEvent, chunk: AiStreamChunk) => handler(chunk)
+    ipcRenderer.on('ai:stream-chunk', listener)
+    return () => ipcRenderer.removeListener('ai:stream-chunk', listener)
+  },
+  pickAttachments() {
+    return ipcRenderer.invoke('files:pick') as Promise<AttachmentAddResult | null>
+  },
+  addAttachmentPaths(paths: string[]) {
+    return ipcRenderer.invoke('files:add', paths) as Promise<AttachmentAddResult>
+  },
+  addPastedImage(data: ArrayBuffer, ext: string) {
+    return ipcRenderer.invoke('files:add-pasted-image', data, ext) as Promise<AttachmentAddResult>
+  },
+  readAttachment(path: string, offset: number, maxChars: number) {
+    return ipcRenderer.invoke('files:read', path, offset, maxChars) as Promise<AttachmentReadResult>
+  },
+  readAttachmentImage(path: string) {
+    return ipcRenderer.invoke('files:read-image', path) as Promise<AttachmentImageResult>
+  },
+  getPathForFile(file: File) {
+    return webUtils.getPathForFile(file)
   },
   getAiMediaProviders() {
     return AI_MEDIA_PROVIDERS

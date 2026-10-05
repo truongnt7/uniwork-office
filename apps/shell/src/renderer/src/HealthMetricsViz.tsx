@@ -355,27 +355,23 @@ export function HealthMetricsViz({ vi }: { vi: boolean }): ReactElement {
 function DeviceConnectStrip({ vi }: { vi: boolean }): ReactElement {
   const label = (a: string, b: string) => (vi ? a : b)
   return (
-    <div className="wb-hdash-devices" aria-label={label('Kết nối thiết bị', 'Device connection')}>
+    <div className="wb-hdash-devices" aria-label={label('Nhập thủ công', 'Manual entry')}>
       <div className="wb-hdash-device-main">
         <span className="wb-hdash-device-pulse" aria-hidden />
         <div>
-          <strong>{label('Wearables', 'Wearables')}</strong>
+          <strong>{label('Chỉ nhập thủ công', 'Manual entry only')}</strong>
           <span>
             {label(
-              'Sẵn sàng kết nối Apple Watch / đồng hồ SK — chờ lớp mạng & quyền thiết bị.',
-              'Ready for Apple Watch / fitness watches — awaiting network & device permissions.',
+              'Số liệu sức khoẻ lưu trên máy. Đồng bộ Apple Watch / wearables chưa có trong bản này.',
+              'Health metrics stay on this device. Apple Watch / wearable sync is not available in this build.',
             )}
           </span>
         </div>
       </div>
       <div className="wb-hdash-device-actions">
-        <button type="button" className="btn btn-secondary" disabled title={label('Sắp có', 'Coming soon')}>
-          Apple Watch
-        </button>
-        <button type="button" className="btn btn-secondary" disabled title={label('Sắp có', 'Coming soon')}>
-          {label('Đồng hồ khác', 'Other watches')}
-        </button>
-        <span className="wb-hdash-badge wb-hdash-badge-muted">{label('Offline · thủ công', 'Offline · manual')}</span>
+        <span className="wb-hdash-badge wb-hdash-badge-muted">
+          {label('Offline · thủ công', 'Offline · manual')}
+        </span>
       </div>
     </div>
   )

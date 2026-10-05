@@ -469,6 +469,11 @@ export function App(): React.JSX.Element {
   const demoVisualDisposablesRef = useRef<{ dispose(): void }[]>([])
   const demoVisualInstallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [prompt, setPrompt] = useState('')
+  const [aiPreset, setAiPreset] = useState<{
+    text: string
+    nonce: number
+    autoRun?: boolean
+  } | null>(null)
   const [preview, setPreview] = useState<ChangePlan | null>(null)
   const [_revision, setRevision] = useState(0)
   const [workbookFile, setWorkbookFile] = useState<WorkbookFile | null>(null)
@@ -1604,6 +1609,22 @@ export function App(): React.JSX.Element {
     // shapes) with the queued file silently never opened.
     void window.desktopApi?.hasQueuedWorkbook?.().then((queued) => {
       if (queued) void handleInspectWorkbook()
+    })
+    void window.desktopApi?.consumeAiPreset?.().then((preset) => {
+      if (!preset?.text) return
+      setAiPreset({
+        text: preset.text,
+        nonce: Date.now(),
+        autoRun: preset.autoRun !== false,
+      })
+    })
+    const offAiPreset = window.desktopApi?.onAiPreset?.((preset) => {
+      if (!preset?.text) return
+      setAiPreset({
+        text: preset.text,
+        nonce: Date.now(),
+        autoRun: preset.autoRun !== false,
+      })
     })
     // Univer 0.25.1 also badges text parseable as date/time, phone numbers, and
     // other long numeric identifiers with "Number stored as text". Those values
@@ -2775,6 +2796,7 @@ export function App(): React.JSX.Element {
       unsubscribeMenu()
       unsubscribeCloseSave()
       offThemeChanged?.()
+      offAiPreset?.()
       undoRedoSub.unsubscribe()
       findRevealDispose()
       wrapMeasureDisposable.dispose()
@@ -4207,6 +4229,7 @@ export function App(): React.JSX.Element {
       )}
       <ExcelShell
         prompt={prompt}
+        aiPreset={aiPreset}
         preview={preview}
         sheetHasContent={sheetHasContent}
         pageLayout={activePageLayout}

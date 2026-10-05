@@ -1768,7 +1768,20 @@ export function App() {
         bootHandledRef.current = true
         void newFile().catch(() => {})
       })
-    return unsubscribe
+    const offAiPreset = window.desktop.onAiPreset?.((preset) => {
+      if (!preset?.text) return
+      setShowAi(true)
+      localStorage.setItem('aidocs.showAi', '1')
+      setAiPreset({
+        text: preset.text,
+        nonce: Date.now(),
+        autoRun: preset.autoRun !== false,
+      })
+    })
+    return () => {
+      unsubscribe()
+      offAiPreset?.()
+    }
     // newFile depends on editor (already in deps); we capture it by closure
     // rather than listing it to avoid a forward-reference TypeScript error
     // (newFile is declared after this effect in source order).

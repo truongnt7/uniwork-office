@@ -74,6 +74,14 @@ const api: DesktopApi = {
   consumeNewBlankDoc: () => ipcRenderer.invoke('docs:consume-new-blank'),
   consumeAiDocContent: () => ipcRenderer.invoke('docs:consume-ai-doc-content'),
   consumeAiPreset: () => ipcRenderer.invoke('docs:consume-ai-preset'),
+  onAiPreset: (handler) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      preset: { text: string; autoRun?: boolean; displayText?: string },
+    ) => handler(preset)
+    ipcRenderer.on('my-ai:ai-preset', listener)
+    return () => ipcRenderer.removeListener('my-ai:ai-preset', listener)
+  },
   consumeHeadlessExport: () => ipcRenderer.invoke('docs:consume-headless-export'),
   headlessExportDone: (result: { ok: boolean; error?: string }) =>
     ipcRenderer.send('docs:headless-export-done', result),

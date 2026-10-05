@@ -563,6 +563,19 @@ function openGeneratedPdf(path: string): void {
   shell.showItemInFolder(path)
 }
 
+export interface PdfAiPresetPayload {
+  text: string
+  autoRun?: boolean
+  displayText?: string
+}
+
+/** Home / My AI preset waiting for a PDF tab */
+const pendingPdfAiPresets = new Map<number, PdfAiPresetPayload>()
+
+export function queuePdfAiPreset(wcId: number, preset: PdfAiPresetPayload): void {
+  pendingPdfAiPresets.set(wcId, preset)
+}
+
 /** Open path per view, queued at tab creation; the renderer consumes it after mount
  * (avoids did-finish-load races). Kept until the view is destroyed: a reload
  * (View > Reload) remounts the renderer and consumes again — a one-shot entry
@@ -837,6 +850,12 @@ function registerPdfIpc(): void {
   ipcRegistered = true
 
   ipcMain.handle(PDF_CHANNELS.consumePending, (e) => openPathByWc.get(e.sender.id) ?? null)
+
+  ipcMain.handle(PDF_CHANNELS.consumeAiPreset, (e): PdfAiPresetPayload | null => {
+    const preset = pendingPdfAiPresets.get(e.sender.id) ?? null
+    pendingPdfAiPresets.delete(e.sender.id)
+    return preset
+  })
 
   ipcMain.handle(PDF_CHANNELS.getUsername, () => {
     try {

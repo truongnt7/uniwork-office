@@ -28,16 +28,20 @@ import {
   createPdfView,
   clearPdfDirty,
   pdfIsDirty,
+  queuePdfAiPreset,
   requestPdfClose,
+  type PdfAiPresetPayload,
 } from '../../../pdf/src/main/pdf-main'
 import {
   createSheetsView,
   nudgeQueuedWorkbook,
+  queueSheetsAiPreset,
   queueWorkbookForView,
   requestSheetsClose,
   setActiveSheetsWebContents,
   setSheetsNewBlank,
   sheetsPendingEditCount,
+  type SheetsAiPresetPayload,
 } from '../../../sheets/src/main/sheets-main'
 import {
   createSlidesView,
@@ -75,6 +79,8 @@ export class TabManager {
     { id: HOME_ID, kind: 'home', view: null, title: 'UniWork Office' },
   ]
   private activeId: string = HOME_ID
+  /** Last activated Office editor tab (Home/My AI stays active while user chats). */
+  private lastOfficeId: string | null = null
   private nextId = 1
   /** tab whose page entered HTML fullscreen (e.g. slides slideshow) — its view covers the tab strip */
   private htmlFullScreenId: string | null = null
@@ -200,6 +206,106 @@ export class TabManager {
     }))
   }
 
+  private isOfficeTab(tab: TabRecord): boolean {
+    return (
+      !tab.present &&
+      (tab.kind === 'docs' ||
+        tab.kind === 'sheets' ||
+        tab.kind === 'slides' ||
+        tab.kind === 'pdf' ||
+        tab.kind === 'markdown' ||
+        tab.kind === 'html')
+    )
+  }
+
+  /** Path of the focused Office tab, or the last Office tab if Home/My AI is active. */
+  activeFilePath(): string | undefined {
+    return this.activeOfficeTab()?.path
+  }
+
+  /**
+   * Best Office tab for My AI “continue / summarize this file”.
+   * Prefers the currently active editor; falls back to the last activated Office tab.
+   */
+  activeOfficeTab(): {
+    id: string
+    kind: TabKind
+    title: string
+    path?: string
+    webContents?: WebContents
+  } | null {
+    const active = this.tabs.find((t) => t.id === this.activeId)
+    if (active && this.isOfficeTab(active)) {
+      return {
+        id: active.id,
+        kind: active.kind,
+        title: active.title,
+        ...(active.filePath ? { path: active.filePath } : {}),
+        ...(active.view ? { webContents: active.view.webContents } : {}),
+      }
+    }
+    if (this.lastOfficeId) {
+      const last = this.tabs.find((t) => t.id === this.lastOfficeId)
+      if (last && this.isOfficeTab(last)) {
+        return {
+          id: last.id,
+          kind: last.kind,
+          title: last.title,
+          ...(last.filePath ? { path: last.filePath } : {}),
+          ...(last.view ? { webContents: last.view.webContents } : {}),
+        }
+      }
+    }
+    for (let i = this.tabs.length - 1; i >= 0; i--) {
+      const t = this.tabs[i]!
+      if (!this.isOfficeTab(t)) continue
+      return {
+        id: t.id,
+        kind: t.kind,
+        title: t.title,
+        ...(t.filePath ? { path: t.filePath } : {}),
+        ...(t.view ? { webContents: t.view.webContents } : {}),
+      }
+    }
+    return null
+  }
+
+  /** Activate an Office tab and push an AI panel preset (create or continue). */
+  pushAiPresetToOfficeTab(
+    preset: { text: string; autoRun?: boolean; displayText?: string },
+    tabId?: string,
+  ): { ok: boolean; tabId?: string; kind?: TabKind; title?: string; path?: string } {
+    const tab = tabId
+      ? this.tabs.find((t) => t.id === tabId)
+      : (() => {
+          const info = this.activeOfficeTab()
+          return info ? this.tabs.find((t) => t.id === info.id) : undefined
+        })()
+    if (!tab || !this.isOfficeTab(tab) || !tab.view || tab.view.webContents.isDestroyed()) {
+      return { ok: false }
+    }
+    this.activateTab(tab.id)
+    const payload = {
+      text: preset.text,
+      autoRun: preset.autoRun !== false,
+      ...(preset.displayText ? { displayText: preset.displayText } : {}),
+    }
+    if (tab.kind === 'docs') queueDocsAiPreset(tab.view.webContents.id, payload)
+    else if (tab.kind === 'slides') queueSlidesAiPreset(tab.view.webContents.id, payload)
+    else if (tab.kind === 'sheets') queueSheetsAiPreset(tab.view.webContents.id, payload)
+    else if (tab.kind === 'pdf') queuePdfAiPreset(tab.view.webContents.id, payload)
+    if (!tab.view.webContents.isDestroyed()) {
+      tab.view.webContents.send('my-ai:ai-preset', payload)
+    }
+    return {
+      ok: true,
+      tabId: tab.id,
+      kind: tab.kind,
+      title: tab.title,
+      ...(tab.filePath ? { path: tab.filePath } : {}),
+    }
+  }
+
   openHomeTab(): void {
     this.activateTab(HOME_ID)
   }
@@ -227,7 +333,10 @@ export class TabManager {
     return id
   }
 
-  openSheetsTab(openPath?: string, options?: { newBlank?: boolean }): string {
+  openSheetsTab(
+    openPath?: string,
+    options?: { newBlank?: boolean; aiPreset?: SheetsAiPresetPayload },
+  ): string {
     if (options?.newBlank) setSheetsNewBlank()
     const spare = this.takeSpareSheetsView()
     const view = spare ?? createSheetsView({ includeAiHandlers: false })
@@ -238,6 +347,7 @@ export class TabManager {
       queueWorkbookForView(view.webContents, openPath)
       if (spare) nudgeQueuedWorkbook(view.webContents)
     }
+    if (options?.aiPreset) queueSheetsAiPreset(view.webContents.id, options.aiPreset)
     const id = `t${this.nextId++}`
     if (!spare) {
       this.shellWindow.contentView.addChildView(view)
@@ -274,9 +384,10 @@ export class TabManager {
     return id
   }
 
-  openPdfTab(openPath: string): string {
+  openPdfTab(openPath: string, options?: { aiPreset?: PdfAiPresetPayload }): string {
     const view = createPdfView(openPath)
     const id = `t${this.nextId++}`
+    if (options?.aiPreset) queuePdfAiPreset(view.webContents.id, options.aiPreset)
     this.shellWindow.contentView.addChildView(view)
     view.setVisible(false)
     this.trackHtmlFullScreen(id, view)
@@ -352,6 +463,7 @@ export class TabManager {
     for (const t of this.tabs) t.view?.setVisible(t.id === id)
     if (target.view) target.view.setBounds(this.contentBounds())
     this.activeId = id
+    if (this.isOfficeTab(target)) this.lastOfficeId = id
     this.refreshActiveTargets()
     this.onChanged()
   }

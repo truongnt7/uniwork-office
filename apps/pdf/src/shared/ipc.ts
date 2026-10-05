@@ -4,6 +4,7 @@ import type { AiSettings, AiStreamChunk, AiStreamRequest } from '@genoffice/ai-p
 
 export const PDF_CHANNELS = {
   consumePending: 'pdf:consume-pending',
+  consumeAiPreset: 'pdf:consume-ai-preset',
   readFile: 'pdf:read-file',
   save: 'pdf:save',
   autoRename: 'pdf:auto-rename',
@@ -674,6 +675,12 @@ export interface ImageSearchResponse {
 export interface PdfApi {
   /** Take the pdf path pending for this view (queued at tab creation); null if none */
   consumePending(): Promise<string | null>
+  /** One-shot AI panel preset queued by Home / My AI */
+  consumeAiPreset(): Promise<{ text: string; autoRun?: boolean; displayText?: string } | null>
+  /** Live push of an AI preset while the tab is already open */
+  onAiPreset(
+    handler: (preset: { text: string; autoRun?: boolean; displayText?: string }) => void,
+  ): () => void
   /** Read pdf bytes. Only paths granted to this view are allowed */
   readFile(path: string): Promise<ArrayBuffer>
   /** Write markups/form values/page ops back to the original file (pdf-lib, content streams untouched); path grants same as readFile. With targetPath set (Save As), the original is only read and the result goes to targetPath */

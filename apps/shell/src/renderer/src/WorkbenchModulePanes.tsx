@@ -12,6 +12,8 @@ import { NotesPane } from './NotesPane'
 import { PetsPane } from './PetsPane'
 import { TasksPane } from './TasksPane'
 import {
+  createEmailDraft,
+  pinModule,
   readClients,
   readContracts,
   readEvents,
@@ -121,14 +123,14 @@ function AssistantPane({ vi, packId }: { vi: boolean; packId?: string | null }):
     <div className="wb-assistant">
       <p>
         {label(
-          'Trợ lý AI dùng panel uniAI chung của UniOffice (trong Docs / Slides / Sheets) — không mở chat thứ hai ở đây để tránh lệch ngữ cảnh.',
-          'AI Assistant uses the shared uniAI panel inside Docs / Slides / Sheets — no second chat here, to keep one context.',
+          'Trợ lý trên Home là “Trợ lý của bạn” (My AI). Trong Docs / Slides / Sheets dùng panel uniAI của tab đang mở.',
+          'Home assistant is My AI. Inside Docs / Slides / Sheets use that tab’s uniAI panel.',
         )}
       </p>
       <p className="teacher-hint">
         {label(
-          'Cách dùng: mở Tài liệu / Skills → chạy skill hoặc mở chat AI trong tab soạn thảo. Token chỉ trừ khi bạn xác nhận.',
-          'How: open Materials / Skills → run a skill or chat AI in an editor tab. Tokens only after you confirm.',
+          'Cách dùng: mở My AI để điều phối Workbench / file; hoặc Skills → chạy kỹ năng (có xác nhận Token).',
+          'How: open My AI to orchestrate Workbench / files; or Skills → run a skill (Token confirm).',
         )}
       </p>
       {packId ? (
@@ -146,13 +148,22 @@ function AssistantPane({ vi, packId }: { vi: boolean; packId?: string | null }):
           )}
         </p>
       )}
-      <button
-        type="button"
-        className="btn btn-secondary"
-        onClick={() => void window.aiOffice.newDoc?.(packId ? { projectId: packId } : undefined)}
-      >
-        {label('Mở Docs + dùng uniAI', 'Open Docs + use uniAI')}
-      </button>
+      <div className="teacher-chip-row">
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => window.dispatchEvent(new Event('uniwork:open-my-ai'))}
+        >
+          {label('Mở Trợ lý của bạn', 'Open My AI')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => void window.aiOffice.newDoc?.(packId ? { projectId: packId } : undefined)}
+        >
+          {label('Mở Docs + uniAI', 'Open Docs + uniAI')}
+        </button>
+      </div>
     </div>
   )
 }
@@ -360,6 +371,7 @@ function PersonalPane({ vi }: { vi: boolean }): ReactElement {
 function EventsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }): ReactElement {
   const label = (a: string, b: string) => (vi ? a : b)
   const [items, setItems] = useState<WbEventItem[]>(() => readEvents(practiceId))
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [time, setTime] = useState('')
   const [title, setTitle] = useState('')
@@ -367,6 +379,10 @@ function EventsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean })
 
   useEffect(() => {
     setItems(readEvents(practiceId))
+    setEditingId(null)
+    setTitle('')
+    setTime('')
+    setPlace('')
   }, [practiceId])
 
   const persist = (next: WbEventItem[]) => {
@@ -374,24 +390,47 @@ function EventsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean })
     writeEvents(practiceId, next)
   }
 
-  const add = () => {
-    const t = title.trim()
-    if (!t || !date) return
-    persist(
-      [
-        {
-          id: newId(),
-          date,
-          title: t,
-          ...(time.trim() ? { time: time.trim() } : {}),
-          ...(place.trim() ? { place: place.trim() } : {}),
-        },
-        ...items,
-      ].sort((a, b) => `${a.date}${a.time ?? ''}`.localeCompare(`${b.date}${b.time ?? ''}`)),
-    )
+  const clearForm = () => {
+    setEditingId(null)
     setTitle('')
     setTime('')
     setPlace('')
+    setDate(new Date().toISOString().slice(0, 10))
+  }
+
+  const startEdit = (it: WbEventItem) => {
+    setEditingId(it.id)
+    setDate(it.date)
+    setTime(it.time ?? '')
+    setTitle(it.title)
+    setPlace(it.place ?? '')
+  }
+
+  const save = () => {
+    const t = title.trim()
+    if (!t || !date) return
+    const row: WbEventItem = {
+      id: editingId ?? newId(),
+      date,
+      title: t,
+      ...(time.trim() ? { time: time.trim() } : {}),
+      ...(place.trim() ? { place: place.trim() } : {}),
+    }
+    const sorted = (list: WbEventItem[]) =>
+      [...list].sort((a, b) =>
+        `${a.date}${a.time ?? ''}`.localeCompare(`${b.date}${b.time ?? ''}`),
+      )
+    if (editingId) {
+      persist(sorted(items.map((x) => (x.id === editingId ? row : x))))
+    } else {
+      persist(sorted([row, ...items]))
+    }
+    clearForm()
+  }
+
+  const remove = (id: string) => {
+    if (editingId === id) clearForm()
+    persist(items.filter((x) => x.id !== id))
   }
 
   return (
@@ -418,7 +457,7 @@ function EventsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean })
             onChange={(e) => setTitle(e.target.value)}
             placeholder={label('VD: Họp phụ huynh khối 6', 'e.g. Grade 6 parent meeting')}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') add()
+              if (e.key === 'Enter') save()
             }}
           />
         </label>
@@ -426,9 +465,16 @@ function EventsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean })
           <span>{label('Địa điểm (tuỳ chọn)', 'Place (optional)')}</span>
           <input value={place} onChange={(e) => setPlace(e.target.value)} />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm sự kiện', 'Add event')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={save}>
+            {editingId ? label('Lưu sự kiện', 'Save event') : label('Thêm sự kiện', 'Add event')}
+          </button>
+          {editingId ? (
+            <button type="button" className="btn btn-secondary" onClick={clearForm}>
+              {label('Huỷ sửa', 'Cancel edit')}
+            </button>
+          ) : null}
+        </div>
       </div>
       <ul className="wb-module-list">
         {items.length === 0 ? (
@@ -444,13 +490,14 @@ function EventsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean })
                 <span>{it.title}</span>
                 {it.place ? <span>{it.place}</span> : null}
               </div>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => persist(items.filter((x) => x.id !== it.id))}
-              >
-                {label('Xóa', 'Delete')}
-              </button>
+              <div className="teacher-chip-row">
+                <button type="button" className="btn btn-secondary" onClick={() => startEdit(it)}>
+                  {label('Sửa', 'Edit')}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={() => remove(it.id)}>
+                  {label('Xóa', 'Delete')}
+                </button>
+              </div>
             </li>
           ))
         )}
@@ -887,6 +934,7 @@ function TravelPane({
 function ClientsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }): ReactElement {
   const label = (a: string, b: string) => (vi ? a : b)
   const [items, setItems] = useState<WbClientItem[]>(() => readClients(practiceId))
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [contact, setContact] = useState('')
   const [phone, setPhone] = useState('')
@@ -895,6 +943,7 @@ function ClientsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
 
   useEffect(() => {
     setItems(readClients(practiceId))
+    setEditingId(null)
   }, [practiceId])
 
   const persist = (next: WbClientItem[]) => {
@@ -902,20 +951,8 @@ function ClientsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
     writeClients(practiceId, next)
   }
 
-  const add = () => {
-    const n = name.trim()
-    if (!n) return
-    persist([
-      {
-        id: newId(),
-        name: n,
-        ...(contact.trim() ? { contact: contact.trim() } : {}),
-        ...(phone.trim() ? { phone: phone.trim() } : {}),
-        ...(email.trim() ? { email: email.trim() } : {}),
-        ...(note.trim() ? { note: note.trim() } : {}),
-      },
-      ...items,
-    ])
+  const clearForm = () => {
+    setEditingId(null)
     setName('')
     setContact('')
     setPhone('')
@@ -923,12 +960,56 @@ function ClientsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
     setNote('')
   }
 
+  const startEdit = (it: WbClientItem) => {
+    setEditingId(it.id)
+    setName(it.name)
+    setContact(it.contact ?? '')
+    setPhone(it.phone ?? '')
+    setEmail(it.email ?? '')
+    setNote(it.note ?? '')
+  }
+
+  const save = () => {
+    const n = name.trim()
+    if (!n) return
+    const row: WbClientItem = {
+      id: editingId ?? newId(),
+      name: n,
+      ...(contact.trim() ? { contact: contact.trim() } : {}),
+      ...(phone.trim() ? { phone: phone.trim() } : {}),
+      ...(email.trim() ? { email: email.trim() } : {}),
+      ...(note.trim() ? { note: note.trim() } : {}),
+    }
+    if (editingId) {
+      persist(items.map((x) => (x.id === editingId ? row : x)))
+    } else {
+      persist([row, ...items])
+    }
+    clearForm()
+  }
+
+  const composeEmail = (it: WbClientItem) => {
+    pinModule(practiceId, 'email')
+    window.dispatchEvent(new Event('uniwork:wb-pins-changed'))
+    createEmailDraft(practiceId, {
+      to: it.email || undefined,
+      subject: label(`Liên hệ ${it.name}`, `Contact ${it.name}`),
+      body: label(
+        `Xin chào${it.contact ? ` ${it.contact}` : ''},\n\n`,
+        `Hello${it.contact ? ` ${it.contact}` : ''},\n\n`,
+      ),
+    })
+    window.dispatchEvent(
+      new CustomEvent('uniwork:wb-open-module', { detail: { moduleId: 'email' } }),
+    )
+  }
+
   return (
     <>
       <p className="teacher-hint">
         {label(
-          'Danh bạ khách hàng / đối tác theo vai trò — lưu trên máy.',
-          'Client / partner directory for this role — stored on device.',
+          'Danh bạ khách hàng / đối tác theo vai trò — lưu trên máy. “Soạn email” tạo nháp trong tab Email (chưa gửi SMTP).',
+          'Client / partner directory for this role — on device. “Draft email” creates a local Email-tab draft (no SMTP yet).',
         )}
       </p>
       <div className="wb-module-form">
@@ -939,7 +1020,7 @@ function ClientsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
             onChange={(e) => setName(e.target.value)}
             placeholder={label('VD: Công ty ABC', 'e.g. ABC Co.')}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') add()
+              if (e.key === 'Enter') save()
             }}
           />
         </label>
@@ -959,9 +1040,18 @@ function ClientsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
           <span>{label('Ghi chú', 'Note')}</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm khách hàng', 'Add client')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={save}>
+            {editingId
+              ? label('Lưu khách hàng', 'Save client')
+              : label('Thêm khách hàng', 'Add client')}
+          </button>
+          {editingId ? (
+            <button type="button" className="btn btn-secondary" onClick={clearForm}>
+              {label('Huỷ sửa', 'Cancel edit')}
+            </button>
+          ) : null}
+        </div>
       </div>
       <ul className="wb-module-list">
         {items.length === 0 ? (
@@ -976,13 +1066,21 @@ function ClientsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
                 </span>
                 {it.note ? <span>{it.note}</span> : null}
               </div>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => persist(items.filter((x) => x.id !== it.id))}
-              >
-                {label('Xóa', 'Delete')}
-              </button>
+              <div className="teacher-chip-row">
+                <button type="button" className="btn btn-secondary" onClick={() => startEdit(it)}>
+                  {label('Sửa', 'Edit')}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={() => composeEmail(it)}>
+                  {label('Soạn email', 'Draft email')}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => persist(items.filter((x) => x.id !== it.id))}
+                >
+                  {label('Xóa', 'Delete')}
+                </button>
+              </div>
             </li>
           ))
         )}

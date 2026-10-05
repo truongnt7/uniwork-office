@@ -1,11 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactElement } from 'react'
-import {
-  createAgentIntent,
-  resolveAgentIntentFromText,
-  type AgentIntent,
-  type PracticeId,
-} from '@uniwork/practice-core'
+import { type AgentIntent, type PracticeId } from '@uniwork/practice-core'
 import { applyAgentIntent } from './agent-intent-apply'
 import { emitAgentIntentNavigate } from './agent-intent-bus'
 import { buildContextPack } from './context-manager'
@@ -24,7 +19,6 @@ export function AgentIntentBanner({ practiceId, ensureWorkbench }: Props): React
 
   const [pending, setPending] = useState<AgentIntent | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [devText, setDevText] = useState('')
 
   useEffect(() => {
     const off = window.aiOffice.onAgentIntent?.((intent) => {
@@ -60,40 +54,7 @@ export function AgentIntentBanner({ practiceId, ensureWorkbench }: Props): React
     setPending(null)
   }
 
-  const submitDev = () => {
-    const resolved = resolveAgentIntentFromText(devText, 'dev')
-    if (!resolved) return
-    setDevText('')
-    setPending(
-      createAgentIntent({
-        ...resolved,
-        requireConsent: true,
-        source: 'dev',
-      }),
-    )
-  }
-
-  if (!pending && !notice) {
-    if (!import.meta.env.DEV) return null
-    return (
-      <div className="agent-intent-dev">
-        <input
-          value={devText}
-          onChange={(e) => setDevText(e.target.value)}
-          placeholder={L(
-            'Thử lệnh NL → tab (DEV)…',
-            'Try NL → tab command (DEV)…',
-          )}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') submitDev()
-          }}
-        />
-        <button type="button" className="btn btn-secondary" onClick={submitDev}>
-          {L('Thử Intent', 'Try Intent')}
-        </button>
-      </div>
-    )
-  }
+  if (!pending && !notice) return null
 
   if (notice && !pending) {
     return (

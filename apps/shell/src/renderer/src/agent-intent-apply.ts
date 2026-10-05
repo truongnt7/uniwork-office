@@ -119,11 +119,7 @@ function addItem(
     ])
     return { vi: `Đã thêm mục tiêu: ${title}`, en: `Added growth goal: ${title}` }
   }
-  // family / friends / pets / travel: open tab only — structured forms differ
-  return {
-    vi: `Đã mở tab để bạn hoàn tất: ${title}`,
-    en: `Opened tab for you to finish: ${title}`,
-  }
+  return null
 }
 
 /** Apply a consented intent on-device (pin tab + optional store write). */
@@ -147,6 +143,35 @@ export function applyAgentIntent(
     const msg = addItem(practiceId, intent.target.id, intent.text ?? intent.summary)
     if (msg) {
       return { ok: true, tabId, messageVi: msg.vi, messageEn: msg.en }
+    }
+  }
+
+  if (intent.action === 'summarize') {
+    window.dispatchEvent(
+      new CustomEvent('uniwork:agent-summarize', {
+        detail: { practiceId, intentId: intent.intentId, text: intent.text ?? intent.summary },
+      }),
+    )
+    return {
+      ok: true,
+      tabId: 'assistant',
+      messageVi: 'Đã mở My AI để tóm tắt ngữ cảnh máy (cần xác nhận Token nếu hỏi AI).',
+      messageEn: 'Opened My AI to summarize on-device context (Token confirm if AI is used).',
+    }
+  }
+
+  if (intent.action === 'run_skill') {
+    const skillHint = (intent.text ?? intent.summary).trim()
+    window.dispatchEvent(
+      new CustomEvent('uniwork:agent-run-skill', {
+        detail: { practiceId, skillHint, intentId: intent.intentId },
+      }),
+    )
+    return {
+      ok: true,
+      tabId: 'skills',
+      messageVi: 'Đã chuyển tới Skills — chọn kỹ năng và xác nhận Token để chạy.',
+      messageEn: 'Opened Skills — pick a skill and confirm Tokens to run.',
     }
   }
 

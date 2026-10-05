@@ -1176,7 +1176,23 @@ export function App() {
         bootHandledRef.current = true
         void bootBlank()
       })
-    return off
+    const offAiPreset = window.slidesApi.onAiPreset?.((preset) => {
+      if (!preset?.text) return
+      setShowAi(() => {
+        localStorage.setItem('ai-slides-show-ai', '1')
+        return true
+      })
+      setAiPreset({
+        text: preset.text,
+        nonce: Date.now(),
+        autoRun: preset.autoRun !== false,
+        ...(preset.displayText ? { displayText: preset.displayText } : {}),
+      })
+    })
+    return () => {
+      off()
+      offAiPreset?.()
+    }
   }, [applyOpen, newBlank])
 
   // File renamed externally (shell Home list rename) → sync the title-bar path (content unchanged, dirty untouched)

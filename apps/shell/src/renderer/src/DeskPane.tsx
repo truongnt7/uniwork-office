@@ -26,6 +26,12 @@ import {
   readMatters,
   readTasks,
 } from './workbench-pins'
+import {
+  remindersEnabled,
+  requestReminderPermission,
+  setRemindersEnabled,
+  startWorkbenchReminderLoop,
+} from './workbench-reminders'
 
 interface Props {
   practiceId: PracticeId
@@ -44,11 +50,29 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
   const [layout, setLayout] = useState<DeskWidgetId[]>(() => readDeskLayout(practiceId))
   const [customOpen, setCustomOpen] = useState(false)
   const [tick, setTick] = useState(0)
+  const [notifyOn, setNotifyOn] = useState(() => remindersEnabled())
 
   useEffect(() => {
     setLayout(readDeskLayout(practiceId))
     setCustomOpen(false)
   }, [practiceId])
+
+  useEffect(() => {
+    if (!notifyOn) return
+    return startWorkbenchReminderLoop(() => practiceId)
+  }, [notifyOn, practiceId])
+
+  const toggleNotify = async () => {
+    if (notifyOn) {
+      setRemindersEnabled(false)
+      setNotifyOn(false)
+      return
+    }
+    const ok = await requestReminderPermission()
+    if (!ok) return
+    setRemindersEnabled(true)
+    setNotifyOn(true)
+  }
 
   const persist = (next: DeskWidgetId[]) => {
     setLayout(next)
@@ -344,6 +368,19 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
           )}
         </div>
         <div className="wb-ms-hero-actions">
+          <button
+            type="button"
+            className={`btn btn-secondary${notifyOn ? ' is-active' : ''}`}
+            onClick={() => void toggleNotify()}
+            title={label(
+              'Thông báo desktop khi việc đến hạn / lịch hôm nay (opt-in)',
+              'Desktop alerts for due tasks / today’s calendar (opt-in)',
+            )}
+          >
+            {notifyOn
+              ? label('Nhắc: bật', 'Reminders: on')
+              : label('Nhắc: tắt', 'Reminders: off')}
+          </button>
           <button type="button" className="btn btn-secondary" onClick={() => setTick((t) => t + 1)}>
             {label('Làm mới', 'Refresh')}
           </button>

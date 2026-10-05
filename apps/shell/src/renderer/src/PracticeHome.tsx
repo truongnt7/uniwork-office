@@ -8,6 +8,7 @@ import {
   listPracticeGroups,
   practiceMaterialSeedHtml,
   practiceMatchesFilter,
+  practiceSkillPrompt,
   skillsForDomain,
   type PracticeDefinition,
   type PracticeId,
@@ -87,12 +88,15 @@ export function PracticeHome({
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  const [confirmSkill, setConfirmSkill] = useState<string | null>(null)
+  const [confirmSkill, setConfirmSkill] = useState<
+    { kind: 'domain' | 'practice'; id: string } | null
+  >(null)
   const [skillDomain, setSkillDomain] = useState<SkillDomainId>(() =>
     readActiveSkillDomain(readPinnedSkillDomains()),
   )
   const domainSkills = useMemo(() => skillsForDomain(skillDomain), [skillDomain])
   const skillDomainDef = getSkillDomain(skillDomain)
+  const roleSkills = practice.skills
   const [facetDraft, setFacetDraft] = useState<Record<string, string>>({})
   const [titleDraft, setTitleDraft] = useState('')
   const [tagsText, setTagsText] = useState('')
@@ -100,6 +104,11 @@ export function PracticeHome({
   const [tagDraft, setTagDraft] = useState('')
   const [addRole, setAddRole] = useState(practice.materialRoles[0]?.id ?? 'khac')
   const [packFiles, setPackFiles] = useState<string[]>([])
+
+  // Declared before effects that depend on it (avoids TDZ crash when opening Workbench).
+  const selected = projects.find((p) => p.id === selectedId) ?? null
+  const meta = selected ? toPracticeMeta(selected, practice.id) : null
+  const hasSelectedPack = !!selected
 
   useEffect(() => {
     const init: Record<string, string> = {}
@@ -112,6 +121,62 @@ export function PracticeHome({
     setAddRole(practice.materialRoles[0]?.id ?? 'khac')
     setTab('desk')
   }, [practice.id])
+
+  useEffect(() => {
+    const openMod = (ev: Event) => {
+      const moduleId = (ev as CustomEvent<{ moduleId?: string }>).detail?.moduleId
+      if (moduleId && isWorkbenchModuleId(moduleId)) setTab(moduleId)
+    }
+    const onRunSkill = (ev: Event) => {
+      setTab('skills')
+      const hint = ((ev as CustomEvent<{ skillHint?: string }>).detail?.skillHint ?? '')
+        .toLowerCase()
+        .trim()
+      if (!hint || !hasSelectedPack) {
+        setNotice(
+          label(
+            hasSelectedPack
+              ? 'Mở Skills — chọn kỹ năng và xác nhận Token.'
+              : 'Mở Skills — chọn gói Tri thức rồi chạy kỹ năng.',
+            hasSelectedPack
+              ? 'Opened Skills — pick a skill and confirm Tokens.'
+              : 'Opened Skills — select a Knowledge pack, then run a skill.',
+          ),
+        )
+        return
+      }
+      const hit =
+        roleSkills.find(
+          (s) =>
+            hint.includes(s.id.toLowerCase()) ||
+            hint.includes(s.labelVi.toLowerCase()) ||
+            hint.includes(s.labelEn.toLowerCase()),
+        ) ??
+        domainSkills.find(
+          (s) =>
+            hint.includes(s.id.toLowerCase()) ||
+            hint.includes(s.labelVi.toLowerCase()) ||
+            hint.includes(s.labelEn.toLowerCase()),
+        )
+      if (!hit) {
+        setNotice(
+          label(
+            'Mở Skills — chọn kỹ năng và xác nhận Token.',
+            'Opened Skills — pick a skill and confirm Tokens.',
+          ),
+        )
+        return
+      }
+      const isPractice = roleSkills.some((s) => s.id === hit.id)
+      setConfirmSkill({ kind: isPractice ? 'practice' : 'domain', id: hit.id })
+    }
+    window.addEventListener('uniwork:wb-open-module', openMod)
+    window.addEventListener('uniwork:agent-run-skill', onRunSkill)
+    return () => {
+      window.removeEventListener('uniwork:wb-open-module', openMod)
+      window.removeEventListener('uniwork:agent-run-skill', onRunSkill)
+    }
+  }, [roleSkills, domainSkills, hasSelectedPack, vi])
 
   useEffect(() => {
     return onAgentIntentNavigate((tabId, intent) => {
@@ -142,9 +207,6 @@ export function PracticeHome({
       )
       .sort((a, b) => (b.entry.lastActiveAt > a.entry.lastActiveAt ? 1 : -1))
   }, [projects, practice.id, practice.projectKind, qQuery])
-
-  const selected = projects.find((p) => p.id === selectedId) ?? null
-  const meta = selected ? toPracticeMeta(selected, practice.id) : null
 
   useEffect(() => {
     if (!meta) {
@@ -307,7 +369,7 @@ export function PracticeHome({
     }
   }
 
-  const runSkill = async (skillId: string) => {
+  const runDomainSkill = async (skillId: string) => {
     if (!selected || !meta) return
     const skill = getDomainSkill(skillId)
     if (!skill) return
@@ -345,6 +407,72 @@ export function PracticeHome({
         await rememberRole(selected.id, role)
       }
       setNotice(label(`Đã chạy kỹ năng: ${skill.labelVi}`, `Ran skill: ${skill.labelEn}`))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const runPracticeSkill = async (skillId: string) => {
+    if (!selected || !meta) return
+    const skill = roleSkills.find((s) => s.id === skillId)
+    if (!skill) return
+    setConfirmSkill(null)
+    setBusy(`pskill:${skillId}`)
+    try {
+      const prompt = practiceSkillPrompt(
+        vi ? skill.labelVi : skill.labelEn,
+        vi ? skill.descVi : skill.descEn,
+        meta,
+      )
+      const preset = {
+        text: prompt,
+        autoRun: true,
+        displayText: vi ? skill.labelVi : skill.labelEn,
+      }
+      if (skill.app === 'slides') {
+        await window.aiOffice.newSlide({ projectId: selected.id, aiPreset: preset })
+      } else {
+        const role = skill.seedRole ?? practice.materialRoles[0]?.id ?? 'khac'
+        const roleDef = practice.materialRoles.find((r) => r.id === role)
+        const html = practiceMaterialSeedHtml(
+          role,
+          vi ? (roleDef?.labelVi ?? role) : (roleDef?.labelEn ?? role),
+          meta,
+        )
+        await openDocs(selected.id, `${skill.labelVi} — ${meta.title}`, html, preset)
+        await rememberRole(selected.id, role)
+      }
+      setNotice(label(`Đã chạy kỹ năng vai: ${skill.labelVi}`, `Ran role skill: ${skill.labelEn}`))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const openFreeChain = async () => {
+    if (!selected || !meta) return
+    const ids = practice.freeChainTemplateIds
+    if (!ids?.length) return
+    setBusy('chain')
+    try {
+      for (const templateId of ids) {
+        const tpl = practice.templates.find((t) => t.id === templateId)
+        if (!tpl) continue
+        if (tpl.app === 'slides') await window.aiOffice.newSlide({ projectId: selected.id })
+        else if (tpl.app === 'sheets') await window.aiOffice.newSheet({ projectId: selected.id })
+        else {
+          const roleDef = practice.materialRoles.find((r) => r.id === tpl.materialRole)
+          const html = practiceMaterialSeedHtml(
+            tpl.materialRole,
+            vi ? (roleDef?.labelVi ?? tpl.labelVi) : (roleDef?.labelEn ?? tpl.labelEn),
+            meta,
+          )
+          await openDocs(selected.id, `${tpl.labelVi} — ${meta.title}`, html)
+        }
+        await rememberRole(selected.id, tpl.materialRole)
+      }
+      setNotice(
+        label('Đã mở chuỗi mẫu miễn phí theo thứ tự.', 'Opened the free template chain in order.'),
+      )
     } finally {
       setBusy(null)
     }
@@ -601,6 +729,18 @@ export function PracticeHome({
                   </button>
                 ))}
               </div>
+              {practice.freeChainTemplateIds && practice.freeChainTemplateIds.length > 0 ? (
+                <div className="teacher-chip-row">
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={!!busy}
+                    onClick={() => void openFreeChain()}
+                  >
+                    {label('Mở chuỗi mẫu miễn phí', 'Open free template chain')}
+                  </button>
+                </div>
+              ) : null}
             </>
           )}
         </section>
@@ -608,7 +748,54 @@ export function PracticeHome({
 
       {tab === 'skills' && (
         <section className="teacher-panel teacher-detail">
-          <h2>{label('Kỹ năng chuyên môn', 'Specialized Skills')}</h2>
+          <h2>{label('Kỹ năng', 'Skills')}</h2>
+          {!selected || !meta ? (
+            <p className="teacher-empty">
+              {label(
+                'Chọn gói ở Tri thức để gắn ngữ cảnh trước khi chạy.',
+                'Select a Knowledge pack for context before running.',
+              )}
+            </p>
+          ) : (
+            <p>
+              {label('Ngữ cảnh:', 'Context:')} <strong>{meta.title}</strong>
+            </p>
+          )}
+
+          {roleSkills.length > 0 ? (
+            <>
+              <h3>{label('Kỹ năng theo vai', 'Role skills')}</h3>
+              <p className="teacher-hint">
+                {label(
+                  'Kỹ năng gắn với vai trò hiện tại. Mỗi lần chạy hỏi xác nhận Token.',
+                  'Skills for this practice role. Each run asks to confirm Tokens.',
+                )}
+              </p>
+              <ul className="teacher-skill-list">
+                {roleSkills.map((s) => (
+                  <li key={s.id} className="teacher-skill-row">
+                    <div>
+                      <strong>{vi ? s.labelVi : s.labelEn}</strong>
+                      <span>{vi ? s.descVi : s.descEn}</span>
+                      <em>
+                        {s.category} · {label('Tốn Token', 'Uses Tokens')}
+                      </em>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={!!busy || !selected}
+                      onClick={() => setConfirmSkill({ kind: 'practice', id: s.id })}
+                    >
+                      {label('Chạy', 'Run')}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+
+          <h3>{label('Kỹ năng lĩnh vực', 'Domain skills')}</h3>
           <p className="teacher-hint">
             {label(
               'Thêm tab lĩnh vực bằng +. Mỗi lần chạy hỏi xác nhận Token.',
@@ -631,15 +818,6 @@ export function PracticeHome({
                   : skillDomainDef.hintEn
                 : ''}
             </p>
-            {!selected || !meta ? (
-              <p className="teacher-empty">
-                {label('Chọn gói ở Tri thức để gắn ngữ cảnh trước khi chạy.', 'Select a Knowledge pack for context before running.')}
-              </p>
-            ) : (
-              <p>
-                {label('Ngữ cảnh:', 'Context:')} <strong>{meta.title}</strong>
-              </p>
-            )}
             <ul className="teacher-skill-list">
               {domainSkills.map((s) => (
                 <li key={s.id} className="teacher-skill-row">
@@ -654,7 +832,7 @@ export function PracticeHome({
                     type="button"
                     className="btn btn-primary"
                     disabled={!!busy || !selected}
-                    onClick={() => setConfirmSkill(s.id)}
+                    onClick={() => setConfirmSkill({ kind: 'domain', id: s.id })}
                   >
                     {label('Chạy', 'Run')}
                   </button>
@@ -738,7 +916,14 @@ export function PracticeHome({
               <button className="btn btn-secondary" type="button" onClick={() => setConfirmSkill(null)}>
                 {label('Huỷ', 'Cancel')}
               </button>
-              <button className="btn btn-primary" type="button" onClick={() => void runSkill(confirmSkill)}>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() => {
+                  if (confirmSkill.kind === 'practice') void runPracticeSkill(confirmSkill.id)
+                  else void runDomainSkill(confirmSkill.id)
+                }}
+              >
                 {label('Chạy AI', 'Run AI')}
               </button>
             </div>

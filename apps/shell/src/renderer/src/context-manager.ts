@@ -145,6 +145,119 @@ function moduleContext(practiceId: PracticeId, moduleId: WorkbenchModuleId): Con
   return chunks
 }
 
+export interface MyAiContextPack {
+  practiceId: PracticeId
+  chunks: ContextChunk[]
+  charCount: number
+  builtAt: string
+  /** Single string for aiChat system / user grounding */
+  plainText: string
+}
+
+export interface MyAiRecentHint {
+  name: string
+  ext: string
+  mtimeMs: number
+}
+
+/**
+ * Desk-wide snapshot for My AI chat turns (no AgentIntent required).
+ * Local-only; budget-capped before any Hub call.
+ */
+export function buildMyAiContextPack(
+  practiceId: PracticeId,
+  opts?: { recents?: readonly MyAiRecentHint[]; vi?: boolean },
+): MyAiContextPack {
+  const vi = opts?.vi !== false
+  const chunks: ContextChunk[] = []
+
+  const openTasks = readTasks(practiceId).filter((t) => !t.done).slice(0, MAX_LIST)
+  chunks.push({
+    id: 'tasks-open',
+    source: 'local:tasks',
+    text: openTasks.length
+      ? vi
+        ? `Việc đang mở (${openTasks.length}): ${openTasks.map((t) => t.title).join('; ')}`
+        : `Open tasks (${openTasks.length}): ${openTasks.map((t) => t.title).join('; ')}`
+      : vi
+        ? 'Không có việc đang mở.'
+        : 'No open tasks.',
+  })
+
+  const notes = readNotes(practiceId)
+  chunks.push({
+    id: 'notes',
+    source: 'local:notes',
+    text: clip(
+      notes
+        ? vi
+          ? `Ghi chú:\n${notes}`
+          : `Notes:\n${notes}`
+        : vi
+          ? 'Bảng ghi chú trống.'
+          : 'Notes board empty.',
+      1_200,
+    ),
+  })
+
+  const mails = readEmails(practiceId).slice(0, MAX_LIST)
+  chunks.push({
+    id: 'email',
+    source: 'local:email',
+    text: mails.length
+      ? vi
+        ? `Email (${mails.length}): ${mails
+            .map((m) => `[${m.folder}] ${m.subject || '(không tiêu đề)'} → ${m.to || m.from}`)
+            .join('; ')}`
+        : `Email (${mails.length}): ${mails
+            .map((m) => `[${m.folder}] ${m.subject || '(no subject)'} → ${m.to || m.from}`)
+            .join('; ')}`
+      : vi
+        ? 'Hộp thư trống.'
+        : 'Email mailbox empty.',
+  })
+
+  const cal = readCalendar(practiceId).slice(0, MAX_LIST)
+  chunks.push({
+    id: 'calendar',
+    source: 'local:calendar',
+    text: cal.length
+      ? vi
+        ? `Lịch: ${cal.map((i) => `${i.date} ${i.title}`).join('; ')}`
+        : `Calendar: ${cal.map((i) => `${i.date} ${i.title}`).join('; ')}`
+      : vi
+        ? 'Lịch trống.'
+        : 'Calendar empty.',
+  })
+
+  const recents = opts?.recents?.slice(0, MAX_LIST) ?? []
+  if (recents.length) {
+    chunks.push({
+      id: 'recents',
+      source: 'local:recents',
+      text: vi
+        ? `File gần đây: ${recents.map((e) => `${e.name} (.${e.ext})`).join('; ')}`
+        : `Recent files: ${recents.map((e) => `${e.name} (.${e.ext})`).join('; ')}`,
+    })
+  }
+
+  chunks.push({
+    id: 'practice',
+    source: 'local:practice',
+    text: vi ? `Practice đang chọn: ${practiceId}` : `Active practice: ${practiceId}`,
+  })
+
+  const packed = packChunks(chunks)
+  const plainText = packed.map((c) => `[${c.source}] ${c.text}`).join('\n')
+  return {
+    practiceId,
+    chunks: packed,
+    charCount: plainText.length,
+    builtAt: new Date().toISOString(),
+    plainText,
+  }
+}
+
 /** Build a budget-capped context pack for Hub / preview UI. */
 export function buildContextPack(
   intent: AgentIntent,

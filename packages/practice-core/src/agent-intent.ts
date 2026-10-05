@@ -203,8 +203,10 @@ export function resolveAgentIntentFromText(
   if (!raw) return null
   const lower = raw.toLowerCase()
 
+  const RUN_SKILL_KEYS = ['chạy kỹ năng', 'chay ky nang', 'run skill', 'run_skill'] as const
   let action: AgentIntentAction = 'open'
-  if (ADD_KEYS.some((k) => lower.includes(k))) action = 'add_item'
+  if (RUN_SKILL_KEYS.some((k) => lower.includes(k))) action = 'run_skill'
+  else if (ADD_KEYS.some((k) => lower.includes(k))) action = 'add_item'
   else if (SUM_KEYS.some((k) => lower.includes(k))) action = 'summarize'
   else if (OPEN_KEYS.some((k) => lower.includes(k))) action = 'open'
 
@@ -259,7 +261,7 @@ export function parseAgentIntentTarget(
   return null
 }
 
-/** Modules that support add_item on-device today. */
+/** Modules that support add_item on-device today (must write a real row). */
 export function moduleSupportsAddItem(id: WorkbenchModuleId): boolean {
   return (
     id === 'tasks' ||
@@ -269,10 +271,6 @@ export function moduleSupportsAddItem(id: WorkbenchModuleId): boolean {
     id === 'events' ||
     id === 'personal-finance' ||
     id === 'health' ||
-    id === 'friends' ||
-    id === 'pets' ||
-    id === 'family' ||
-    id === 'travel' ||
     id === 'self-growth'
   )
 }
@@ -291,7 +289,7 @@ export function listAgentRoutableTabs(): {
     labelVi: m.labelVi,
     labelEn: m.labelEn,
     actions: (
-      ['open', 'navigate', 'summarize'] as AgentIntentAction[]
+      ['open', 'navigate'] as AgentIntentAction[]
     ).concat(moduleSupportsAddItem(m.id) ? (['add_item'] as AgentIntentAction[]) : []),
   }))
   const pillars = PILLARS.map((id) => ({

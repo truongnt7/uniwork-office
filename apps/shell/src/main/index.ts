@@ -232,6 +232,8 @@ import type {
 } from '../shared/home-api'
 import { HOME_CHANNELS } from '../shared/home-api'
 import { extractAllowedFileExcerpts } from './file-excerpts'
+import { getWorkbenchDb, isAllowedWbKey, type WbKvMap } from './workbench-db'
+import { exportWorkbenchBackup, importWorkbenchBackup } from './workbench-backup'
 import {
   normalizeAiPanelPrefs,
   sameAiPanelPrefs,
@@ -3507,6 +3509,43 @@ function registerHomeIpc(): void {
   ipcMain.handle(HOME_CHANNELS.fileExcerpts, (_event, paths: unknown) =>
     extractAllowedFileExcerpts(paths, tabManager?.openFilePaths() ?? []),
   )
+
+  ipcMain.handle(HOME_CHANNELS.wbLoadAll, () => {
+    const db = getWorkbenchDb(app.getPath('userData'))
+    const keys = db.loadAll()
+    return { keys, keyCount: Object.keys(keys).length, dbPath: db.dbPath }
+  })
+
+  ipcMain.handle(HOME_CHANNELS.wbGetKey, (_event, key: unknown) => {
+    if (typeof key !== 'string' || !isAllowedWbKey(key)) return null
+    return getWorkbenchDb(app.getPath('userData')).get(key)
+  })
+
+  ipcMain.handle(HOME_CHANNELS.wbSetKey, (_event, key: unknown, value: unknown) => {
+    if (typeof key !== 'string' || typeof value !== 'string' || !isAllowedWbKey(key)) return
+    getWorkbenchDb(app.getPath('userData')).set(key, value)
+  })
+
+  ipcMain.handle(HOME_CHANNELS.wbRemoveKey, (_event, key: unknown) => {
+    if (typeof key !== 'string' || !isAllowedWbKey(key)) return
+    getWorkbenchDb(app.getPath('userData')).remove(key)
+  })
+
+  ipcMain.handle(HOME_CHANNELS.wbImportKeys, (_event, keys: unknown) => {
+    if (!keys || typeof keys !== 'object' || Array.isArray(keys)) return { imported: 0 }
+    const imported = getWorkbenchDb(app.getPath('userData')).importKeys(keys as WbKvMap)
+    return { imported }
+  })
+
+  ipcMain.handle(HOME_CHANNELS.wbExportBackup, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return exportWorkbenchBackup(win)
+  })
+
+  ipcMain.handle(HOME_CHANNELS.wbImportBackup, async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    return importWorkbenchBackup(win)
+  })
 
   ipcMain.handle(HOME_CHANNELS.activeOfficeTab, () => {
     const tab = tabManager?.activeOfficeTab()

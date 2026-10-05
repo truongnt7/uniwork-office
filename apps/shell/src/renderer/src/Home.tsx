@@ -28,6 +28,11 @@ import { AgentIntentBanner } from './AgentIntentBanner'
 import { NewChatPane } from './NewChatPane'
 import { PracticeHome } from './PracticeHome'
 import { TeacherHome } from './TeacherHome'
+import {
+  hydrateWorkbenchStore,
+  wbStoreGetRaw,
+  wbStoreSetRaw,
+} from './workbench-store-client'
 
 declare global {
   interface Window {
@@ -1140,22 +1145,22 @@ export function Home() {
   const [eduMode, setEduMode] = useState(false)
   const [eduSelectedId, setEduSelectedId] = useState<string | null>(null)
   const [activePracticeId, setActivePracticeId] = useState<PracticeId>(() => {
-    try {
-      const raw = localStorage.getItem('uniwork.activePracticeId')
-      if (isPracticeId(raw)) return raw
-    } catch {
-      /* ignore */
-    }
+    const raw = wbStoreGetRaw('uniwork.activePracticeId')
+    if (isPracticeId(raw)) return raw
     return 'teacher'
   })
   const switchPractice = useCallback((id: PracticeId) => {
     setActivePracticeId(id)
     setEduSelectedId(null)
-    try {
-      localStorage.setItem('uniwork.activePracticeId', id)
-    } catch {
-      /* ignore */
-    }
+    wbStoreSetRaw('uniwork.activePracticeId', id)
+  }, [])
+
+  // Hydrate Workbench SQLite (migrate localStorage → DB when empty).
+  useEffect(() => {
+    void hydrateWorkbenchStore().then(() => {
+      const raw = wbStoreGetRaw('uniwork.activePracticeId')
+      if (isPracticeId(raw)) setActivePracticeId(raw)
+    })
   }, [])
   const [filter, setFilter] = useState('all')
   // modified-column sort (WPS-style header popover), shared by the global and project tables

@@ -293,6 +293,25 @@ export interface HomeApi {
     provider: AiSearchProviderId
     apiKey: string
   }): Promise<{ ok: boolean; error?: string }>
+  /** Local Workbench SQLite store (main-process source of truth) */
+  wb: WorkbenchStoreApi
+}
+
+/** Renderer ↔ main bridge for Workbench key/value persistence. */
+export interface WorkbenchStoreApi {
+  loadAll(): Promise<{ keys: Record<string, string>; keyCount: number; dbPath: string }>
+  getKey(key: string): Promise<string | null>
+  setKey(key: string, value: string): Promise<void>
+  removeKey(key: string): Promise<void>
+  importKeys(keys: Record<string, string>): Promise<{ imported: number }>
+  exportBackup(): Promise<{ ok: boolean; path?: string; error?: string; canceled?: boolean }>
+  importBackup(): Promise<{
+    ok: boolean
+    keyCount?: number
+    keys?: Record<string, string>
+    error?: string
+    canceled?: boolean
+  }>
 }
 
 export interface AiCatalogEntry extends AiProviderMeta {
@@ -643,6 +662,13 @@ export const HOME_CHANNELS = {
   fileExcerpts: 'home:file-excerpts',
   activeOfficeTab: 'home:active-office-tab',
   pushAiPreset: 'home:push-ai-preset',
+  wbLoadAll: 'home:wb-load-all',
+  wbGetKey: 'home:wb-get-key',
+  wbSetKey: 'home:wb-set-key',
+  wbRemoveKey: 'home:wb-remove-key',
+  wbImportKeys: 'home:wb-import-keys',
+  wbExportBackup: 'home:wb-export-backup',
+  wbImportBackup: 'home:wb-import-backup',
 } as const
 
 export const PROJECT_CHANNELS = {

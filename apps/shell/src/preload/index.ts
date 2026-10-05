@@ -451,6 +451,58 @@ const homeApi: HomeApi = {
       ? { ok: true }
       : { ok: false, error: typeof raw.error === 'string' ? raw.error : 'Connection failed' }
   },
+  wb: {
+    async loadAll() {
+      const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.wbLoadAll)
+      if (result && typeof result === 'object') {
+        const r = result as { keys?: unknown; keyCount?: unknown; dbPath?: unknown }
+        return {
+          keys:
+            r.keys && typeof r.keys === 'object' && !Array.isArray(r.keys)
+              ? (r.keys as Record<string, string>)
+              : {},
+          keyCount: typeof r.keyCount === 'number' ? r.keyCount : 0,
+          dbPath: typeof r.dbPath === 'string' ? r.dbPath : '',
+        }
+      }
+      return { keys: {}, keyCount: 0, dbPath: '' }
+    },
+    async getKey(key) {
+      const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.wbGetKey, key)
+      return typeof result === 'string' ? result : null
+    },
+    async setKey(key, value) {
+      await ipcRenderer.invoke(HOME_CHANNELS.wbSetKey, key, value)
+    },
+    async removeKey(key) {
+      await ipcRenderer.invoke(HOME_CHANNELS.wbRemoveKey, key)
+    },
+    async importKeys(keys) {
+      const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.wbImportKeys, keys)
+      const imported =
+        result && typeof result === 'object' && typeof (result as { imported?: unknown }).imported === 'number'
+          ? (result as { imported: number }).imported
+          : 0
+      return { imported }
+    },
+    async exportBackup() {
+      return (await ipcRenderer.invoke(HOME_CHANNELS.wbExportBackup)) as {
+        ok: boolean
+        path?: string
+        error?: string
+        canceled?: boolean
+      }
+    },
+    async importBackup() {
+      return (await ipcRenderer.invoke(HOME_CHANNELS.wbImportBackup)) as {
+        ok: boolean
+        keyCount?: number
+        keys?: Record<string, string>
+        error?: string
+        canceled?: boolean
+      }
+    },
+  },
 }
 
 function asCloudProjectsSnapshot(result: unknown): CloudProjectsSnapshot | null {

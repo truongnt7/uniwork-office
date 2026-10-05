@@ -14,6 +14,8 @@
  * pricing page and “Simulate” is available only in DEV for UI testing.
  */
 
+import { wbStoreSetRaw } from './workbench-store-client'
+
 export type BackupPlanId = 'backup-basic' | 'backup-plus'
 export type StoragePackId = 'storage-50' | 'storage-200' | 'storage-1tb'
 export type AddonSkuId = BackupPlanId | StoragePackId
@@ -255,7 +257,7 @@ export function importLocalBackup(snapshot: LocalBackupSnapshot): { ok: true; co
     ) {
       continue
     }
-    localStorage.setItem(k, v)
+    wbStoreSetRaw(k, v)
     count++
   }
   return { ok: true, count }

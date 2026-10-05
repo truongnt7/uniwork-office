@@ -5,11 +5,19 @@ import {
   type WorkbenchModuleId,
 } from '@uniwork/practice-core'
 
+import {
+  wbStoreGetRaw,
+  wbStoreRead,
+  wbStoreRemove,
+  wbStoreSetRaw,
+  wbStoreWrite,
+} from './workbench-store-client'
+
 const PINS_PREFIX = 'uniwork.wb.pins.'
 
 export function readPinnedModules(practiceId: PracticeId): WorkbenchModuleId[] {
   try {
-    const raw = localStorage.getItem(PINS_PREFIX + practiceId)
+    const raw = wbStoreGetRaw(PINS_PREFIX + practiceId)
     if (raw === null) return defaultPinnedModules(practiceId)
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return defaultPinnedModules(practiceId)
@@ -21,7 +29,7 @@ export function readPinnedModules(practiceId: PracticeId): WorkbenchModuleId[] {
 
 export function writePinnedModules(practiceId: PracticeId, pins: WorkbenchModuleId[]): void {
   try {
-    localStorage.setItem(PINS_PREFIX + practiceId, JSON.stringify(pins))
+    wbStoreSetRaw(PINS_PREFIX + practiceId, JSON.stringify(pins))
   } catch {
     /* ignore quota */
   }
@@ -73,7 +81,7 @@ export type CalendarViewMode = 'list' | 'calendar'
 
 export function readCalendarView(): CalendarViewMode {
   try {
-    const raw = localStorage.getItem('uniwork.wb.calendar.view')
+    const raw = wbStoreGetRaw('uniwork.wb.calendar.view')
     if (raw === 'list' || raw === 'calendar') return raw
   } catch {
     /* ignore */
@@ -83,7 +91,7 @@ export function readCalendarView(): CalendarViewMode {
 
 export function writeCalendarView(mode: CalendarViewMode): void {
   try {
-    localStorage.setItem('uniwork.wb.calendar.view', mode)
+    wbStoreSetRaw('uniwork.wb.calendar.view', mode)
   } catch {
     /* ignore */
   }
@@ -169,21 +177,11 @@ export function taskWithStatus(item: WbTaskItem, status: WbTaskStatus): WbTaskIt
 }
 
 function readJson<T>(key: string, fallback: T): T {
-  try {
-    const raw = localStorage.getItem(key)
-    if (!raw) return fallback
-    return JSON.parse(raw) as T
-  } catch {
-    return fallback
-  }
+  return wbStoreRead(key, fallback)
 }
 
 function writeJson(key: string, value: unknown): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value))
-  } catch {
-    /* ignore */
-  }
+  wbStoreWrite(key, value)
 }
 
 /** Guard re-entrant dual-write between Calendar ↔ Events. */
@@ -235,7 +233,7 @@ export function writeTasks(practiceId: PracticeId, items: WbTaskItem[]): void {
 
 export function readTasksView(): TasksViewId {
   try {
-    const raw = localStorage.getItem('uniwork.wb.tasks.view')
+    const raw = wbStoreGetRaw('uniwork.wb.tasks.view')
     if (raw === 'list' || raw === 'kanban' || raw === 'calendar' || raw === 'dashboard') return raw
   } catch {
     /* ignore */
@@ -245,7 +243,7 @@ export function readTasksView(): TasksViewId {
 
 export function writeTasksView(view: TasksViewId): void {
   try {
-    localStorage.setItem('uniwork.wb.tasks.view', view)
+    wbStoreSetRaw('uniwork.wb.tasks.view', view)
   } catch {
     /* ignore */
   }
@@ -361,10 +359,10 @@ export function normalizeStickyNote(raw: Partial<WbStickyNote> & { id: string })
 
 function migrateLegacyNotes(practiceId: PracticeId): WbStickyNote[] | null {
   try {
-    const legacy = localStorage.getItem(legacyNotesKey(practiceId))
+    const legacy = wbStoreGetRaw(legacyNotesKey(practiceId))
     if (legacy == null) return null
     const text = legacy.trim()
-    localStorage.removeItem(legacyNotesKey(practiceId))
+    wbStoreRemove(legacyNotesKey(practiceId))
     if (!text) return []
     const now = new Date().toISOString()
     return [
@@ -388,7 +386,7 @@ function migrateLegacyNotes(practiceId: PracticeId): WbStickyNote[] | null {
 export function readStickyNotes(practiceId: PracticeId): WbStickyNote[] {
   const key = stickyKey(practiceId)
   try {
-    const raw = localStorage.getItem(key)
+    const raw = wbStoreGetRaw(key)
     if (raw == null) {
       const migrated = migrateLegacyNotes(practiceId)
       if (migrated) {
@@ -545,7 +543,7 @@ function seedDemoEmails(practiceId: PracticeId): WbEmailMessage[] {
 export function readEmails(practiceId: PracticeId): WbEmailMessage[] {
   const key = emailKey(practiceId)
   try {
-    const raw = localStorage.getItem(key)
+    const raw = wbStoreGetRaw(key)
     if (raw == null) {
       const seeded = seedDemoEmails(practiceId)
       writeEmails(practiceId, seeded)
@@ -622,7 +620,7 @@ export type FinanceSubTabId = 'goals' | 'spending' | 'invest'
 
 export function readFinanceSubTab(): FinanceSubTabId {
   try {
-    const raw = localStorage.getItem('uniwork.wb.finance.subtab')
+    const raw = wbStoreGetRaw('uniwork.wb.finance.subtab')
     if (raw === 'goals' || raw === 'spending' || raw === 'invest') return raw
   } catch {
     /* ignore */
@@ -632,7 +630,7 @@ export function readFinanceSubTab(): FinanceSubTabId {
 
 export function writeFinanceSubTab(id: FinanceSubTabId): void {
   try {
-    localStorage.setItem('uniwork.wb.finance.subtab', id)
+    wbStoreSetRaw('uniwork.wb.finance.subtab', id)
   } catch {
     /* ignore */
   }
@@ -736,7 +734,7 @@ export type HealthSubTabId =
 
 export function readHealthSubTab(): HealthSubTabId {
   try {
-    const raw = localStorage.getItem('uniwork.wb.health.subtab')
+    const raw = wbStoreGetRaw('uniwork.wb.health.subtab')
     const ok: HealthSubTabId[] = [
       'metrics',
       'running',
@@ -755,7 +753,7 @@ export function readHealthSubTab(): HealthSubTabId {
 
 export function writeHealthSubTab(id: HealthSubTabId): void {
   try {
-    localStorage.setItem('uniwork.wb.health.subtab', id)
+    wbStoreSetRaw('uniwork.wb.health.subtab', id)
   } catch {
     /* ignore */
   }
@@ -832,7 +830,7 @@ function openHealthMediaDb(): Promise<IDBDatabase> {
 
 export function readHealthBodyMeta(): WbHealthBodyMeta | null {
   try {
-    const raw = localStorage.getItem(HEALTH_BODY_META_KEY)
+    const raw = wbStoreGetRaw(HEALTH_BODY_META_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as WbHealthBodyMeta
     if (parsed?.source === 'upload' || parsed?.source === 'camera') return parsed
@@ -844,8 +842,8 @@ export function readHealthBodyMeta(): WbHealthBodyMeta | null {
 
 export function writeHealthBodyMeta(meta: WbHealthBodyMeta | null): void {
   try {
-    if (!meta) localStorage.removeItem(HEALTH_BODY_META_KEY)
-    else localStorage.setItem(HEALTH_BODY_META_KEY, JSON.stringify(meta))
+    if (!meta) wbStoreRemove(HEALTH_BODY_META_KEY)
+    else wbStoreSetRaw(HEALTH_BODY_META_KEY, JSON.stringify(meta))
   } catch {
     /* ignore */
   }
@@ -1085,7 +1083,7 @@ export type FamilySubTabId =
 
 export function readFamilySubTab(): FamilySubTabId {
   try {
-    const raw = localStorage.getItem('uniwork.wb.family.subtab')
+    const raw = wbStoreGetRaw('uniwork.wb.family.subtab')
     const ok: FamilySubTabId[] = [
       'members',
       'parenting',
@@ -1103,7 +1101,7 @@ export function readFamilySubTab(): FamilySubTabId {
 
 export function writeFamilySubTab(id: FamilySubTabId): void {
   try {
-    localStorage.setItem('uniwork.wb.family.subtab', id)
+    wbStoreSetRaw('uniwork.wb.family.subtab', id)
   } catch {
     /* ignore */
   }
@@ -1255,7 +1253,7 @@ export interface WbFriendAnniversary {
 
 export function readFriendsSubTab(): FriendsSubTabId {
   try {
-    const raw = localStorage.getItem('uniwork.wb.friends.subtab')
+    const raw = wbStoreGetRaw('uniwork.wb.friends.subtab')
     const ok: FriendsSubTabId[] = ['people', 'events', 'anniversaries']
     if (raw && (ok as string[]).includes(raw)) return raw as FriendsSubTabId
   } catch {
@@ -1266,7 +1264,7 @@ export function readFriendsSubTab(): FriendsSubTabId {
 
 export function writeFriendsSubTab(id: FriendsSubTabId): void {
   try {
-    localStorage.setItem('uniwork.wb.friends.subtab', id)
+    wbStoreSetRaw('uniwork.wb.friends.subtab', id)
   } catch {
     /* ignore */
   }
@@ -1409,7 +1407,7 @@ export async function deletePetPhotoBlob(id: string): Promise<void> {
 
 export function readPetsSubTab(): PetsSubTabId {
   try {
-    const raw = localStorage.getItem('uniwork.wb.pets.subtab')
+    const raw = wbStoreGetRaw('uniwork.wb.pets.subtab')
     if (raw === 'roster' || raw === 'gallery' || raw === 'care') return raw
   } catch {
     /* ignore */
@@ -1419,7 +1417,7 @@ export function readPetsSubTab(): PetsSubTabId {
 
 export function writePetsSubTab(id: PetsSubTabId): void {
   try {
-    localStorage.setItem('uniwork.wb.pets.subtab', id)
+    wbStoreSetRaw('uniwork.wb.pets.subtab', id)
   } catch {
     /* ignore */
   }

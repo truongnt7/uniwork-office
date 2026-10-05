@@ -19,6 +19,10 @@ import {
   type AddonSkuId,
   type LocalBackupSnapshot,
 } from './backup-addons'
+import {
+  exportWorkbenchBackupUi,
+  importWorkbenchBackupUi,
+} from './workbench-store-client'
 
 function L(lang: Lang, vi: string, en: string): string {
   return lang === 'vi' ? vi : en
@@ -70,6 +74,43 @@ export function BackupStoragePane({
         `Exported local backup (${Object.keys(snap.keys).length} items).`,
       ),
     )
+  }
+
+  const doExportZip = async () => {
+    setErr(null)
+    setMsg(null)
+    const r = await exportWorkbenchBackupUi()
+    if (r.ok) {
+      setMsg(
+        L(
+          lang,
+          `Đã xuất backup SQLite: ${r.path}`,
+          `Exported SQLite backup: ${r.path}`,
+        ),
+      )
+      return
+    }
+    if (r.canceled) return
+    setErr(r.error || L(lang, 'Xuất backup thất bại.', 'Backup export failed.'))
+  }
+
+  const doImportZip = async () => {
+    setErr(null)
+    setMsg(null)
+    const r = await importWorkbenchBackupUi()
+    if (r.ok) {
+      setEnt(readEntitlements())
+      setMsg(
+        L(
+          lang,
+          `Đã khôi phục ${r.keyCount} mục từ backup SQLite. Tải lại app nếu tab đang mở chưa cập nhật.`,
+          `Restored ${r.keyCount} items from SQLite backup. Reload if open tabs look stale.`,
+        ),
+      )
+      return
+    }
+    if (r.canceled) return
+    setErr(r.error || L(lang, 'Nhập backup thất bại.', 'Backup import failed.'))
   }
 
   const onPickImport = async (file: File | null) => {
@@ -184,6 +225,12 @@ export function BackupStoragePane({
 
       <h4 className="set-backup-h">{L(lang, 'Miễn phí trên máy', 'Free on this device')}</h4>
       <div className="set-backup-actions">
+        <button type="button" className="btn btn-secondary" onClick={() => void doExportZip()}>
+          {L(lang, 'Xuất backup ZIP (SQLite)', 'Export ZIP backup (SQLite)')}
+        </button>
+        <button type="button" className="btn btn-secondary" onClick={() => void doImportZip()}>
+          {L(lang, 'Nhập backup ZIP', 'Import ZIP backup')}
+        </button>
         <button type="button" className="btn btn-secondary" onClick={doExport}>
           {L(lang, 'Xuất backup JSON', 'Export JSON backup')}
         </button>

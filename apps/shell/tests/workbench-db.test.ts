@@ -8,7 +8,21 @@ import {
   resetWorkbenchDbForTests,
 } from '../src/main/workbench-db'
 
-describe('workbench-db', () => {
+function sqliteAvailable(): boolean {
+  try {
+    // Prefer the same loader the app uses (CJS require of the built-in).
+    // Node < 22 does not ship node:sqlite.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('node:sqlite') as typeof import('node:sqlite')
+    return typeof mod.DatabaseSync === 'function'
+  } catch {
+    return false
+  }
+}
+
+const describeSqlite = sqliteAvailable() ? describe : describe.skip
+
+describeSqlite('workbench-db', () => {
   const dirs: string[] = []
 
   afterEach(() => {
@@ -27,13 +41,6 @@ describe('workbench-db', () => {
     dirs.push(dir)
     return new WorkbenchDb(dir)
   }
-
-  it('allows workbench / my-ai key prefixes', () => {
-    expect(isAllowedWbKey('uniwork.wb.calendar.teacher')).toBe(true)
-    expect(isAllowedWbKey('uniwork.my-ai.history.teacher')).toBe(true)
-    expect(isAllowedWbKey('uniwork.activePracticeId')).toBe(true)
-    expect(isAllowedWbKey('evil.other')).toBe(false)
-  })
 
   it('round-trips kv and persists across reopen', () => {
     const dir = mkdtempSync(join(tmpdir(), 'uw-wb-db-'))
@@ -76,5 +83,14 @@ describe('workbench-db', () => {
     db.remove('uniwork.wb.x')
     expect(db.get('uniwork.wb.x')).toBeNull()
     expect(db.keyCount()).toBe(0)
+  })
+})
+
+describe('workbench-db allowlist', () => {
+  it('allows workbench / my-ai key prefixes', () => {
+    expect(isAllowedWbKey('uniwork.wb.calendar.teacher')).toBe(true)
+    expect(isAllowedWbKey('uniwork.my-ai.history.teacher')).toBe(true)
+    expect(isAllowedWbKey('uniwork.activePracticeId')).toBe(true)
+    expect(isAllowedWbKey('evil.other')).toBe(false)
   })
 })

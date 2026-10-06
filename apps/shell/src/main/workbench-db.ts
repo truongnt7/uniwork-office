@@ -1,10 +1,20 @@
 /**
  * Local Workbench database (SQLite via node:sqlite DatabaseSync).
  * Lives under userData/workbench/workbench.sqlite — source of truth for wb.* keys.
+ *
+ * SQLite is loaded lazily so a missing/broken node:sqlite never prevents the
+ * shell main process from booting (falls back to renderer localStorage).
  */
-import { existsSync, mkdirSync, copyFileSync, renameSync, unlinkSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  copyFileSync,
+  renameSync,
+  unlinkSync,
+  appendFileSync,
+} from 'node:fs'
 import { join } from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
+import { installStdioGuard } from './stdio-guard'
 
 const SCHEMA_VERSION = 1
 
@@ -25,16 +35,55 @@ CREATE INDEX IF NOT EXISTS idx_wb_kv_prefix ON wb_kv(key);
 
 export type WbKvMap = Record<string, string>
 
+type DatabaseSyncCtor = typeof import('node:sqlite').DatabaseSync
+type DatabaseSyncInstance = InstanceType<DatabaseSyncCtor>
+
+let DatabaseSyncRef: DatabaseSyncCtor | null = null
+let sqliteLoadError: string | null = null
+
+function loadDatabaseSync(): DatabaseSyncCtor {
+  if (DatabaseSyncRef) return DatabaseSyncRef
+  if (sqliteLoadError) throw new Error(sqliteLoadError)
+  try {
+    // Ensure broken-stdio guard is active before the ExperimentalWarning fires.
+    installStdioGuard()
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const mod = require('node:sqlite') as typeof import('node:sqlite')
+    if (typeof mod.DatabaseSync !== 'function') {
+      throw new Error('node:sqlite.DatabaseSync unavailable')
+    }
+    DatabaseSyncRef = mod.DatabaseSync
+    return DatabaseSyncRef
+  } catch (err) {
+    sqliteLoadError = err instanceof Error ? err.message : String(err)
+    throw new Error(sqliteLoadError)
+  }
+}
+
+function logDbError(userDataDir: string, err: unknown): void {
+  try {
+    const dir = join(userDataDir, 'workbench')
+    mkdirSync(dir, { recursive: true })
+    appendFileSync(
+      join(dir, 'error.log'),
+      `${new Date().toISOString()} ${err instanceof Error ? err.stack || err.message : String(err)}\n`,
+    )
+  } catch {
+    /* ignore */
+  }
+}
+
 export class WorkbenchDb {
   readonly rootDir: string
   readonly dbPath: string
-  private db: DatabaseSync
+  private db: DatabaseSyncInstance
 
   constructor(userDataDir: string) {
     this.rootDir = join(userDataDir, 'workbench')
     this.dbPath = join(this.rootDir, 'workbench.sqlite')
     mkdirSync(this.rootDir, { recursive: true })
     mkdirSync(join(this.rootDir, 'media'), { recursive: true })
+    const DatabaseSync = loadDatabaseSync()
     this.db = new DatabaseSync(this.dbPath)
     this.db.exec('PRAGMA journal_mode = WAL;')
     this.db.exec('PRAGMA foreign_keys = ON;')
@@ -48,10 +97,11 @@ export class WorkbenchDb {
       | undefined
     const current = row ? Number(row.value) : 0
     if (!Number.isFinite(current) || current < SCHEMA_VERSION) {
-      this.db.prepare('INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(
-        'schema_version',
-        String(SCHEMA_VERSION),
-      )
+      this.db
+        .prepare(
+          'INSERT INTO meta(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+        )
+        .run('schema_version', String(SCHEMA_VERSION))
     }
   }
 
@@ -137,9 +187,7 @@ export class WorkbenchDb {
 
   replaceAll(keys: WbKvMap): number {
     const now = new Date().toISOString()
-    const stmt = this.db.prepare(
-      'INSERT INTO wb_kv(key, value, updated_at) VALUES(?, ?, ?)',
-    )
+    const stmt = this.db.prepare('INSERT INTO wb_kv(key, value, updated_at) VALUES(?, ?, ?)')
     let n = 0
     this.db.exec('BEGIN')
     try {
@@ -191,6 +239,7 @@ export class WorkbenchDb {
         /* ignore */
       }
     }
+    const DatabaseSync = loadDatabaseSync()
     this.db = new DatabaseSync(this.dbPath)
     this.db.exec('PRAGMA journal_mode = WAL;')
     this.migrate()
@@ -210,10 +259,28 @@ export function isAllowedWbKey(key: string): boolean {
 }
 
 let singleton: WorkbenchDb | null = null
+let singletonFailed = false
 
 export function getWorkbenchDb(userDataDir: string): WorkbenchDb {
-  if (!singleton) singleton = new WorkbenchDb(userDataDir)
-  return singleton
+  if (singleton) return singleton
+  if (singletonFailed) throw new Error(sqliteLoadError || 'workbench-db-unavailable')
+  try {
+    singleton = new WorkbenchDb(userDataDir)
+    return singleton
+  } catch (err) {
+    singletonFailed = true
+    logDbError(userDataDir, err)
+    throw err
+  }
+}
+
+/** Returns null when SQLite cannot open — callers should fall back. */
+export function tryGetWorkbenchDb(userDataDir: string): WorkbenchDb | null {
+  try {
+    return getWorkbenchDb(userDataDir)
+  } catch {
+    return null
+  }
 }
 
 export function resetWorkbenchDbForTests(): void {
@@ -221,4 +288,7 @@ export function resetWorkbenchDbForTests(): void {
     singleton.close()
     singleton = null
   }
+  singletonFailed = false
+  sqliteLoadError = null
+  DatabaseSyncRef = null
 }

@@ -38,11 +38,15 @@ export async function exportWorkbenchBackup(
     }
 
     const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' })
-    const result = await dialog.showSaveDialog(parent ?? undefined!, {
+    const opts = {
       title: 'Export Workbench backup',
       defaultPath: `uniwork-workbench-${manifest.createdAt.slice(0, 10)}.zip`,
       filters: [{ name: 'UniWork backup', extensions: ['zip'] }],
-    })
+    }
+    const result =
+      parent && !parent.isDestroyed()
+        ? await dialog.showSaveDialog(parent, opts)
+        : await dialog.showSaveDialog(opts)
     if (result.canceled || !result.filePath) {
       return { ok: false, error: 'canceled', canceled: true }
     }
@@ -60,11 +64,15 @@ export async function importWorkbenchBackup(
   | { ok: false; error: string; canceled?: boolean }
 > {
   try {
-    const picked = await dialog.showOpenDialog(parent ?? undefined!, {
+    const openOpts = {
       title: 'Import Workbench backup',
-      properties: ['openFile'],
+      properties: ['openFile' as const],
       filters: [{ name: 'UniWork backup', extensions: ['zip', 'json'] }],
-    })
+    }
+    const picked =
+      parent && !parent.isDestroyed()
+        ? await dialog.showOpenDialog(parent, openOpts)
+        : await dialog.showOpenDialog(openOpts)
     if (picked.canceled || !picked.filePaths[0]) {
       return { ok: false, error: 'canceled', canceled: true }
     }

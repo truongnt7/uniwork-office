@@ -1,3 +1,4 @@
+import './stdio-guard'
 import { execSync, spawn } from 'node:child_process'
 import {
   copyFileSync,
@@ -232,7 +233,7 @@ import type {
 } from '../shared/home-api'
 import { HOME_CHANNELS } from '../shared/home-api'
 import { extractAllowedFileExcerpts } from './file-excerpts'
-import { getWorkbenchDb, isAllowedWbKey, type WbKvMap } from './workbench-db'
+import { isAllowedWbKey, tryGetWorkbenchDb, type WbKvMap } from './workbench-db'
 import { exportWorkbenchBackup, importWorkbenchBackup } from './workbench-backup'
 import {
   normalizeAiPanelPrefs,
@@ -3511,40 +3512,75 @@ function registerHomeIpc(): void {
   )
 
   ipcMain.handle(HOME_CHANNELS.wbLoadAll, () => {
-    const db = getWorkbenchDb(app.getPath('userData'))
-    const keys = db.loadAll()
-    return { keys, keyCount: Object.keys(keys).length, dbPath: db.dbPath }
+    try {
+      const db = tryGetWorkbenchDb(app.getPath('userData'))
+      if (!db) return { keys: {}, keyCount: 0, dbPath: '', unavailable: true }
+      const keys = db.loadAll()
+      return { keys, keyCount: Object.keys(keys).length, dbPath: db.dbPath }
+    } catch (err) {
+      console.error('[workbench-db] loadAll failed', err)
+      return { keys: {}, keyCount: 0, dbPath: '', unavailable: true }
+    }
   })
 
   ipcMain.handle(HOME_CHANNELS.wbGetKey, (_event, key: unknown) => {
-    if (typeof key !== 'string' || !isAllowedWbKey(key)) return null
-    return getWorkbenchDb(app.getPath('userData')).get(key)
+    try {
+      if (typeof key !== 'string' || !isAllowedWbKey(key)) return null
+      return tryGetWorkbenchDb(app.getPath('userData'))?.get(key) ?? null
+    } catch (err) {
+      console.error('[workbench-db] getKey failed', err)
+      return null
+    }
   })
 
   ipcMain.handle(HOME_CHANNELS.wbSetKey, (_event, key: unknown, value: unknown) => {
-    if (typeof key !== 'string' || typeof value !== 'string' || !isAllowedWbKey(key)) return
-    getWorkbenchDb(app.getPath('userData')).set(key, value)
+    try {
+      if (typeof key !== 'string' || typeof value !== 'string' || !isAllowedWbKey(key)) return
+      tryGetWorkbenchDb(app.getPath('userData'))?.set(key, value)
+    } catch (err) {
+      console.error('[workbench-db] setKey failed', err)
+    }
   })
 
   ipcMain.handle(HOME_CHANNELS.wbRemoveKey, (_event, key: unknown) => {
-    if (typeof key !== 'string' || !isAllowedWbKey(key)) return
-    getWorkbenchDb(app.getPath('userData')).remove(key)
+    try {
+      if (typeof key !== 'string' || !isAllowedWbKey(key)) return
+      tryGetWorkbenchDb(app.getPath('userData'))?.remove(key)
+    } catch (err) {
+      console.error('[workbench-db] removeKey failed', err)
+    }
   })
 
   ipcMain.handle(HOME_CHANNELS.wbImportKeys, (_event, keys: unknown) => {
-    if (!keys || typeof keys !== 'object' || Array.isArray(keys)) return { imported: 0 }
-    const imported = getWorkbenchDb(app.getPath('userData')).importKeys(keys as WbKvMap)
-    return { imported }
+    try {
+      if (!keys || typeof keys !== 'object' || Array.isArray(keys)) return { imported: 0 }
+      const db = tryGetWorkbenchDb(app.getPath('userData'))
+      if (!db) return { imported: 0 }
+      return { imported: db.importKeys(keys as WbKvMap) }
+    } catch (err) {
+      console.error('[workbench-db] importKeys failed', err)
+      return { imported: 0 }
+    }
   })
 
   ipcMain.handle(HOME_CHANNELS.wbExportBackup, async (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    return exportWorkbenchBackup(win)
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      return await exportWorkbenchBackup(win)
+    } catch (err) {
+      console.error('[workbench-db] exportBackup failed', err)
+      return { ok: false as const, error: err instanceof Error ? err.message : String(err) }
+    }
   })
 
   ipcMain.handle(HOME_CHANNELS.wbImportBackup, async (event) => {
-    const win = BrowserWindow.fromWebContents(event.sender)
-    return importWorkbenchBackup(win)
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      return await importWorkbenchBackup(win)
+    } catch (err) {
+      console.error('[workbench-db] importBackup failed', err)
+      return { ok: false as const, error: err instanceof Error ? err.message : String(err) }
+    }
   })
 
   ipcMain.handle(HOME_CHANNELS.activeOfficeTab, () => {

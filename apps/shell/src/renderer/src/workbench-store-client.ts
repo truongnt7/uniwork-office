@@ -18,7 +18,12 @@ function allowedKey(key: string): boolean {
 }
 
 type WbApi = {
-  loadAll: () => Promise<{ keys: WbKvMap; keyCount: number; dbPath: string }>
+  loadAll: () => Promise<{
+    keys: WbKvMap
+    keyCount: number
+    dbPath: string
+    unavailable?: boolean
+  }>
   getKey: (key: string) => Promise<string | null>
   setKey: (key: string, value: string) => Promise<void>
   removeKey: (key: string) => Promise<void>
@@ -78,6 +83,11 @@ export async function hydrateWorkbenchStore(): Promise<void> {
   }
   try {
     const snap = await api.loadAll()
+    if (snap.unavailable) {
+      usingSqlite = false
+      hydrated = true
+      return
+    }
     cache = new Map(Object.entries(snap.keys ?? {}))
     if (cache.size === 0) {
       const fromLs = collectLocalStorageKeys()

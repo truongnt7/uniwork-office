@@ -22,6 +22,7 @@ export const vi = {
   aiTplDetailsTitle: 'Chi tiết mẫu',
   aiTplBadge: 'Slides',
   aiTplBack: 'Quay lại',
+  aiTplPreviewDisclaimer: 'Preview mang tính minh họa — AI điền nội dung thật theo chủ đề của bạn.',
   aiTplOutline: 'Dàn ý các trang',
   aiTplTopicLabel: 'Chủ đề / nội dung chính',
   aiTplGenerate: 'Tạo bằng mẫu này',

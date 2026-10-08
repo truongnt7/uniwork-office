@@ -12,6 +12,7 @@ import {
   type DeckTemplateCategory,
   type DeckTemplateCoverLayout,
 } from './deck-templates'
+import { getTemplatePreviewAssets } from './template-preview-assets'
 
 interface Props {
   open: boolean
@@ -23,6 +24,7 @@ interface Props {
     detailsTitle: string
     badge: string
     back: string
+    previewDisclaimer: string
     pages: (n: number) => string
     outline: string
     topicLabel: string
@@ -35,8 +37,9 @@ interface Props {
 }
 
 type Stage = 'browse' | 'detail'
+type CoverSize = 'card' | 'hero' | 'thumb'
 
-/** Phase A mock cover — CSS mood + layout, not real slide art. */
+/** Phase A mock cover — CSS mood + layout when Phase B art is missing. */
 function MockCover({
   tpl,
   layout,
@@ -44,7 +47,7 @@ function MockCover({
 }: {
   tpl: DeckTemplate
   layout?: DeckTemplateCoverLayout | string
-  size?: 'card' | 'hero' | 'thumb'
+  size?: CoverSize
 }): ReactElement {
   const cover = (layout as DeckTemplateCoverLayout | undefined) ?? tpl.coverLayout
   return (
@@ -64,6 +67,31 @@ function MockCover({
       <span className="ai-tpl-cover-chip" />
     </div>
   )
+}
+
+/** Phase B static art when available; otherwise Phase A mock. */
+function TemplateCover({
+  tpl,
+  src,
+  layout,
+  size = 'card',
+}: {
+  tpl: DeckTemplate
+  /** Explicit Phase B URL; omit to use cover art or fall back to mock */
+  src?: string | null
+  layout?: DeckTemplateCoverLayout | string
+  size?: CoverSize
+}): ReactElement {
+  const assets = getTemplatePreviewAssets(tpl.id)
+  const resolved = src ?? assets?.cover ?? null
+  if (resolved) {
+    return (
+      <div className={`ai-tpl-cover ai-tpl-cover--${size} ai-tpl-cover--photo`} data-tpl={tpl.id}>
+        <img className="ai-tpl-cover-img" src={resolved} alt="" loading="lazy" draggable={false} />
+      </div>
+    )
+  }
+  return <MockCover tpl={tpl} layout={layout} size={size} />
 }
 
 export function DeckTemplateGalleryModal({
@@ -121,8 +149,12 @@ export function DeckTemplateGalleryModal({
   if (!open) return null
 
   const canGenerate = topic.trim().length > 0
-  const previewLayout =
-    selected.pages[previewPage]?.layout ?? selected.coverLayout
+  const previewLayout = selected.pages[previewPage]?.layout ?? selected.coverLayout
+  const selectedPreview = getTemplatePreviewAssets(selected.id)
+  const stripSrcs = selectedPreview
+    ? [selectedPreview.cover, ...selectedPreview.pages].slice(0, 5)
+    : null
+  const stripCount = stripSrcs?.length ?? Math.min(5, selected.pages.length)
   const tags = deckTemplateTags(selected, lang)
 
   const submit = () => {
@@ -181,6 +213,7 @@ export function DeckTemplateGalleryModal({
             </div>
             <div className="ai-tpl-browse">
               <h3 className="ai-tpl-browse-heading">{labels.browseHeading}</h3>
+              <p className="ai-tpl-browse-disclaimer">{labels.previewDisclaimer}</p>
               <div className="ai-tpl-browse-grid" role="list">
                 {filtered.map((tpl) => (
                   <button
@@ -192,7 +225,7 @@ export function DeckTemplateGalleryModal({
                     onClick={() => openDetail(tpl.id)}
                   >
                     <div className="ai-tpl-card-media">
-                      <MockCover tpl={tpl} size="card" />
+                      <TemplateCover tpl={tpl} size="card" />
                       <span className="ai-tpl-card-badge">{labels.badge}</span>
                     </div>
                     <span className="ai-tpl-card-name">{deckTemplateLabel(tpl, lang)}</span>
@@ -205,9 +238,14 @@ export function DeckTemplateGalleryModal({
         ) : (
           <div className="ai-tpl-detail">
             <div className="ai-tpl-detail-visual" data-tpl={selected.id}>
-              <MockCover tpl={selected} layout={previewLayout} size="hero" />
+              <TemplateCover
+                tpl={selected}
+                src={stripSrcs?.[previewPage] ?? null}
+                layout={previewLayout}
+                size="hero"
+              />
               <div className="ai-tpl-detail-strip" role="tablist" aria-label={labels.outline}>
-                {selected.pages.slice(0, 5).map((p, i) => (
+                {Array.from({ length: stripCount }, (_, i) => (
                   <button
                     key={`${selected.id}-thumb-${i}`}
                     type="button"
@@ -216,7 +254,12 @@ export function DeckTemplateGalleryModal({
                     className={`ai-tpl-detail-thumb${previewPage === i ? ' is-active' : ''}`}
                     onClick={() => setPreviewPage(i)}
                   >
-                    <MockCover tpl={selected} layout={p.layout} size="thumb" />
+                    <TemplateCover
+                      tpl={selected}
+                      src={stripSrcs?.[i] ?? null}
+                      layout={selected.pages[i]?.layout ?? selected.coverLayout}
+                      size="thumb"
+                    />
                   </button>
                 ))}
               </div>
@@ -233,6 +276,7 @@ export function DeckTemplateGalleryModal({
                 ))}
               </div>
               <p className="ai-tpl-detail-desc">{deckTemplateDesc(selected, lang)}</p>
+              <p className="ai-tpl-preview-disclaimer">{labels.previewDisclaimer}</p>
               <p className="ai-tpl-detail-meta">
                 {labels.pages(selected.approxPages)} ·{' '}
                 {deckTemplateCategoryLabel(selected.category, lang)}

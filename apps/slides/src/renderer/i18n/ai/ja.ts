@@ -22,6 +22,7 @@ export const ja = {
   aiTplDetailsTitle: 'テンプレート詳細',
   aiTplBadge: 'Slides',
   aiTplBack: '戻る',
+  aiTplPreviewDisclaimer: 'プレビューは参考です。AI がトピックに沿って本文を埋めます。',
   aiTplOutline: 'Page outline',
   aiTplTopicLabel: 'Topic / brief',
   aiTplGenerate: 'Generate with template',

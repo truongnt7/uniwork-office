@@ -21,6 +21,7 @@ export const zh = {
   aiTplDetailsTitle: '模板详情',
   aiTplBadge: 'Slides',
   aiTplBack: '返回',
+  aiTplPreviewDisclaimer: '预览仅供参考，AI 会按你的主题填写实际内容。',
   aiTplOutline: '页大纲',
   aiTplTopicLabel: '主题 / 内容要点',
   aiTplGenerate: '用此模板生成',

@@ -22,6 +22,7 @@ export const zhTW = {
   aiTplDetailsTitle: '範本詳情',
   aiTplBadge: 'Slides',
   aiTplBack: '返回',
+  aiTplPreviewDisclaimer: '預覽僅供參考，AI 會依你的主題填入實際內容。',
   aiTplOutline: '頁大綱',
   aiTplTopicLabel: '主題 / 內容要點',
   aiTplGenerate: '用此範本產生',

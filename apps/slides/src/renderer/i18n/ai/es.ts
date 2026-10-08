@@ -22,6 +22,7 @@ export const es = {
   aiTplDetailsTitle: 'Template details',
   aiTplBadge: 'Slides',
   aiTplBack: 'Back',
+  aiTplPreviewDisclaimer: 'Preview is illustrative — AI fills real content from your topic.',
   aiTplOutline: 'Page outline',
   aiTplTopicLabel: 'Topic / brief',
   aiTplGenerate: 'Generate with template',

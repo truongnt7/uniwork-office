@@ -22,6 +22,7 @@ export const ko = {
   aiTplDetailsTitle: '템플릿 상세',
   aiTplBadge: 'Slides',
   aiTplBack: '뒤로',
+  aiTplPreviewDisclaimer: '미리보기는 참고용입니다. AI가 주제에 맞춰 실제 내용을 채웁니다.',
   aiTplOutline: 'Page outline',
   aiTplTopicLabel: 'Topic / brief',
   aiTplGenerate: 'Generate with template',

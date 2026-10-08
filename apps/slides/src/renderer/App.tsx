@@ -4325,6 +4325,7 @@ export function App() {
           detailsTitle: t('aiTplDetailsTitle'),
           badge: t('aiTplBadge'),
           back: t('aiTplBack'),
+          previewDisclaimer: t('aiTplPreviewDisclaimer'),
           pages: (n) => t('aiTplPages', { n }),
           outline: t('aiTplOutline'),
           topicLabel: t('aiTplTopicLabel'),

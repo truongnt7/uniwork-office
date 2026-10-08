@@ -22,6 +22,7 @@ export const de = {
   aiTplDetailsTitle: 'Vorlagendetails',
   aiTplBadge: 'Slides',
   aiTplBack: 'Zurück',
+  aiTplPreviewDisclaimer: 'Vorschau zur Orientierung — KI füllt den Inhalt anhand Ihres Themas.',
   aiTplOutline: 'Page outline',
   aiTplTopicLabel: 'Topic / brief',
   aiTplGenerate: 'Generate with template',

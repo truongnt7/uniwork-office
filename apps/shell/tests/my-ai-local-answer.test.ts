@@ -61,7 +61,7 @@ describe('answerMyAiLocally', () => {
     expect(r.topic).toBe('off_topic')
     expect(r.contextUsed).toBe(false)
     expect(r.offerAi).toBe(false)
-    expect(r.text).toMatch(/UniWork|máy/i)
+    expect(r.text).toMatch(/UniWork|lịch|Word/i)
   })
 
   it('fallback offers AI for longer unclear questions', () => {

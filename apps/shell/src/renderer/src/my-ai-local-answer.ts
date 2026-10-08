@@ -117,7 +117,9 @@ export function answerMyAiLocally(
 
   if (!raw) {
     return {
-      text: vi ? 'Bạn muốn hỏi gì về lịch, việc, file hay ghi chú trên máy?' : 'What do you want to know about calendar, tasks, files, or notes?',
+      text: vi
+        ? 'Bạn cần gì nào? Mình xem giúp lịch, việc đang mở, file gần đây — hoặc soạn Word / thêm việc giúp bạn.'
+        : 'What do you need? I can check today’s calendar, open tasks, recent files — or draft Word / add a task for you.',
       topic: 'fallback',
       offerAi: false,
       contextUsed: false,
@@ -127,8 +129,8 @@ export function answerMyAiLocally(
   if (looksOffTopic(lower)) {
     return {
       text: vi
-        ? 'Mình giúp việc trên máy UniWork — lịch, việc, file, soạn Word / Excel… Bạn muốn xem gì?'
-        : 'I help with on-device UniWork work — calendar, tasks, files, drafting Word / Excel… What should we look at?',
+        ? 'Phần này mình chưa giỏi lắm — mình hỗ trợ tốt hơn với việc trên UniWork: lịch, việc, file, soạn Word… Bạn muốn thử hướng nào?'
+        : 'That’s a bit outside what I’m best at — I’m stronger with UniWork work: calendar, tasks, files, drafting Word… What should we try?',
       topic: 'off_topic',
       offerAi: false,
       contextUsed: false,
@@ -287,8 +289,8 @@ export function answerMyAiLocally(
     )
   }
   const head = vi
-    ? 'Mình có thể trả lời lịch / việc / file / ghi chú trên máy, hoặc giúp soạn Word, mở file, thêm việc.'
-    : 'I can answer from on-device calendar / tasks / files / notes, or help draft Word, open a file, add a task.'
+    ? 'Mình chưa chắc ý bạn — mình xem giúp lịch, việc đang mở hay file gần đây; cũng có thể soạn Word hoặc thêm việc nếu bạn muốn.'
+    : 'I’m not sure what you need yet — I can check calendar, open tasks, or recent files; or draft Word / add a task if you’d like.'
   const text =
     pulseBits.length > 0
       ? `${head}\n\n${pulseBits.map((b) => `• ${b}`).join('\n')}`

@@ -24,6 +24,11 @@ export type MyAiStep =
       blank: boolean
     }
   | {
+      /** Ask topic in chat before opening an Office app */
+      kind: 'ask_create'
+      app: OfficeApp
+    }
+  | {
       kind: 'open_file'
       query: string
     }
@@ -232,6 +237,48 @@ function looksLikeCreate(lower: string): boolean {
   )
 }
 
+function wantsExplicitBlankCreate(lower: string): boolean {
+  return /(?:trống|trong|blank|empty|không nội dung|khong noi dung)/i.test(lower)
+}
+
+/**
+ * True when the leftover after stripping create-noise is a real topic
+ * (not “giúp tôi”, “nhanh”, …) — otherwise My AI must ask first.
+ */
+export function isSubstantiveCreateBrief(brief: string): boolean {
+  const b = brief.replace(/\s+/g, ' ').trim()
+  if (b.length < 6) return false
+  if (
+    /^(giúp|giup|help|nhanh|please|pls|đi|di|với|voi|cho tôi|cho toi|giùm|gium|nhé|nhe|ạ|a)[!?.…]*$/i.test(
+      b,
+    )
+  ) {
+    return false
+  }
+  if (/^(giúp|giup|help)(\s+(tôi|toi|mình|minh|me))?[!?.…]*$/i.test(b)) return false
+  if (/^(một|mot|cái|cai|file|document|văn bản|van ban|tài liệu|tai lieu)[!?.…]*$/i.test(b)) {
+    return false
+  }
+  // Mostly filler / politeness
+  if (
+    /^(giúp|giup|help)\s+(tôi|toi|mình|minh|me)\s+(với|voi|nhé|nhe|đi|di)?[!?.…]*$/i.test(b)
+  ) {
+    return false
+  }
+  return true
+}
+
+function routeCreateApp(app: OfficeApp, raw: string, lower: string, lowerNorm: string): MyAiStep {
+  if (wantsExplicitBlankCreate(lower) || wantsExplicitBlankCreate(lowerNorm)) {
+    return { kind: 'create_file', app, blank: true }
+  }
+  const brief = stripCreateNoise(raw, app)
+  if (isSubstantiveCreateBrief(brief)) {
+    return { kind: 'create_file', app, blank: false, brief }
+  }
+  return { kind: 'ask_create', app }
+}
+
 function looksLikeOpenFile(lower: string): boolean {
   // "đang mở" must not count as the open-file verb (ASCII `\b` breaks on Vietnamese).
   if (/(?:đang mở|dang mo)/i.test(lower) && !/(?:mở file|mo file|open file)/i.test(lower)) {
@@ -345,6 +392,7 @@ export function extractCompanionClauses(text: string): { head: string; companion
 
 function stepKey(step: MyAiStep): string {
   if (step.kind === 'create_file') return `create:${step.app}:${step.brief ?? ''}:${step.blank}`
+  if (step.kind === 'ask_create') return `ask_create:${step.app}`
   if (step.kind === 'open_file') return `open:${step.query}`
   if (step.kind === 'search_files') return `search:${step.query}`
   if (step.kind === 'summarize_recents') return `sum:${step.query ?? ''}:${step.limit}`
@@ -386,7 +434,10 @@ export function synthesizePlanGoal(
     }
   }
 
-  const creates = steps.filter((s): s is Extract<MyAiStep, { kind: 'create_file' }> => s.kind === 'create_file')
+  const creates = steps.filter(
+    (s): s is Extract<MyAiStep, { kind: 'create_file' | 'ask_create' }> =>
+      s.kind === 'create_file' || s.kind === 'ask_create',
+  )
   const adds = steps.filter(
     (s): s is Extract<MyAiStep, { kind: 'workbench' }> =>
       s.kind === 'workbench' && s.intent.action === 'add_item',
@@ -634,28 +685,15 @@ export function routeMyAiTextSingle(text: string): MyAiStep | Extract<MyAiRoute,
     return { kind: 'open_file', query: cleaned || query }
   }
 
-  // 3) Create Office file (+ optional AI brief for Docs/Slides)
+  // 3) Create Office file — ask for topic unless brief is clear (or user wants blank)
   if (looksLikeCreate(lower) || looksLikeCreate(lowerNorm)) {
     const app = detectApp(lower) ?? detectApp(lowerNorm)
     if (app) {
-      const brief = stripCreateNoise(raw, app)
-      const blank =
-        !brief ||
-        brief.length < 6 ||
-        /^(moi|mới|blank|trong|trống)$/i.test(brief)
-      return {
-        kind: 'create_file',
-        app,
-        blank,
-        ...(blank ? {} : { brief }),
-      }
+      return routeCreateApp(app, raw, lower, lowerNorm)
     }
-    // "viết giúp tôi hợp đồng thuê nhà" without saying Word → default Docs + brief
+    // "viết hợp đồng thuê nhà" without saying Word → Docs when topic is clear
     if (/\b(viết|viet|soạn|soan|draft|write)\b/i.test(lower)) {
-      const brief = stripCreateNoise(raw, 'docs')
-      if (brief.length >= 6) {
-        return { kind: 'create_file', app: 'docs', blank: false, brief }
-      }
+      return routeCreateApp('docs', raw, lower, lowerNorm)
     }
   }
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   extractCompanionClauses,
+  isSubstantiveCreateBrief,
   routeMyAiText,
   splitMyAiClauses,
   synthesizePlanGoal,
@@ -67,6 +68,16 @@ describe('my-ai multi-tool plans (B4)', () => {
   it('keeps single create as a single step', () => {
     const r = routeMyAiText('Soạn văn bản Word: thư mời họp khách')
     expect(r.kind).toBe('create_file')
+  })
+
+  it('asks for a Word topic instead of auto-drafting', () => {
+    expect(isSubstantiveCreateBrief('giúp tôi')).toBe(false)
+    expect(isSubstantiveCreateBrief('thư mời họp khách')).toBe(true)
+    expect(routeMyAiText('Tạo Word').kind).toBe('ask_create')
+    expect(routeMyAiText('Soạn văn bản Word giúp tôi').kind).toBe('ask_create')
+    expect(routeMyAiText('Tạo Word trống').kind).toBe('create_file')
+    const blank = routeMyAiText('Tạo Word trống')
+    if (blank.kind === 'create_file') expect(blank.blank).toBe(true)
   })
 
   it('does not route free-form chat to Workbench', () => {

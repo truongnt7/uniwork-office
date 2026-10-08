@@ -85,6 +85,10 @@ function outcomeForStep(step: MyAiStep, vi: boolean): string {
     if (step.blank) return vi ? `mở ${app} trống` : `open a blank ${app}`
     return vi ? `soạn ${app} (có AI)` : `draft ${app} (with AI)`
   }
+  if (step.kind === 'ask_create') {
+    const app = officeAppFriendly(step.app, vi)
+    return vi ? `hỏi chủ đề rồi soạn ${app}` : `ask for a topic, then draft ${app}`
+  }
   if (step.kind === 'open_file')
     return vi ? `mở file “${step.query}”` : `open “${step.query}”`
   if (step.kind === 'search_files')
@@ -139,6 +143,10 @@ function doneForStep(step: MyAiStep, vi: boolean): string {
     const app = officeAppFriendly(step.app, vi)
     if (step.blank) return vi ? `đã mở ${app} trống` : `opened a blank ${app}`
     return vi ? `đã soạn ${app}` : `drafted ${app}`
+  }
+  if (step.kind === 'ask_create') {
+    const app = officeAppFriendly(step.app, vi)
+    return vi ? `đang hỏi chủ đề ${app}` : `asked for a ${app} topic`
   }
   if (step.kind === 'open_file')
     return vi ? `đã mở file “${step.query}”` : `opened “${step.query}”`

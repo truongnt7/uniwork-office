@@ -29,6 +29,7 @@ import {
 import { practiceMyAiChips } from './my-ai-playbooks'
 import {
   isAmbiguousRecentMatch,
+  isSubstantiveCreateBrief,
   officeAppLabel,
   rankRecents,
   rankRecentsScored,
@@ -604,6 +605,48 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     pack: MyAiContextPack,
     opts?: { showAiBubble?: boolean },
   ): Promise<StepOutcome> => {
+    if (step.kind === 'ask_create' || (step.kind === 'create_file' && !step.blank && !isSubstantiveCreateBrief(step.brief ?? ''))) {
+      const app = step.app
+      const name = officeAppLabel(app, vi)
+      const draftPrefix =
+        app === 'docs'
+          ? label('Soạn văn bản Word: ', 'Draft a Word doc: ')
+          : app === 'sheets'
+            ? label('Tạo bảng Excel: ', 'Create an Excel sheet: ')
+            : app === 'slides'
+              ? label('Tạo slide: ', 'Create a slide deck: ')
+              : label('Tạo file PDF: ', 'Create a PDF: ')
+      const blankPrompt =
+        app === 'docs'
+          ? label('Tạo Word trống', 'Create a blank Word doc')
+          : app === 'sheets'
+            ? label('Tạo Excel trống', 'Create a blank Excel sheet')
+            : app === 'slides'
+              ? label('Tạo slide trống', 'Create a blank slide deck')
+              : label('Tạo PDF trống', 'Create a blank PDF')
+      return {
+        text: label(
+          `Bạn muốn soạn ${name} về gì? Viết ngắn chủ đề hoặc dàn ý — mình mới mở file và soạn.`,
+          `What should this ${name} be about? Share a short topic or outline — then I’ll open and draft it.`,
+        ),
+        choices: [
+          {
+            id: 'ask-create-topic',
+            label: label('Nhập chủ đề…', 'Enter topic…'),
+            kind: 'prompt',
+            value: draftPrefix,
+          },
+          {
+            id: 'ask-create-blank',
+            label: label('Chỉ tạo trống', 'Blank only'),
+            kind: 'prompt',
+            value: blankPrompt,
+          },
+        ],
+        pausePlan: true,
+      }
+    }
+
     if (step.kind === 'create_file') {
       const rawBrief = step.blank ? undefined : step.brief
       let brief = rawBrief ? enrichBrief(rawBrief, pack, userText) : undefined
@@ -611,7 +654,25 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       if (brief && attachBlock) {
         brief = `${brief}\n\n---\nAttached files (on-device):\n${attachBlock}`
       } else if (!brief && attachBlock && !step.blank) {
-        brief = attachBlock.slice(0, 1_800)
+        // Attachment alone is not a user topic — ask instead of inventing a draft
+        return {
+          text: label(
+            `Bạn muốn soạn ${officeAppLabel(step.app, true)} về gì? (Có tệp đính kèm — nêu chủ đề để mình dùng kèm.)`,
+            `What should this ${officeAppLabel(step.app, false)} be about? (You attached files — add a topic so I can use them.)`,
+          ),
+          choices: [
+            {
+              id: 'ask-create-topic',
+              label: label('Nhập chủ đề…', 'Enter topic…'),
+              kind: 'prompt',
+              value:
+                step.app === 'docs'
+                  ? label('Soạn văn bản Word: ', 'Draft a Word doc: ')
+                  : label('Tạo file: ', 'Create file: '),
+            },
+          ],
+          pausePlan: true,
+        }
       }
       const usedCtx = Boolean(
         (brief && brief !== rawBrief) || (attachBlock && brief),
@@ -1299,13 +1360,15 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
         (usedAi
           ? contextFootnote(vi)
           : local.topic === 'fallback' || local.topic === 'off_topic'
-            ? label(
-                '\n\n_(Trên máy — chưa dùng Token. Bấm “Làm rõ bằng AI” nếu cần.)_',
-                '\n\n_(On-device — no Tokens used. Tap “Clarify with AI” if needed.)_',
-              )
+            ? offerAi
+              ? label(
+                  '\n\nMuốn mình suy nghĩ sâu hơn thì bấm “Làm rõ bằng AI” nhé.',
+                  '\n\nWant a deeper take? Tap “Clarify with AI”.',
+                )
+              : ''
             : label(
-                '\n\n_(Trả lời trên máy — chưa dùng Token.)_',
-                '\n\n_(Answered on-device — no Tokens used.)_',
+                '\n\n_(Trả lời nhanh từ dữ liệu trên máy.)_',
+                '\n\n_(Quick answer from on-device data.)_',
               ))
 
       if (streamedMessageId) {

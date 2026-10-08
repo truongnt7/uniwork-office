@@ -11,9 +11,11 @@ import {
   eduPackReadme,
   extractHubBalanceHint,
   hubModelsUrl,
+  isOpenRouterHubUrl,
   normalizeHubBaseUrl,
   type HubProbeResult,
 } from '@uniwork/edu-core'
+import { openRouterAttributionHeaders, probeOpenRouterKey } from '@genoffice/ai-provider'
 import { showSaveDialogWithMemory } from '@genoffice/electron-utils'
 
 export async function probeAiHub(baseUrl: string, apiKey: string): Promise<HubProbeResult> {
@@ -21,11 +23,13 @@ export async function probeAiHub(baseUrl: string, apiKey: string): Promise<HubPr
   if (!modelsUrl || !apiKey.trim()) {
     return { ok: false, message: 'Cần Base URL và Token Hub.' }
   }
+  const openRouter = isOpenRouterHubUrl(baseUrl)
   try {
     const res = await fetch(modelsUrl, {
       headers: {
         Authorization: `Bearer ${apiKey.trim()}`,
         Accept: 'application/json',
+        ...(openRouter ? openRouterAttributionHeaders(modelsUrl) : {}),
       },
     })
     const text = await res.text()
@@ -36,35 +40,51 @@ export async function probeAiHub(baseUrl: string, apiKey: string): Promise<HubPr
       json = null
     }
     if (res.status === 401 || res.status === 403) {
-      return { ok: false, message: 'Token không hợp lệ hoặc bị từ chối.' }
+      return { ok: false, message: 'Token không hợp lệ hoặc bị từ chối.', openRouter }
     }
     if (res.status === 402) {
-      return { ok: false, message: 'Hết Token / cần nạp credit trên Hub.' }
+      return { ok: false, message: 'Hết Token / cần nạp credit trên Hub.', openRouter }
     }
     if (!res.ok) {
       const snippet = text.replace(/\s+/g, ' ').slice(0, 160)
-      return { ok: false, message: `Hub lỗi HTTP ${res.status}${snippet ? `: ${snippet}` : ''}` }
+      return {
+        ok: false,
+        message: `Hub lỗi HTTP ${res.status}${snippet ? `: ${snippet}` : ''}`,
+        openRouter,
+      }
     }
     const data = json && typeof json === 'object' ? (json as { data?: unknown[] }) : null
     const modelCount = Array.isArray(data?.data) ? data.data.length : undefined
-    const balanceText = extractHubBalanceHint(json)
+    let balanceText = extractHubBalanceHint(json)
     const remaining = res.headers.get('x-remaining-credits') || res.headers.get('x-credits-remaining')
+    if (!balanceText && remaining) balanceText = remaining
+
+    // OpenRouter: enrich with GET /api/v1/key (limit_remaining / usage).
+    if (openRouter) {
+      const keyStatus = await probeOpenRouterKey(apiKey.trim())
+      if (keyStatus.ok && keyStatus.summary) {
+        balanceText = keyStatus.summary
+      } else if (!balanceText && keyStatus.error) {
+        // Models OK but key probe failed — still report models success.
+      }
+    }
+
     return {
       ok: true,
-      message: balanceText || remaining
-        ? `Hub OK — số dư: ${balanceText || remaining}`
+      message: balanceText
+        ? `Hub OK — ${balanceText}`
         : modelCount != null
           ? `Hub OK — ${modelCount} model.`
           : 'Hub OK — kết nối được.',
-      ...(balanceText || remaining
-        ? { balanceText: String(balanceText || remaining) }
-        : {}),
+      ...(balanceText ? { balanceText: String(balanceText) } : {}),
       ...(modelCount != null ? { modelCount } : {}),
+      openRouter,
     }
   } catch (err) {
     return {
       ok: false,
       message: err instanceof Error ? err.message : String(err),
+      openRouter,
     }
   }
 }

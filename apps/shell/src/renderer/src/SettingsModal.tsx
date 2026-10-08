@@ -318,6 +318,8 @@ function AiModelPane({ t }: { t: TFunc }) {
   const [saved, setSaved] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; error?: string } | null>(null)
+  const [hubStatus, setHubStatus] = useState<string | null>(null)
+  const [hubChecking, setHubChecking] = useState(false)
   /** free-typed value of the output-cap field; committed (and clamped) on blur */
   const [maxTokensDraft, setMaxTokensDraft] = useState<string | null>(null)
 
@@ -353,6 +355,21 @@ function AiModelPane({ t }: { t: TFunc }) {
       if (codex) {
         void refreshCodexModels(codex.cliPath ?? '', codex.model).catch(() => undefined)
       }
+      const orKey = s.providers.openrouter?.apiKey
+      if (s.provider === 'openrouter' && orKey && window.aiOffice.probeOpenRouterKey) {
+        setHubChecking(true)
+        void window.aiOffice
+          .probeOpenRouterKey(orKey)
+          .then((r) => {
+            if (!alive) return
+            if (r.ok && r.summary) setHubStatus(r.summary)
+            else if (r.error) setHubStatus(r.error)
+          })
+          .catch(() => undefined)
+          .finally(() => {
+            if (alive) setHubChecking(false)
+          })
+      }
     })
     return () => {
       alive = false
@@ -370,11 +387,13 @@ function AiModelPane({ t }: { t: TFunc }) {
   }
   const isGenspark = provider === 'genspark'
   const isCodex = provider === 'codex'
+  const isOpenRouter = provider === 'openrouter'
 
   const touch = () => {
     setDirty(true)
     setSaved(false)
     setTestResult(null)
+    setHubStatus(null)
   }
   const updateConfig = (patch: Partial<typeof config>) => {
     setSettings({
@@ -422,11 +441,29 @@ function AiModelPane({ t }: { t: TFunc }) {
         if (r?.ok && isCodex) {
           void refreshCodexModels(config.cliPath ?? '', config.model).catch(() => undefined)
         }
+        if (r?.ok && isOpenRouter && config.apiKey) {
+          void checkOpenRouterHub(config.apiKey)
+        }
       })
       .catch((error) =>
         setTestResult({ ok: false, error: error instanceof Error ? error.message : String(error) }),
       )
       .finally(() => setTesting(false))
+  }
+
+  const checkOpenRouterHub = (apiKey: string) => {
+    if (!window.aiOffice.probeOpenRouterKey) return
+    setHubChecking(true)
+    void window.aiOffice
+      .probeOpenRouterKey(apiKey)
+      .then((r) => {
+        if (r.ok && r.summary) setHubStatus(r.summary)
+        else setHubStatus(r.error || t('setAiOpenRouterHubFail'))
+      })
+      .catch((error) =>
+        setHubStatus(error instanceof Error ? error.message : t('setAiOpenRouterHubFail')),
+      )
+      .finally(() => setHubChecking(false))
   }
 
   return (
@@ -591,6 +628,40 @@ function AiModelPane({ t }: { t: TFunc }) {
           }}
         />
       </div>
+      {isOpenRouter ? (
+        <div className="set-field">
+          <div className="set-field-text">
+            <div className="set-field-stack">
+              <div className="set-field-label">{t('setAiOpenRouterHub')}</div>
+              <div className="set-field-desc">{t('setAiOpenRouterHubHint')}</div>
+              {hubChecking ? (
+                <div className="set-field-desc">{t('setAiOpenRouterHubChecking')}</div>
+              ) : hubStatus ? (
+                <div className="set-field-desc">{hubStatus}</div>
+              ) : null}
+            </div>
+          </div>
+          <div className="set-ai-hub-actions">
+            <button
+              type="button"
+              className="set-btn"
+              disabled={hubChecking || !config.apiKey}
+              onClick={() => checkOpenRouterHub(config.apiKey)}
+            >
+              {t('setAiOpenRouterHubCheck')}
+            </button>
+            <button
+              type="button"
+              className="set-btn"
+              onClick={() =>
+                void window.open('https://openrouter.ai/settings/credits', '_blank', 'noopener')
+              }
+            >
+              {t('setAiOpenRouterCredits')}
+            </button>
+          </div>
+        </div>
+      ) : null}
       <div className="set-pane-footer">
         <AiStatusPill
           status={

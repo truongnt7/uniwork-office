@@ -378,6 +378,9 @@ const homeApi: HomeApi = {
       ? { ok: true }
       : { ok: false, error: typeof raw.error === 'string' ? raw.error : 'Connection failed' }
   },
+  async probeOpenRouterKey(apiKey) {
+    return (await ipcRenderer.invoke('ai:openrouter-key-status', apiKey)) as import('@genoffice/ai-provider').OpenRouterKeyStatus
+  },
   async aiChat(input) {
     const settings =
       input.settings ?? ((await ipcRenderer.invoke('ai:get-settings')) as AiSettings)

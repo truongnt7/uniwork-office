@@ -8,6 +8,7 @@ import {
   EDU_SUBJECTS,
   EDU_TEMPLATES,
   EDU_WORKFLOWS,
+  OPENROUTER_HUB_BASE_URL,
   eduMatchesFilter,
   eduMaterialSeedHtml,
   eduMaterialSeedTitle,
@@ -17,6 +18,7 @@ import {
   eduTemplateTitle,
   eduWorkflowPrompt,
   inferMaterialRole,
+  isOpenRouterHubUrl,
   materialRoleLabel,
   uniqueGrades,
   uniqueSubjects,
@@ -241,7 +243,16 @@ export function TeacherHome({
 
   useEffect(() => {
     void window.aiOffice.getAiSettings?.().then((s) => {
+      const openrouter = s.providers.openrouter
       const custom = s.providers.custom
+      if (s.provider === 'openrouter' && openrouter?.apiKey) {
+        setHubBaseUrl(openrouter.baseUrl || OPENROUTER_HUB_BASE_URL)
+        setHubToken(openrouter.apiKey)
+        setHubModel(openrouter.model ?? '')
+        setHubStatus(label('Đang dùng OpenRouter.', 'Using OpenRouter.'))
+        setHubOk(true)
+        return
+      }
       setHubBaseUrl(custom?.baseUrl ?? '')
       setHubToken(custom?.apiKey ?? '')
       setHubModel(custom?.model ?? '')
@@ -286,20 +297,40 @@ export function TeacherHome({
         setHubStatus(label('Cần Base URL và Token.', 'Base URL and token are required.'))
         return
       }
-      await window.aiOffice.setAiSettings({
-        ...current,
-        provider: 'custom',
-        providers: {
-          ...current.providers,
-          custom: {
-            ...current.providers.custom,
-            apiKey,
-            baseUrl,
-            model: model || current.providers.custom.model || 'gpt-4o',
+      const asOpenRouter = isOpenRouterHubUrl(baseUrl)
+      const normalizedBase = asOpenRouter ? OPENROUTER_HUB_BASE_URL : baseUrl
+      const defaultModel = asOpenRouter ? 'openrouter/auto' : 'gpt-4o'
+      if (asOpenRouter) {
+        await window.aiOffice.setAiSettings({
+          ...current,
+          provider: 'openrouter',
+          providers: {
+            ...current.providers,
+            openrouter: {
+              ...current.providers.openrouter,
+              apiKey,
+              baseUrl: normalizedBase,
+              model: model || current.providers.openrouter?.model || defaultModel,
+            },
           },
-        },
-      })
-      const probe = await window.aiOffice.probeAiHub({ baseUrl, apiKey })
+        })
+        if (hubBaseUrl.trim() !== normalizedBase) setHubBaseUrl(normalizedBase)
+      } else {
+        await window.aiOffice.setAiSettings({
+          ...current,
+          provider: 'custom',
+          providers: {
+            ...current.providers,
+            custom: {
+              ...current.providers.custom,
+              apiKey,
+              baseUrl: normalizedBase,
+              model: model || current.providers.custom.model || defaultModel,
+            },
+          },
+        })
+      }
+      const probe = await window.aiOffice.probeAiHub({ baseUrl: normalizedBase, apiKey })
       setHubOk(probe.ok)
       setHubStatus(
         probe.ok
@@ -1033,17 +1064,29 @@ export function TeacherHome({
             <div className="teacher-hub teacher-hub-nested">
               <p className="teacher-hint">
                 {label(
-                  'Gateway OpenAI-compatible. Mở mẫu / xuất zip không trừ Token.',
-                  'OpenAI-compatible gateway. Templates / zip export do not charge Tokens.',
+                  'Gateway OpenAI-compatible (kể cả OpenRouter). Mở mẫu / xuất zip không trừ Token.',
+                  'OpenAI-compatible gateway (incl. OpenRouter). Templates / zip export do not charge Tokens.',
                 )}
               </p>
+              <div className="teacher-chip-row">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setHubBaseUrl(OPENROUTER_HUB_BASE_URL)
+                    if (!hubModel.trim()) setHubModel('openrouter/auto')
+                  }}
+                >
+                  OpenRouter
+                </button>
+              </div>
               <div className="teacher-form">
                 <label className="teacher-form-wide">
                   <span>Base URL</span>
                   <input
                     value={hubBaseUrl}
                     onChange={(e) => setHubBaseUrl(e.target.value)}
-                    placeholder="https://your-hub.example/v1"
+                    placeholder="https://openrouter.ai/api/v1"
                   />
                 </label>
                 <label className="teacher-form-wide">

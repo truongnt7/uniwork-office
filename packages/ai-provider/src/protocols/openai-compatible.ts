@@ -2,6 +2,7 @@ import type { AgentMessage, AgentToolCall, AgentToolDef } from '@genoffice/agent
 import { aiFetch } from '../fetch'
 import { httpBodyDetail } from '../http-error'
 import { gensparkAttributionHeaders, opencodeSessionHeaders } from '../providers'
+import { openRouterAttributionHeaders } from '../openrouter'
 import { modelEchoesReasoning } from '../registry'
 import type { AiChatResponse, AiProviderConfig } from '../types'
 import { createStreamWatchdog, type StreamWatchdog } from '../watchdog'
@@ -10,6 +11,7 @@ import {
   parseToolInput,
   sseErrorText,
   sseLines,
+  AiCreditsError,
   throwIfCreditsNotice,
   type StreamCallbacks,
 } from './shared'
@@ -156,6 +158,7 @@ async function openAiCompatibleTurn(
       'Content-Type': 'application/json',
       ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
       ...gensparkAttributionHeaders(baseUrl),
+      ...openRouterAttributionHeaders(baseUrl),
       ...opencodeSessionHeaders(baseUrl, cb.sessionId),
     },
     body: JSON.stringify({
@@ -180,7 +183,9 @@ async function openAiCompatibleTurn(
   // headers arrived: ping the renderer watchdog too, or a slow first chunk could trip it
   onBytes()
   if (!response.ok || !response.body) {
-    throw new Error(`HTTP ${response.status}: ${httpBodyDetail(await response.text())}`)
+    const detail = httpBodyDetail(await response.text())
+    if (response.status === 402) throw new AiCreditsError(detail)
+    throw new Error(`HTTP ${response.status}: ${detail}`)
   }
   const jsonBody = await jsonBodyInsteadOfSse(response)
   if (jsonBody !== null) {
@@ -321,6 +326,7 @@ export async function chatOpenAiCompatible(
       'Content-Type': 'application/json',
       ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
       ...gensparkAttributionHeaders(baseUrl),
+      ...openRouterAttributionHeaders(baseUrl),
       ...opencodeSessionHeaders(baseUrl),
     },
     body: JSON.stringify({
@@ -335,7 +341,9 @@ export async function chatOpenAiCompatible(
   })
   wd.touch()
   if (!response.ok) {
-    return { ok: false, error: `HTTP ${response.status}: ${httpBodyDetail(await response.text())}` }
+    const detail = httpBodyDetail(await response.text())
+    if (response.status === 402) return { ok: false, error: detail, errorCode: 'credits' as const }
+    return { ok: false, error: `HTTP ${response.status}: ${detail}` }
   }
   // A 200 with an HTML shell / empty / truncated body (gateway soft-failure)
   // would make response.json() throw; return ok:false instead of leaking a

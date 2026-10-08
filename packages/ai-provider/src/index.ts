@@ -80,6 +80,15 @@ export { isAiNetworkError } from './network-error'
 export { isAiOverloadedError } from './overload-error'
 export { parseOutputCapRejection } from './output-cap'
 export { AiCreditsError, sseLines, streamForProvider } from './stream'
+export {
+  OPENROUTER_API_BASE,
+  OPENROUTER_CREDITS_URL,
+  OPENROUTER_KEYS_URL,
+  formatOpenRouterKeySummary,
+  openRouterAttributionHeaders,
+  probeOpenRouterKey,
+} from './openrouter'
+export type { OpenRouterKeyStatus } from './openrouter'
 export type { StreamCallbacks } from './stream'
 export {
   AI_CHAT_RESPONSE_TIMEOUT_MS,

@@ -25,6 +25,8 @@ export function gensparkAttributionHeaders(baseUrl?: string): Record<string, str
     : {}
 }
 
+export { openRouterAttributionHeaders } from './openrouter'
+
 /**
  * OpenCode Zen / Go route and cache per conversation and answer 400
  * MissingSessionID without this header (genoffice#331). The renderer's

@@ -10,12 +10,31 @@ export interface HubProbeResult {
   /** Best-effort remaining balance text when the gateway exposes it */
   balanceText?: string
   modelCount?: number
+  /** True when base URL points at OpenRouter */
+  openRouter?: boolean
+}
+
+/** Canonical OpenRouter OpenAI-compatible root (no trailing slash). */
+export const OPENROUTER_HUB_BASE_URL = 'https://openrouter.ai/api/v1'
+
+/** Detect OpenRouter from a Hub / custom base URL (host match). */
+export function isOpenRouterHubUrl(baseUrl: string): boolean {
+  const raw = baseUrl.trim()
+  if (!raw) return false
+  try {
+    const withProto = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+    const host = new URL(withProto).hostname.toLowerCase()
+    return host === 'openrouter.ai' || host.endsWith('.openrouter.ai')
+  } catch {
+    return /openrouter\.ai/i.test(raw)
+  }
 }
 
 /** Normalize a Hub base URL to an OpenAI-compatible /v1 root (no trailing slash). */
 export function normalizeHubBaseUrl(baseUrl: string): string {
   let u = baseUrl.trim().replace(/\/+$/, '')
   if (!u) return ''
+  if (isOpenRouterHubUrl(u)) return OPENROUTER_HUB_BASE_URL
   if (!/\/v\d+$/i.test(u)) u = `${u}/v1`
   return u
 }

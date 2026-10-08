@@ -24,8 +24,10 @@ export {
 export { eduSystemPromptAddendum, eduWorkflowPrompt } from './prompts.js'
 export { eduPackReadme, looksLikeAiCreditError } from './pack.js'
 export {
+  OPENROUTER_HUB_BASE_URL,
   extractHubBalanceHint,
   hubModelsUrl,
+  isOpenRouterHubUrl,
   normalizeHubBaseUrl,
   type HubProbeInput,
   type HubProbeResult,

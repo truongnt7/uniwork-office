@@ -366,6 +366,13 @@
   color: var(--danger);
 }
 
+.set-ai-hub-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .set-pane-footer {
   margin-top: auto;
   padding-top: 20px;

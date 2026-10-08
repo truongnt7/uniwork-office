@@ -77,6 +77,7 @@ import {
   chatForProvider,
   defaultAiSettings,
   activeProvider,
+  probeOpenRouterKey,
   testMediaProvider,
   type AiMediaProviderConfig,
   type AiMediaProviderId,
@@ -2922,6 +2923,10 @@ export function registerAiIpc(): void {
 
   ipcMain.handle('ai:set-settings', (_event, settings: AiSettings) => {
     writeJson(SETTINGS_PATH(), settings)
+  })
+
+  ipcMain.handle('ai:openrouter-key-status', async (_event, apiKey: unknown) => {
+    return probeOpenRouterKey(typeof apiKey === 'string' ? apiKey : '')
   })
 
   ipcMain.handle('ai:codex-models', async (_event, cliPath: unknown) => {

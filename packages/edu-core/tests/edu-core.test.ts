@@ -7,11 +7,13 @@ import {
   eduSkillPrompt,
   eduTemplateHtml,
   eduWorkflowPrompt,
+  OPENROUTER_HUB_BASE_URL,
   extractHubBalanceHint,
   getEduSkill,
   hubModelsUrl,
   inferMaterialRole,
   isEduMeta,
+  isOpenRouterHubUrl,
   looksLikeAiCreditError,
   materialRoleLabel,
   normalizeHubBaseUrl,
@@ -67,6 +69,10 @@ describe('edu-core', () => {
     expect(hubModelsUrl('https://hub.example/v1')).toBe('https://hub.example/v1/models')
     expect(extractHubBalanceHint({ balance: 12.5 })).toBe('12.5')
     expect(looksLikeAiCreditError('Your credits have been exhausted')).toBe(true)
+    expect(isOpenRouterHubUrl('https://openrouter.ai/api/v1')).toBe(true)
+    expect(isOpenRouterHubUrl('openrouter.ai')).toBe(true)
+    expect(isOpenRouterHubUrl('https://hub.example/v1')).toBe(false)
+    expect(normalizeHubBaseUrl('https://openrouter.ai')).toBe(OPENROUTER_HUB_BASE_URL)
   })
 
   it('filters knowledge library by subject/tag/query', () => {

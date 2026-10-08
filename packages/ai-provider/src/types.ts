@@ -164,6 +164,8 @@ export interface AiChatResponse {
   ok: boolean
   content?: string
   error?: string
+  /** Same codes as stream errors — e.g. OpenRouter HTTP 402 */
+  errorCode?: 'timeout' | 'credits' | 'network' | 'overloaded'
 }
 
 export interface AiStreamRequest {

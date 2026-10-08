@@ -131,7 +131,11 @@ function creditsNoticeText(value: unknown): string | null {
     const credits =
       t.includes('genspark.ai/pricing') ||
       t.includes('uniwork.app/pricing') ||
-      (t.includes('credit') && (t.includes('exhausted') || t.includes('insufficient')))
+      t.includes('openrouter.ai') ||
+      t.includes('openrouter_credits') ||
+      t.includes('openrouter_key_limit') ||
+      (t.includes('credit') &&
+        (t.includes('exhausted') || t.includes('insufficient') || t.includes('balance')))
     return credits ? value : null
   }
   if (Array.isArray(value) || (value && typeof value === 'object')) {

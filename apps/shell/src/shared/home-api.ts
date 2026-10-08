@@ -10,6 +10,7 @@ import type {
   AiStreamChunk,
   AiStreamRequest,
   CodexModelCatalog,
+  OpenRouterKeyStatus,
 } from '@genoffice/ai-provider'
 
 /** Image attachment extensions — multimodal base64 on send (mirrors docs). */
@@ -266,6 +267,8 @@ export interface HomeApi {
   getCodexModels(cliPath?: string): Promise<CodexModelCatalog>
   /** one-shot round trip against the given (possibly unsaved) settings — the settings-UI connection test */
   testAiSettings(settings: AiSettings): Promise<AiChatResponse>
+  /** OpenRouter Token Hub: GET /api/v1/key for the given (possibly unsaved) API key */
+  probeOpenRouterKey(apiKey: string): Promise<OpenRouterKeyStatus>
   /** one-shot non-streaming chat using saved (or provided) AI settings — Workbench helpers */
   aiChat(input: { system: string; user: string; settings?: AiSettings }): Promise<AiChatResponse>
   /** streaming chat (same IPC as editor AI panels) */

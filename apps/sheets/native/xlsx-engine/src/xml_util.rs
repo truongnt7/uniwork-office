@@ -3,6 +3,8 @@
 
 use std::borrow::Cow;
 
+use unicode_normalization::UnicodeNormalization;
+
 use super::*;
 
 /// Entry lookup tolerant of non-conformant producers: '\' separators,
@@ -130,12 +132,19 @@ pub(crate) fn decode_xlsx_escapes(text: &str) -> Cow<'_, str> {
 
 /// Cell text as Excel sees it. Raw CRLF is XML-level noise and must collapse
 /// before the escaped CR appears, otherwise `_x000D_\r\n` (Excel's encoding
-/// of CR LF) would turn into two line breaks.
+/// of CR LF) would turn into two line breaks. NFC keeps Vietnamese diacritics
+/// precomposed so canvas font fallback does not split tone marks.
 pub(crate) fn normalize_cell_text(text: &mut String) {
     normalize_line_endings(text);
     if let Cow::Owned(decoded) = decode_xlsx_escapes(text) {
         *text = decoded;
         normalize_line_endings(text);
+    }
+    if text.bytes().any(|b| b >= 0x80) {
+        let nfc: String = text.nfc().collect();
+        if nfc != *text {
+            *text = nfc;
+        }
     }
 }
 

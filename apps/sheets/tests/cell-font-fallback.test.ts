@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   CELL_FONT_ALIASES,
+  VIETNAMESE_UNICODE_RANGE,
   rewriteScopedFamilies,
   withSansSerifFallback,
 } from '../src/renderer/cell-font-fallback'
@@ -106,7 +107,18 @@ describe('CELL_FONT_ALIASES', () => {
     for (const alias of CELL_FONT_ALIASES) {
       expect(alias.regular.length).toBeGreaterThan(0)
       if (alias.bold) expect(alias.bold.length).toBeGreaterThan(0)
+      if (alias.italic) expect(alias.italic.length).toBeGreaterThan(0)
+      if (alias.italicBold) expect(alias.italicBold.length).toBeGreaterThan(0)
     }
+  })
+
+  it('covers Times New Roman italic + Vietnamese precomposed range', () => {
+    const times = CELL_FONT_ALIASES.find((a) => a.family === 'Times New Roman')
+    expect(times?.italic?.[0]).toBe('Times New Roman Italic')
+    expect(times?.italicBold?.[0]).toBe('Times New Roman Bold Italic')
+    expect(times?.vietnameseCover?.regular?.[0]).toBe('Times New Roman')
+    expect(times?.vietnameseCover?.italic?.[0]).toBe('Times New Roman Italic')
+    expect(VIETNAMESE_UNICODE_RANGE).toContain('U+1EA0-1EF9')
   })
 
   it('lists the genuine bold face first where the family has a real bold', () => {

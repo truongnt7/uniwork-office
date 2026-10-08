@@ -2822,10 +2822,11 @@ function escapeCellText(input: string): string {
 }
 
 /// Mirrors the sidecar: raw CRLF folds first so `_x000D_` + LF (Excel's CR LF)
-/// ends up as one line break.
+/// ends up as one line break. NFC keeps Vietnamese diacritics precomposed so
+/// canvas font fallback does not split tone marks onto a different face.
 function decodeCellText(input: string): string {
   const text = decodeXmlText(input).replace(/\r\n?/g, '\n')
-  return decodeXlsxEscapes(text).replace(/\r\n?/g, '\n')
+  return decodeXlsxEscapes(text).replace(/\r\n?/g, '\n').normalize('NFC')
 }
 
 const XML_NAMED_ENTITIES: Record<string, string> = {

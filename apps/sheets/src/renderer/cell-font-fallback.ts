@@ -13,6 +13,7 @@
 
 import carlitoBoldUrl from '@genoffice/ui/fonts/Carlito-Bold.ttf?url'
 import carlitoRegularUrl from '@genoffice/ui/fonts/Carlito-Regular.ttf?url'
+import { normalizeCellText } from './cell-text-normalize'
 
 const GENERIC_FAMILY =
   /(?:^|[\s,])(?:serif|sans-serif|monospace|cursive|fantasy|system-ui|math|ui-serif|ui-sans-serif|ui-monospace|ui-rounded)$/i
@@ -110,6 +111,47 @@ export function rewriteScopedFamilies(
   return segments.join(',')
 }
 
+/// Precomposed Vietnamese + Latin Extended-A letters used in VN orthography.
+/// Overlay faces for this range keep tone marks attached when Times Italic
+/// (or similar) is missing those glyphs and would otherwise fall back per
+/// combining mark.
+export const VIETNAMESE_UNICODE_RANGE =
+  'U+0102-0103, U+0110-0111, U+1EA0-1EF9'
+
+const TIMES_ITALIC = [
+  'Times New Roman Italic',
+  'TimesNewRomanPS-ItalicMT',
+  'Liberation Serif Italic',
+  'Noto Serif Italic',
+  'Georgia Italic',
+  'Georgia-Italic',
+] as const
+const TIMES_BOLD_ITALIC = [
+  'Times New Roman Bold Italic',
+  'TimesNewRomanPS-BoldItalicMT',
+  'Liberation Serif Bold Italic',
+  'Noto Serif Bold Italic',
+  'Georgia Bold Italic',
+  'Georgia-BoldItalic',
+] as const
+/// Prefer faces known to ship full Vietnamese precomposed sets.
+const VN_SERIF_COVER = [
+  'Times New Roman',
+  'Liberation Serif',
+  'Noto Serif',
+  'Georgia',
+  'Arial Unicode MS',
+] as const
+const VN_SERIF_COVER_ITALIC = [
+  'Times New Roman Italic',
+  'TimesNewRomanPS-ItalicMT',
+  'Liberation Serif Italic',
+  'Noto Serif Italic',
+  'Georgia Italic',
+  'Georgia-Italic',
+  'Arial Unicode MS',
+] as const
+
 export interface CellFontAlias {
   readonly family: string
   /// local() face names, tried in order; genuine (Windows) names first so the
@@ -119,6 +161,10 @@ export interface CellFontAlias {
   /// Real bold faces only — never a regular face, which would suppress
   /// synthetic bold where no true bold exists.
   readonly bold?: readonly string[]
+  /// Real italic faces (style: italic). Without these, Chromium synthesizes
+  /// italic and Vietnamese marks often detach onto a different fallback face.
+  readonly italic?: readonly string[]
+  readonly italicBold?: readonly string[]
   /// size-adjust % matching the substitute's advances to the original's
   /// Excel-print advances (weighted per-char ratio measured from production
   /// ref PDFs). Requires skipIfLocal: the adjustment is derived for the
@@ -149,6 +195,14 @@ export interface CellFontAlias {
     /// Overrides the default U+0-2CFF span — Thai sits inside it, so Thai
     /// aliases carve their own block out and keep it on the base face.
     readonly unicodeRange?: string
+  }
+  /// VN precomposed overlay (unicodeRange VIETNAMESE_UNICODE_RANGE). Keeps
+  /// tone-marked letters on one face when italic/regular Times lacks glyphs.
+  readonly vietnameseCover?: {
+    readonly regular: readonly string[]
+    readonly bold?: readonly string[]
+    readonly italic?: readonly string[]
+    readonly italicBold?: readonly string[]
   }
 }
 
@@ -549,6 +603,20 @@ export const CELL_FONT_ALIASES: readonly CellFontAlias[] = [
     family: 'Times New Roman',
     regular: ['Times New Roman', 'Times', 'Georgia'],
     bold: TIMES_BOLD,
+    italic: TIMES_ITALIC,
+    italicBold: TIMES_BOLD_ITALIC,
+    // Overlay VN letters so italic/regular runs with missing glyphs do not
+    // fall back per combining mark (floating tone marks next to the base).
+    vietnameseCover: {
+      regular: VN_SERIF_COVER,
+      bold: ['Times New Roman Bold', 'TimesNewRomanPS-BoldMT', ...VN_SERIF_COVER],
+      italic: VN_SERIF_COVER_ITALIC,
+      italicBold: [
+        'Times New Roman Bold Italic',
+        'TimesNewRomanPS-BoldItalicMT',
+        ...VN_SERIF_COVER_ITALIC,
+      ],
+    },
   },
   { family: 'PT Serif', regular: ['PT Serif', 'Times New Roman', 'Georgia'] },
   // Google serif faces Office fetches as cloud fonts (Excel draws the real
@@ -662,10 +730,44 @@ function patchFontSetter(proto: object): void {
   })
 }
 
+/// NFC cell strings before canvas draw/measure so combining Vietnamese marks
+/// stay one grapheme cluster and share one font fallback decision.
+function patchCanvasTextNormalize(proto: CanvasRenderingContext2D): void {
+  const fillText = proto.fillText
+  proto.fillText = function (this: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth?: number) {
+    const normalized = normalizeCellText(String(text))
+    return maxWidth === undefined
+      ? fillText.call(this, normalized, x, y)
+      : fillText.call(this, normalized, x, y, maxWidth)
+  }
+  const strokeText = proto.strokeText
+  proto.strokeText = function (
+    this: CanvasRenderingContext2D,
+    text: string,
+    x: number,
+    y: number,
+    maxWidth?: number,
+  ) {
+    const normalized = normalizeCellText(String(text))
+    return maxWidth === undefined
+      ? strokeText.call(this, normalized, x, y)
+      : strokeText.call(this, normalized, x, y, maxWidth)
+  }
+  const measureText = proto.measureText
+  proto.measureText = function (this: CanvasRenderingContext2D, text: string) {
+    return measureText.call(this, normalizeCellText(String(text)))
+  }
+}
+
 export function installCanvasFontFallback(): void {
   patchFontSetter(CanvasRenderingContext2D.prototype)
-  if (typeof OffscreenCanvasRenderingContext2D !== 'undefined')
+  patchCanvasTextNormalize(CanvasRenderingContext2D.prototype)
+  if (typeof OffscreenCanvasRenderingContext2D !== 'undefined') {
     patchFontSetter(OffscreenCanvasRenderingContext2D.prototype)
+    patchCanvasTextNormalize(
+      OffscreenCanvasRenderingContext2D.prototype as unknown as CanvasRenderingContext2D,
+    )
+  }
 }
 
 /// Everything below the CJK blocks: latin sub-faces cover digits/latin/punct
@@ -714,20 +816,44 @@ function registerAlias(alias: CellFontAlias, loads: Promise<unknown>[]): void {
   addFace(family, alias.regular, { weight: '400', sizeAdjust: alias.sizeAdjust }, loads)
   if (alias.bold)
     addFace(family, alias.bold, { weight: '700', sizeAdjust: alias.boldSizeAdjust }, loads)
-  const latin = alias.latin
-  if (!latin) return
-  const unicodeRange = latin.unicodeRange ?? LATIN_RANGE
-  addFace(
-    family,
-    latin.regular,
-    { weight: '400', sizeAdjust: latin.sizeAdjust, unicodeRange },
-    loads,
-  )
-  if (latin.bold)
+  if (alias.italic)
+    addFace(family, alias.italic, { weight: '400', style: 'italic', sizeAdjust: alias.sizeAdjust }, loads)
+  if (alias.italicBold)
     addFace(
       family,
-      latin.bold,
-      { weight: '700', sizeAdjust: latin.boldSizeAdjust, unicodeRange },
+      alias.italicBold,
+      { weight: '700', style: 'italic', sizeAdjust: alias.boldSizeAdjust },
+      loads,
+    )
+  const latin = alias.latin
+  if (latin) {
+    const unicodeRange = latin.unicodeRange ?? LATIN_RANGE
+    addFace(
+      family,
+      latin.regular,
+      { weight: '400', sizeAdjust: latin.sizeAdjust, unicodeRange },
+      loads,
+    )
+    if (latin.bold)
+      addFace(
+        family,
+        latin.bold,
+        { weight: '700', sizeAdjust: latin.boldSizeAdjust, unicodeRange },
+        loads,
+      )
+  }
+  const vn = alias.vietnameseCover
+  if (!vn) return
+  const vnRange = VIETNAMESE_UNICODE_RANGE
+  addFace(family, vn.regular, { weight: '400', unicodeRange: vnRange }, loads)
+  if (vn.bold) addFace(family, vn.bold, { weight: '700', unicodeRange: vnRange }, loads)
+  if (vn.italic)
+    addFace(family, vn.italic, { weight: '400', style: 'italic', unicodeRange: vnRange }, loads)
+  if (vn.italicBold)
+    addFace(
+      family,
+      vn.italicBold,
+      { weight: '700', style: 'italic', unicodeRange: vnRange },
       loads,
     )
 }

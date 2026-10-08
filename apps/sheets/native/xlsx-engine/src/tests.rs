@@ -43,6 +43,15 @@ fn escaped_cr_before_raw_line_break_is_one_break() {
     assert_eq!(text, "LINE ONE \nLINE TWO \nLINE THREE");
 }
 
+/// NFD Vietnamese (e + combining dot-below + circumflex) must become NFC "ệ"
+/// so canvas font fallback keeps the grapheme on one face.
+#[test]
+fn vietnamese_nfd_collapses_to_nfc() {
+    let mut text = "Vie\u{0323}\u{0302}t Nam".to_owned();
+    normalize_cell_text(&mut text);
+    assert_eq!(text, "Vi\u{1ec7}t Nam");
+}
+
 #[test]
 fn shared_and_inline_strings_decode_escapes() {
     let (_dir, path) = open_fixture(&[

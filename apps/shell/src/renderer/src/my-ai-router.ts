@@ -677,16 +677,28 @@ export function routeMyAiTextSingle(text: string): MyAiStep | Extract<MyAiRoute,
     }
   }
 
-  // 5) Workbench / agent intent
+  // 5) Workbench — add/summarize/run_skill OK; open/navigate need an open verb
+  // (bare keywords like “bạn”/“note” must not yank the user out of My AI)
   const resolved = resolveAgentIntentFromText(raw, 'desktop')
   if (resolved) {
-    const intent = createAgentIntent({
-      ...resolved,
-      source: 'desktop',
-      requireConsent: false,
-      text: raw,
-    })
-    return { kind: 'workbench', intent }
+    const openVerb =
+      /(?:^|[\s,;])(?:mở|mo|open|vào|vao|go to|chuyển tới|chuyen toi|chuyển đến|chuyen den)\b/i.test(
+        lower,
+      ) ||
+      /(?:mở|open)\s+tab\b/i.test(lower) ||
+      /(?:mở|open)\s+(?:lịch|lich|calendar|công việc|cong viec|tasks?|ghi chú|ghi chu|notes?|email|khách hàng|clients?)/i.test(
+        lower,
+      )
+    const isOpenish = resolved.action === 'open' || resolved.action === 'navigate'
+    if (!(isOpenish && !openVerb)) {
+      const intent = createAgentIntent({
+        ...resolved,
+        source: 'desktop',
+        requireConsent: false,
+        text: raw,
+      })
+      return { kind: 'workbench', intent }
+    }
   }
 
   return {

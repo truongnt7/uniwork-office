@@ -229,8 +229,13 @@ export function resolveAgentIntentFromText(
     }
   }
   if (!target) {
-    // Default assistant for ambiguous NL from PWA
-    target = { kind: 'module', id: action === 'add_item' ? 'tasks' : 'assistant' }
+    // add_item without a module cue → tasks. Otherwise do not invent a tab
+    // (My AI must stay in chat for free-form / local Q&A).
+    if (action === 'add_item') {
+      target = { kind: 'module', id: 'tasks' }
+    } else {
+      return null
+    }
   }
 
   const modLabel =

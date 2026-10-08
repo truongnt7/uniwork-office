@@ -930,10 +930,16 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       }
     }
 
-    // workbench
-    ensureWorkbench()
+    // workbench — stay in My AI for soft adds; only jump when user asked to open a tab
     const result = applyAgentIntent(step.intent, practiceId)
-    emitAgentIntentNavigate(result.tabId, step.intent)
+    const jumpToWorkbench =
+      step.intent.action === 'open' ||
+      step.intent.action === 'navigate' ||
+      step.intent.action === 'run_skill'
+    if (jumpToWorkbench) {
+      ensureWorkbench()
+      emitAgentIntentNavigate(result.tabId, step.intent)
+    }
     const tabName = workbenchModuleLabel(result.tabId, vi)
     const openChoice: ChatChoice = {
       id: `open-wb-${result.tabId}`,
@@ -951,9 +957,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
           },
           openChoice,
         ]
-      : step.intent.action === 'add_item' ||
-          step.intent.action === 'open' ||
-          step.intent.action === 'navigate'
+      : step.intent.action === 'add_item' || jumpToWorkbench
         ? [openChoice]
         : []
     return {

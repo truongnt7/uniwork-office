@@ -25,6 +25,11 @@ describe('agent-intent catalog', () => {
     expect(task?.action).toBe('add_item')
   })
 
+  it('returns null for free-form chat without a Workbench cue', () => {
+    expect(resolveAgentIntentFromText('Xin chào, giúp mình với')).toBeNull()
+    expect(resolveAgentIntentFromText('Hôm nay trời đẹp quá')).toBeNull()
+  })
+
   it('parses tab targets and skill domains', () => {
     expect(parseAgentIntentTarget('calendar')).toEqual({ kind: 'module', id: 'calendar' })
     expect(parseAgentIntentTarget('knowledge')).toEqual({ kind: 'pillar', id: 'knowledge' })

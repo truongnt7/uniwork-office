@@ -69,6 +69,13 @@ describe('my-ai multi-tool plans (B4)', () => {
     expect(r.kind).toBe('create_file')
   })
 
+  it('does not route free-form chat to Workbench', () => {
+    expect(routeMyAiText('Xin chào').kind).toBe('unknown')
+    expect(routeMyAiText('Giúp mình nghĩ ý tưởng hay').kind).toBe('unknown')
+    expect(routeMyAiText('Cảm ơn bạn nhiều').kind).toBe('unknown')
+    expect(routeMyAiText('Mở tab lịch của tôi').kind).toBe('workbench')
+  })
+
   it('extracts trailing companions without conjunction split', () => {
     const { head, companions } = extractCompanionClauses(
       'Tạo slide kế hoạch quý rồi thêm công việc gửi slide',

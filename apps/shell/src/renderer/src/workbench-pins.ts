@@ -2,8 +2,10 @@ import {
   defaultPinnedModules,
   ensureCorePinnedModules,
   isCorePinnedModule,
+  isPracticePillarId,
   isWorkbenchModuleId,
   type PracticeId,
+  type PracticePillarId,
   type WorkbenchModuleId,
 } from '@uniwork/practice-core'
 
@@ -16,6 +18,46 @@ import {
 } from './workbench-store-client'
 
 const PINS_PREFIX = 'uniwork.wb.pins.'
+const PILLAR_PINS_PREFIX = 'uniwork.wb.pillarPins.'
+
+/** Pillars (Knowledge / Materials / Skills / Compose) are opt-in via Tab + — none pinned by default. */
+export function defaultPinnedPillars(): PracticePillarId[] {
+  return []
+}
+
+export function readPinnedPillars(practiceId: PracticeId): PracticePillarId[] {
+  try {
+    const raw = wbStoreGetRaw(PILLAR_PINS_PREFIX + practiceId)
+    if (raw === null) return defaultPinnedPillars()
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return defaultPinnedPillars()
+    return parsed.filter(isPracticePillarId)
+  } catch {
+    return defaultPinnedPillars()
+  }
+}
+
+export function writePinnedPillars(practiceId: PracticeId, pins: PracticePillarId[]): void {
+  try {
+    wbStoreSetRaw(PILLAR_PINS_PREFIX + practiceId, JSON.stringify(pins))
+  } catch {
+    /* ignore quota */
+  }
+}
+
+export function pinPillar(practiceId: PracticeId, id: PracticePillarId): PracticePillarId[] {
+  const cur = readPinnedPillars(practiceId)
+  if (cur.includes(id)) return cur
+  const next = [...cur, id]
+  writePinnedPillars(practiceId, next)
+  return next
+}
+
+export function unpinPillar(practiceId: PracticeId, id: PracticePillarId): PracticePillarId[] {
+  const next = readPinnedPillars(practiceId).filter((x) => x !== id)
+  writePinnedPillars(practiceId, next)
+  return next
+}
 
 export function readPinnedModules(practiceId: PracticeId): WorkbenchModuleId[] {
   try {

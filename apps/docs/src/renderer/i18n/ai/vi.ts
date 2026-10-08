@@ -9,6 +9,7 @@ export const vi = {
   aiStarterContinue: 'Viết tiếp từ chỗ tài liệu đang dừng',
   aiStarterFillTemplate: 'Tìm và điền các chỗ trống trong tài liệu này',
   aiGskLoginBtn: 'Đăng nhập UniWork',
+  aiBuyPlanBtn: 'Mua gói AI',
   aiPanelTitle: 'uniAI',
   aiOpenAssistant: 'Mở trợ lý AI',
   aiSummarizeBtn: 'AI Tóm tắt',

@@ -492,6 +492,21 @@ function SidebarFooter({
     setSettingsOpen(true)
   }
 
+  useEffect(() => {
+    const onOpen = (ev: Event) => {
+      const detail = (ev as CustomEvent<{ section?: SettingsSectionId }>).detail
+      openSettings(detail?.section ?? 'account')
+    }
+    window.addEventListener('uniwork:open-settings', onOpen)
+    const unsub = window.aiOffice.onOpenSettingsEvent?.((section) => {
+      openSettings((section as SettingsSectionId) || 'account')
+    })
+    return () => {
+      window.removeEventListener('uniwork:open-settings', onOpen)
+      unsub?.()
+    }
+  }, [])
+
   return (
     <div className="sidebar-footer">
       <CreditWallet onOpenAiSettings={() => openSettings('aiModel')} />

@@ -10901,6 +10901,17 @@ tr > .page-gap-cut {
   }
 }
 
+.ai-msg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ai-msg-actions .ai-login-btn {
+  margin-top: 0;
+}
+
 .ai-login-btn {
   margin-top: 8px;
   border: 1px solid var(--accent);

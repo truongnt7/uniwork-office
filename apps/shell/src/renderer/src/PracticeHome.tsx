@@ -4,6 +4,7 @@ import {
   domainSkillPrompt,
   getDomainSkill,
   getSkillDomain,
+  isPracticePillarId,
   isWorkbenchModuleId,
   listPracticeGroups,
   practiceMaterialSeedHtml,
@@ -22,6 +23,7 @@ import { SkillDomainTabs } from './SkillDomainTabs'
 import { readActiveSkillDomain, readPinnedSkillDomains } from './skill-domain-pins'
 import { WorkbenchModulePane } from './WorkbenchModulePanes'
 import { WorkbenchTabs } from './WorkbenchTabs'
+import { pinPillar } from './workbench-pins'
 import { WbDeleteBtn, WbOpenBtn, WbRowActions } from './WbRowActions'
 
 const UI_LANG_KEY = 'uniwork.teacherUiLang'
@@ -129,6 +131,8 @@ export function PracticeHome({
       if (moduleId && isWorkbenchModuleId(moduleId)) setTab(moduleId)
     }
     const onRunSkill = (ev: Event) => {
+      pinPillar(practice.id, 'skills')
+      window.dispatchEvent(new Event('uniwork:wb-pins-changed'))
       setTab('skills')
       const hint = ((ev as CustomEvent<{ skillHint?: string }>).detail?.skillHint ?? '')
         .toLowerCase()
@@ -177,7 +181,7 @@ export function PracticeHome({
       window.removeEventListener('uniwork:wb-open-module', openMod)
       window.removeEventListener('uniwork:agent-run-skill', onRunSkill)
     }
-  }, [roleSkills, domainSkills, hasSelectedPack, vi])
+  }, [roleSkills, domainSkills, hasSelectedPack, vi, practice.id])
 
   useEffect(() => {
     return onAgentIntentNavigate((tabId, intent) => {
@@ -349,6 +353,8 @@ export function PracticeHome({
       }
       setTitleDraft('')
       setTagsText('')
+      pinPillar(practice.id, 'materials')
+      window.dispatchEvent(new Event('uniwork:wb-pins-changed'))
       setTab('materials')
       setNotice(label('Đã tạo gói trong Tri thức.', 'Pack added to Knowledge.'))
     } catch (err) {
@@ -581,8 +587,9 @@ export function PracticeHome({
         active={tab}
         onSelect={setTab}
         vi={vi}
-        onPinsChange={(pins) => {
-          if (isWorkbenchModuleId(tab) && !pins.includes(tab)) setTab(pins.includes('desk') ? 'desk' : 'knowledge')
+        onPinsChange={(pins, pillarPins) => {
+          if (isWorkbenchModuleId(tab) && !pins.includes(tab)) setTab('desk')
+          if (isPracticePillarId(tab) && !pillarPins.includes(tab)) setTab('desk')
         }}
       />
 
@@ -646,7 +653,15 @@ export function PracticeHome({
                   <h2>{meta.title}</h2>
                   <p>{Object.values(meta.facets).filter(Boolean).join(' · ')}</p>
                   <div className="teacher-chip-row">
-                    <button type="button" className="btn btn-secondary" onClick={() => setTab('materials')}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        pinPillar(practice.id, 'materials')
+                        window.dispatchEvent(new Event('uniwork:wb-pins-changed'))
+                        setTab('materials')
+                      }}
+                    >
                       {label('Tài liệu', 'Materials')}
                     </button>
                     <button

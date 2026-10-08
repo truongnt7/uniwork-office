@@ -360,6 +360,8 @@ export interface DesktopApi {
   aiGskStatus(withEmail?: boolean): Promise<GenSparkAccountStatus>
   /** Open the browser to log in to Genspark (fire-and-forget; aiGskStatus flips to logged-in when done) */
   aiGskLogin(): Promise<void>
+  /** Focus Home → Settings → Account (AI plan purchase UI) */
+  aiOpenBilling(): Promise<void>
   webSearch(
     query: string,
     maxResults?: number,

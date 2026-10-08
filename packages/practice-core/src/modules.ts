@@ -2,7 +2,8 @@ import type { PracticeId } from './types.js'
 
 /**
  * Optional Workbench modules (pinned via Tab +).
- * Core pillars (knowledge / materials / skills / compose) are always present.
+ * Pillars (knowledge / materials / skills / compose) are also opt-in via Tab +.
+ * Core always-on modules: My Space / Tasks / Calendar / Forms.
  * "Projects" is intentionally omitted — it maps to the Knowledge pillar.
  */
 export type WorkbenchModuleId =

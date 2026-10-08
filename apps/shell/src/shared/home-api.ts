@@ -210,6 +210,8 @@ export interface HomeApi {
   openLoginUrl(): Promise<void>
   /** log out (clears any leftover local auth material) */
   accountLogout(): Promise<void>
+  /** Editor AI “Buy AI plan” → open Settings section (e.g. account); unsubscribe returned */
+  onOpenSettingsEvent?(handler: (section: string) => void): () => void
   /** app version (from package.json / electron app.getVersion) */
   getAppVersion(): Promise<string>
   /** whether the first-run onboarding has been completed or skipped (persisted in userData/app-settings.json) */
@@ -648,6 +650,8 @@ export const HOME_CHANNELS = {
   accountLoginEvent: 'home:account-login-event',
   accountLoginOpenUrl: 'home:account-login-open-url',
   accountLogout: 'home:account-logout',
+  /** Main → shell renderer: open Settings to a section (from editor AI billing CTA). */
+  openSettingsEvent: 'home:open-settings-event',
   getAppVersion: 'home:get-app-version',
   onboardingSeen: 'home:onboarding-seen',
   setOnboardingSeen: 'home:set-onboarding-seen',

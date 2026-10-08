@@ -1385,10 +1385,24 @@ export function AiPanel({
               {entry.error && (
                 <div className="ai-msg-error">{t('aiErrorPrefix', { error: entry.error })}</div>
               )}
-              {entry.loginRequired && (
-                <button className="ai-login-btn" onClick={() => void window.desktop.aiGskLogin()}>
-                  {t('aiGskLoginBtn')}
-                </button>
+              {(entry.loginRequired ||
+                (entry.error &&
+                  /API\s*[Kk]ey|api key|khóa API|kích hoạt|mua gói AI|not activated|purchase an AI|未配置|未設定/i.test(
+                    entry.error,
+                  ))) && (
+                <div className="ai-msg-actions">
+                  {entry.loginRequired && (
+                    <button className="ai-login-btn" onClick={() => void window.desktop.aiGskLogin()}>
+                      {t('aiGskLoginBtn')}
+                    </button>
+                  )}
+                  <button
+                    className="ai-login-btn"
+                    onClick={() => void window.desktop.aiOpenBilling?.()}
+                  >
+                    {t('aiBuyPlanBtn')}
+                  </button>
+                </div>
               )}
               {showToolbar && (
                 <div className="ai-msg-toolbar">

@@ -9,6 +9,7 @@ export const pl = {
   aiStarterContinue: 'Kontynuuj pisanie od miejsca, w którym kończy się dokument',
   aiStarterFillTemplate: 'Znajdź i uzupełnij symbole zastępcze w dokumencie',
   aiGskLoginBtn: 'Zaloguj się do UniWork',
+  aiBuyPlanBtn: 'Buy AI plan',
   aiPanelTitle: 'uniAI',
   aiOpenAssistant: 'Otwórz asystenta AI',
   aiSummarizeBtn: 'Podsumowanie AI',

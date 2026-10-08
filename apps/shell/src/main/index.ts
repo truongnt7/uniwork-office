@@ -2776,6 +2776,14 @@ function createShellWindow(): void {
     focusTab: (id) => manager.activateTab(id),
     closeActiveTab: () => manager.closeActiveTab(),
     openGeneratedPath: (path) => openGeneratedDocument(path),
+    openSettings: (section) => {
+      if (!shellWindow || shellWindow.isDestroyed()) return
+      shellWindow.show()
+      shellWindow.focus()
+      if (!shellWindow.webContents.isDestroyed()) {
+        shellWindow.webContents.send(HOME_CHANNELS.openSettingsEvent, section)
+      }
+    },
   })
   setSheetsCloseTabHook(() => manager.closeActiveTab())
   // ⌘W targets the focused window: in a detached slides editor window it closes

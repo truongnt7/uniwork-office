@@ -239,7 +239,7 @@ const tMain = createI18n({
     errNotImage: 'not a supported image type',
     errGskNotLoggedIn:
       'Not signed in to UniWork: click “Sign in to UniWork” below, sign in, then retry',
-    errNoApiKey: 'No API key configured for {provider}',
+    errNoApiKey: 'AI is not activated. Purchase a plan to use the AI assistant.',
     errAiBusy: 'The AI service is busy right now — please try again in a moment',
     errNoModel: 'No model name configured',
     errImgAbsPath: 'Image path must be absolute.',
@@ -1352,7 +1352,7 @@ const tMain = createI18n({
     errNotImage: 'không phải loại ảnh được hỗ trợ',
     errGskNotLoggedIn:
       'Chưa đăng nhập UniWork: nhấp “Đăng nhập UniWork” bên dưới, đăng nhập, rồi thử lại',
-    errNoApiKey: 'Chưa cấu hình khóa API cho {provider}',
+    errNoApiKey: 'Chưa kích hoạt / mua gói AI. Hãy mua gói để dùng Trợ lý AI.',
     errAiBusy: 'Dịch vụ AI đang bận — vui lòng thử lại sau giây lát',
     errNoModel: 'Chưa cấu hình tên mô hình',
     errImgAbsPath: 'Đường dẫn ảnh phải là tuyệt đối.',

@@ -9,6 +9,7 @@ export const cs = {
   aiStarterContinue: 'Pokračovat v psaní tam, kde dokument končí',
   aiStarterFillTemplate: 'Najít a vyplnit zástupné texty v tomto dokumentu',
   aiGskLoginBtn: 'Přihlásit se ke UniWork',
+  aiBuyPlanBtn: 'Buy AI plan',
   aiPanelTitle: 'uniAI',
   aiOpenAssistant: 'Otevřít asistenta AI',
   aiSummarizeBtn: 'Shrnutí AI',

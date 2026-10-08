@@ -9,6 +9,7 @@ export const fr = {
   aiStarterContinue: 'Continuer la rédaction là où le document s’arrête',
   aiStarterFillTemplate: 'Trouver et remplir les espaces réservés du document',
   aiGskLoginBtn: 'Se connecter à UniWork',
+  aiBuyPlanBtn: 'Buy AI plan',
   aiPanelTitle: 'uniAI',
   aiOpenAssistant: "Ouvrir l'assistant IA",
   aiSummarizeBtn: 'Résumé IA',

@@ -33,6 +33,7 @@ import {
   getDomainSkill,
   getPractice,
   getSkillDomain,
+  isPracticePillarId,
   isWorkbenchModuleId,
   listPracticeGroups,
   listPractices,
@@ -47,6 +48,7 @@ import { readActiveSkillDomain, readPinnedSkillDomains } from './skill-domain-pi
 import { onAgentIntentNavigate } from './agent-intent-bus'
 import { WorkbenchModulePane } from './WorkbenchModulePanes'
 import { WorkbenchTabs } from './WorkbenchTabs'
+import { pinPillar } from './workbench-pins'
 import { WbDeleteBtn, WbOpenBtn, WbRowActions } from './WbRowActions'
 
 function toEduMeta(entry: ProjectSummaryEntry): EduMeta | null {
@@ -382,6 +384,8 @@ export function TeacherHome({
       })
       setObjectiveText('')
       setTagsText('')
+      pinPillar('teacher', 'materials')
+      window.dispatchEvent(new Event('uniwork:wb-pins-changed'))
       setTab('materials')
       setNotice(label('Đã tạo bài trong Tri thức.', 'Lesson pack added to Knowledge.'))
     } catch (err) {
@@ -703,8 +707,9 @@ export function TeacherHome({
         active={tab}
         onSelect={setTab}
         vi={vi}
-        onPinsChange={(pins) => {
-          if (isWorkbenchModuleId(tab) && !pins.includes(tab)) setTab(pins.includes('desk') ? 'desk' : 'knowledge')
+        onPinsChange={(pins, pillarPins) => {
+          if (isWorkbenchModuleId(tab) && !pins.includes(tab)) setTab('desk')
+          if (isPracticePillarId(tab) && !pillarPins.includes(tab)) setTab('desk')
         }}
       />
 
@@ -822,7 +827,15 @@ export function TeacherHome({
                     </div>
                   </header>
                   <div className="teacher-chip-row">
-                    <button type="button" className="btn btn-secondary" onClick={() => setTab('materials')}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        pinPillar('teacher', 'materials')
+                        window.dispatchEvent(new Event('uniwork:wb-pins-changed'))
+                        setTab('materials')
+                      }}
+                    >
                       {label('Học liệu', 'Materials')}
                     </button>
                     <button type="button" className="btn btn-secondary" onClick={() => onOpenPackFiles(selected.id)}>

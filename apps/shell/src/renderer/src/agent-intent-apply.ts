@@ -8,6 +8,7 @@ import {
 } from '@uniwork/practice-core'
 import {
   pinModule,
+  pinPillar,
   readCalendar,
   readEmails,
   readEvents,
@@ -220,9 +221,15 @@ export function applyAgentIntent(
     ensurePinned(practiceId, intent.target.id)
     window.dispatchEvent(new Event('uniwork:wb-pins-changed'))
   }
+  if (intent.target.kind === 'pillar') {
+    pinPillar(practiceId, intent.target.id)
+    window.dispatchEvent(new Event('uniwork:wb-pins-changed'))
+  }
   if (intent.target.kind === 'skill-domain' && isSkillDomainId(intent.target.id)) {
+    pinPillar(practiceId, 'skills')
     pinSkillDomain(intent.target.id)
     writeActiveSkillDomain(intent.target.id)
+    window.dispatchEvent(new Event('uniwork:wb-pins-changed'))
     window.dispatchEvent(new Event('uniwork:skill-domain-changed'))
   }
 

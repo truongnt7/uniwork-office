@@ -9,6 +9,7 @@ export const hi = {
   aiStarterContinue: 'दस्तावेज़ जहाँ रुका है वहाँ से आगे लिखें',
   aiStarterFillTemplate: 'दस्तावेज़ के प्लेसहोल्डर ढूँढ़कर भरें',
   aiGskLoginBtn: 'UniWork में साइन इन करें',
+  aiBuyPlanBtn: 'Buy AI plan',
   aiPanelTitle: 'uniAI',
   aiOpenAssistant: 'AI सहायक खोलें',
   aiSummarizeBtn: 'AI सारांश',

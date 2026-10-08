@@ -9,6 +9,7 @@ export const ar = {
   aiStarterContinue: 'تابع الكتابة من حيث انتهى المستند',
   aiStarterFillTemplate: 'اعثر على العناصر النائبة في المستند واملأها',
   aiGskLoginBtn: 'تسجيل الدخول إلى UniWork',
+  aiBuyPlanBtn: 'Buy AI plan',
   aiPanelTitle: 'uniAI',
   aiOpenAssistant: 'فتح مساعد الذكاء الاصطناعي',
   aiSummarizeBtn: 'تلخيص AI',

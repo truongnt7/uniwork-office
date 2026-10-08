@@ -238,6 +238,13 @@ const homeApi: HomeApi = {
   async accountLogout() {
     await ipcRenderer.invoke(HOME_CHANNELS.accountLogout)
   },
+  onOpenSettingsEvent(handler) {
+    const listener = (_event: IpcRendererEvent, section: unknown) => {
+      handler(typeof section === 'string' && section ? section : 'account')
+    }
+    ipcRenderer.on(HOME_CHANNELS.openSettingsEvent, listener)
+    return () => ipcRenderer.removeListener(HOME_CHANNELS.openSettingsEvent, listener)
+  },
   async getAppVersion() {
     const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.getAppVersion)
     return typeof result === 'string' ? result : ''

@@ -9,6 +9,7 @@ export const ko = {
   aiStarterContinue: '지금 내용에 이어서 계속 써 줘',
   aiStarterFillTemplate: '문서의 자리 표시자를 찾아 채워 줘',
   aiGskLoginBtn: 'UniWork 로그인',
+  aiBuyPlanBtn: 'AI 요금제 구매',
   aiPanelTitle: 'uniAI',
   aiOpenAssistant: 'AI 도우미 열기',
   aiSummarizeBtn: 'AI 요약',

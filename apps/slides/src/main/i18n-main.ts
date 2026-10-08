@@ -180,7 +180,7 @@ export const tMain = createI18n({
     errNotImage: 'not a supported image type',
     errGskNotLoggedIn:
       'Not signed in to UniWork: click “Sign in to UniWork” below, sign in, then retry',
-    errNoApiKey: 'No API key configured for {provider}',
+    errNoApiKey: 'AI is not activated. Purchase a plan to use the AI assistant.',
     errNoModel: 'No model name configured',
     errGskCli: 'gsk not signed in: run gsk login to sign in to your UniWork account first',
     errNoDeckAppend:
@@ -2224,7 +2224,7 @@ export const tMain = createI18n({
     errNotImage: 'không phải loại ảnh được hỗ trợ',
     errGskNotLoggedIn:
       'Chưa đăng nhập UniWork: nhấp “Đăng nhập UniWork” bên dưới, đăng nhập, rồi thử lại',
-    errNoApiKey: 'Chưa cấu hình khóa API cho {provider}',
+    errNoApiKey: 'Chưa kích hoạt / mua gói AI. Hãy mua gói để dùng Trợ lý AI.',
     errNoModel: 'Chưa cấu hình tên mô hình',
     errGskCli: 'gsk chưa đăng nhập: chạy gsk login để đăng nhập tài khoản UniWork trước',
     errNoDeckAppend:

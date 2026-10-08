@@ -55,6 +55,12 @@ import {
   type OfficeApp,
 } from './my-ai-router'
 import { streamMyAiReply } from './my-ai-stream'
+import {
+  aiSettingsReady,
+  buyAiPlanLabel,
+  looksLikeMissingAiActivation,
+  softAiActivationMessage,
+} from './my-ai-activation'
 import type { RecentEntry } from '../../shared/home-api'
 import { FILE_EXCERPT_MAX_FILES, formatExcerptsForPrompt } from '../../shared/file-excerpt'
 
@@ -63,8 +69,8 @@ type ChatRole = 'user' | 'assistant' | 'system'
 interface ChatChoice {
   id: string
   label: string
-  /** Path to open, prompt text, consent, or soft-mutate undo */
-  kind: 'open_path' | 'prompt' | 'confirm' | 'cancel' | 'undo'
+  /** Path to open, prompt text, consent, soft-mutate undo, or Settings section */
+  kind: 'open_path' | 'prompt' | 'confirm' | 'cancel' | 'undo' | 'open_settings'
   value: string
 }
 
@@ -394,6 +400,37 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     setAttachments((prev) => prev.filter((a) => a.path !== path))
   }
 
+  const buyAiChoice = (): ChatChoice => ({
+    id: 'buy-ai-plan',
+    label: buyAiPlanLabel(vi),
+    kind: 'open_settings',
+    value: 'account',
+  })
+
+  const activationFailure = (
+    msgId: string | undefined,
+    showBubble: boolean,
+  ): { ok: false; error: string; messageId?: string } => {
+    const error = softAiActivationMessage(vi)
+    if (showBubble && msgId) {
+      patchMessage(msgId, {
+        text: error,
+        streaming: false,
+        role: 'system',
+        choices: [buyAiChoice()],
+        choicesResolved: false,
+      })
+    } else if (showBubble) {
+      const id = push({
+        role: 'system',
+        text: error,
+        choices: [buyAiChoice()],
+      })
+      return { ok: false, error, messageId: id }
+    }
+    return { ok: false, error, messageId: msgId }
+  }
+
   const runStreamedAi = async (opts: {
     system: string
     user: string
@@ -410,6 +447,10 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     const provider = settings.provider
     const model = settings.providers?.[provider]?.model
 
+    if (!aiSettingsReady(settings)) {
+      return activationFailure(opts.messageId, showBubble)
+    }
+
     if (!api.aiStream) {
       if (!api.aiChat) return { ok: false, error: 'AI unavailable' }
       const res = await api.aiChat({ settings, system: opts.system, user: opts.user })
@@ -423,6 +464,9 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
         model,
         ok: Boolean(res.ok),
       })
+      if (!res.ok && looksLikeMissingAiActivation(res.error || '')) {
+        return activationFailure(opts.messageId, showBubble)
+      }
       if (!showBubble) return res
       const msgId =
         opts.messageId ??
@@ -470,6 +514,9 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
         ok: Boolean(result.ok),
         cancelled: result.cancelled,
       })
+      if (!result.ok && looksLikeMissingAiActivation(result.error || '')) {
+        return activationFailure(msgId, showBubble)
+      }
       const text = result.content?.trim() || result.error || ''
       if (msgId) {
         patchMessage(msgId, {
@@ -491,6 +538,9 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
         model,
         ok: false,
       })
+      if (looksLikeMissingAiActivation(error)) {
+        return activationFailure(msgId, showBubble)
+      }
       if (msgId) patchMessage(msgId, { text: error, streaming: false, role: 'system' })
       return { ok: false, error, messageId: msgId }
     }
@@ -585,6 +635,14 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     )
     if (choice.kind === 'open_path') {
       void openPathChoice(choice.value, choice.label)
+      return
+    }
+    if (choice.kind === 'open_settings') {
+      window.dispatchEvent(
+        new CustomEvent('uniwork:open-settings', {
+          detail: { section: choice.value || 'account' },
+        }),
+      )
       return
     }
     if (choice.kind === 'cancel') {

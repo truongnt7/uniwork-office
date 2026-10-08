@@ -3070,6 +3070,408 @@ body.vib .home {
   color: var(--text);
 }
 
+/* ---- Workbench hybrid shell (Spaces sidebar + canvas) ---- */
+.wb-shell {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 0;
+  align-items: stretch;
+  min-height: min(70vh, 720px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.wb-spaces {
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-subtle, var(--bg-content)) 70%, var(--surface));
+  min-height: 0;
+  /* Above canvas so the Add-Space popover can paint into the canvas column */
+  position: relative;
+  z-index: 4;
+  overflow: visible;
+}
+
+.wb-spaces-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.wb-spaces-group-label {
+  margin: 0 8px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.wb-spaces-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wb-space-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 7px 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.wb-space-item:hover {
+  background: var(--bg-hover, color-mix(in srgb, var(--text) 6%, transparent));
+  color: var(--text);
+}
+
+.wb-space-item.active {
+  background: color-mix(in srgb, var(--accent) 14%, var(--surface));
+  color: var(--text);
+}
+
+.wb-space-item.is-dragging {
+  opacity: 0.45;
+}
+
+.wb-space-item.is-drag-over {
+  outline: 1px dashed color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+.wb-space-grip {
+  font-size: 10px;
+  letter-spacing: -1px;
+  color: var(--text-secondary);
+  opacity: 0;
+  cursor: grab;
+  flex-shrink: 0;
+}
+
+.wb-space-item:hover .wb-space-grip,
+.wb-space-item.is-dragging .wb-space-grip {
+  opacity: 0.7;
+}
+
+.wb-space-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.wb-space-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-space-unpin {
+  opacity: 0;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+
+.wb-space-item:hover .wb-space-unpin {
+  opacity: 1;
+}
+
+.wb-space-unpin:hover {
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  color: var(--text);
+}
+
+.wb-spaces-footer {
+  position: relative;
+  padding: 8px 10px 12px;
+  border-top: 1px solid var(--border);
+  overflow: visible;
+}
+
+.wb-space-add {
+  color: var(--text-secondary);
+}
+
+/* Must beat .teacher-tab-menu { top: 100% } which pushed the panel below the
+   shell (clipped by .wb-shell overflow). Open into the canvas column instead. */
+.wb-spaces-menu.teacher-tab-menu,
+.wb-spaces-menu {
+  position: absolute;
+  top: auto;
+  right: auto;
+  left: calc(100% + 8px);
+  bottom: 8px;
+  z-index: 60;
+  width: min(340px, 70vw);
+  min-width: 260px;
+  max-height: min(420px, 70vh);
+  overflow: auto;
+}
+
+.wb-canvas {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 20px 24px 28px;
+  background: var(--bg-content, var(--surface-subtle));
+}
+
+/* Flat, quiet buttons inside Workbench shell (scoped — Home chrome unchanged) */
+.wb-shell .btn {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  box-shadow: none;
+  transform: none;
+}
+
+.wb-shell .btn:hover:not(:disabled),
+.wb-shell .btn:active:not(:disabled) {
+  transform: none;
+  box-shadow: none;
+}
+
+.wb-shell .btn:focus-visible {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.wb-shell .btn-primary {
+  box-shadow: none;
+}
+
+.wb-shell .btn-primary:hover:not(:disabled) {
+  box-shadow: none;
+}
+
+.wb-shell .btn-secondary {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+
+.wb-shell .btn-secondary:hover:not(:disabled) {
+  background: var(--bg-hover, color-mix(in srgb, var(--text) 6%, transparent));
+  border-color: var(--border-hover, var(--border));
+  color: var(--text);
+}
+
+.wb-shell .btn-danger {
+  box-shadow: none;
+}
+
+.wb-space-icon .wb-app-icon.is-quiet,
+.wb-page-icon .wb-app-icon.is-quiet,
+.wb-cmdk-item-icon .wb-app-icon.is-quiet {
+  color: var(--text-secondary);
+  display: block;
+}
+
+.wb-space-item:hover .wb-space-icon .wb-app-icon.is-quiet,
+.wb-space-item.active .wb-space-icon .wb-app-icon.is-quiet {
+  color: var(--text);
+}
+
+.wb-space-item.active .wb-space-icon .wb-app-icon.is-quiet {
+  color: var(--accent);
+}
+
+.wb-page-icon .wb-app-icon.is-quiet {
+  color: var(--text);
+}
+
+.wb-page-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin: 0 0 20px;
+}
+
+.wb-page-icon {
+  display: inline-flex;
+  line-height: 0;
+  margin-top: 2px;
+}
+
+.wb-page-heading {
+  min-width: 0;
+}
+
+.wb-page-title {
+  margin: 0;
+  font-size: clamp(22px, 2.4vw, 28px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.wb-page-desc {
+  margin: 6px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  max-width: 62ch;
+}
+
+.wb-db-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.wb-composer-panel {
+  margin-bottom: 16px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.wb-cmdk-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: color-mix(in srgb, var(--text) 28%, transparent);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 12vh 16px 16px;
+}
+
+.wb-cmdk {
+  width: min(520px, 100%);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.wb-cmdk-input {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  padding: 14px 16px;
+  outline: none;
+}
+
+.wb-cmdk-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.wb-cmdk-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  padding: 8px 10px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.wb-cmdk-item:hover {
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+.wb-cmdk-item-icon {
+  display: inline-flex;
+  line-height: 0;
+}
+
+.wb-cmdk-item-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wb-cmdk-item-text strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wb-cmdk-item-text span {
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wb-cmdk-item-kind {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.wb-cmdk-empty {
+  padding: 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.wb-cmdk-foot {
+  margin: 0;
+  padding: 8px 14px 10px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 860px) {
+  .wb-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .wb-spaces {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    max-height: 220px;
+  }
+}
+
 .teacher-tabs {
   display: flex;
   flex-wrap: wrap;

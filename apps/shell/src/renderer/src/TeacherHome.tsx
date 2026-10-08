@@ -47,6 +47,10 @@ import { SkillDomainTabs } from './SkillDomainTabs'
 import { readActiveSkillDomain, readPinnedSkillDomains } from './skill-domain-pins'
 import { onAgentIntentNavigate } from './agent-intent-bus'
 import { WorkbenchModulePane } from './WorkbenchModulePanes'
+import {
+  WorkbenchCommandPalette,
+  useWorkbenchCommandPaletteHotkey,
+} from './WorkbenchCommandPalette'
 import { WorkbenchTabs } from './WorkbenchTabs'
 import { pinPillar } from './workbench-pins'
 import { WbDeleteBtn, WbOpenBtn, WbRowActions } from './WbRowActions'
@@ -138,6 +142,8 @@ export function TeacherHome({
   }
 
   const [tab, setTab] = useState<string>('desk')
+  const [cmdkOpen, setCmdkOpen] = useState(false)
+  useWorkbenchCommandPaletteHotkey(() => setCmdkOpen(true))
   const teacherPractice = getPractice('teacher')!
   const [qSubject, setQSubject] = useState('')
   const [qGrade, setQGrade] = useState('')
@@ -701,18 +707,20 @@ export function TeacherHome({
         </div>
       </section>
 
-      <WorkbenchTabs
-        practiceId="teacher"
-        pillars={teacherPractice.pillars}
-        active={tab}
-        onSelect={setTab}
-        vi={vi}
-        onPinsChange={(pins, pillarPins) => {
-          if (isWorkbenchModuleId(tab) && !pins.includes(tab)) setTab('desk')
-          if (isPracticePillarId(tab) && !pillarPins.includes(tab)) setTab('desk')
-        }}
-      />
+      <div className="wb-shell">
+        <WorkbenchTabs
+          practiceId="teacher"
+          pillars={teacherPractice.pillars}
+          active={tab}
+          onSelect={setTab}
+          vi={vi}
+          onPinsChange={(pins, pillarPins) => {
+            if (isWorkbenchModuleId(tab) && !pins.includes(tab)) setTab('desk')
+            if (isPracticePillarId(tab) && !pillarPins.includes(tab)) setTab('desk')
+          }}
+        />
 
+        <div className="wb-canvas">
       {error && <p className="teacher-error">{error}</p>}
       {notice && <p className="teacher-hint">{notice}</p>}
 
@@ -1232,6 +1240,16 @@ export function TeacherHome({
           </button>
         </section>
       )}
+        </div>
+      </div>
+
+      <WorkbenchCommandPalette
+        open={cmdkOpen}
+        onClose={() => setCmdkOpen(false)}
+        vi={vi}
+        practiceId="teacher"
+        onOpenModule={(id) => setTab(id)}
+      />
 
       {confirmAi && (
         <div className="modal-overlay" onClick={() => setConfirmAi(null)}>

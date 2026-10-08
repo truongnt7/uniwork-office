@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ReactElement } from 'react'
 import { getWorkbenchModule, type PracticeId, type WorkbenchModuleId } from '@uniwork/practice-core'
+import { WorkbenchIcon } from './WorkbenchIcons'
 import { CalendarPane } from './CalendarPane'
 import { DeskPane } from './DeskPane'
 import { FamilyPane } from './FamilyPane'
@@ -83,17 +84,22 @@ export function WorkbenchModulePane({
 
   return (
     <section
-      className={`teacher-panel teacher-detail${hideChrome ? ' is-immersive' : ''}`}
+      className={`teacher-panel teacher-detail wb-page${hideChrome ? ' is-immersive' : ''}`}
       aria-label={vi ? mod.labelVi : mod.labelEn}
     >
       {!hideChrome && (
-        <>
-          <h2>{vi ? mod.labelVi : mod.labelEn}</h2>
-          <p className="teacher-hint">
-            {vi ? mod.hintVi : mod.hintEn}
-            {contextTitle ? ` · ${contextTitle}` : ''}
-          </p>
-        </>
+        <header className="wb-page-header">
+          <span className="wb-page-icon" aria-hidden="true">
+            <WorkbenchIcon id={moduleId} size={24} tone="quiet" />
+          </span>
+          <div className="wb-page-heading">
+            <h1 className="wb-page-title">{vi ? mod.labelVi : mod.labelEn}</h1>
+            <p className="wb-page-desc">
+              {vi ? mod.hintVi : mod.hintEn}
+              {contextTitle ? ` · ${contextTitle}` : ''}
+            </p>
+          </div>
+        </header>
       )}
       {moduleId === 'desk' && <DeskPane practiceId={practiceId} vi={vi} />}
       {moduleId === 'calendar' && <CalendarPane practiceId={practiceId} vi={vi} />}
@@ -1044,6 +1050,7 @@ function ClientsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
   const label = (a: string, b: string) => (vi ? a : b)
   const [items, setItems] = useState<WbClientItem[]>(() => readClients(practiceId))
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [composing, setComposing] = useState(false)
   const [name, setName] = useState('')
   const [contact, setContact] = useState('')
   const [phone, setPhone] = useState('')
@@ -1053,6 +1060,7 @@ function ClientsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
   useEffect(() => {
     setItems(readClients(practiceId))
     setEditingId(null)
+    setComposing(false)
   }, [practiceId])
 
   const persist = (next: WbClientItem[]) => {
@@ -1062,6 +1070,7 @@ function ClientsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
 
   const clearForm = () => {
     setEditingId(null)
+    setComposing(false)
     setName('')
     setContact('')
     setPhone('')
@@ -1071,6 +1080,7 @@ function ClientsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
 
   const startEdit = (it: WbClientItem) => {
     setEditingId(it.id)
+    setComposing(true)
     setName(it.name)
     setContact(it.contact ?? '')
     setPhone(it.phone ?? '')
@@ -1113,15 +1123,24 @@ function ClientsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
     )
   }
 
+  const showForm = composing || Boolean(editingId)
+
   return (
     <>
-      <p className="teacher-hint">
-        {label(
-          'Danh bạ khách hàng / đối tác theo vai trò — lưu trên máy. “Soạn email” tạo nháp trong tab Email (chưa gửi SMTP).',
-          'Client / partner directory for this role — on device. “Draft email” creates a local Email-tab draft (no SMTP yet).',
-        )}
-      </p>
-      <div className="wb-module-form">
+      <div className="wb-db-toolbar">
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => {
+            clearForm()
+            setComposing(true)
+          }}
+        >
+          {label('Thêm khách hàng', 'New client')}
+        </button>
+      </div>
+      {showForm ? (
+      <div className="wb-module-form wb-composer-panel">
         <label>
           <span>{label('Tên KH / tổ chức', 'Client / org')}</span>
           <input
@@ -1131,6 +1150,7 @@ function ClientsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
             onKeyDown={(e) => {
               if (e.key === 'Enter') save()
             }}
+            autoFocus
           />
         </label>
         <label>
@@ -1155,13 +1175,12 @@ function ClientsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
               ? label('Lưu khách hàng', 'Save client')
               : label('Thêm khách hàng', 'Add client')}
           </button>
-          {editingId ? (
-            <button type="button" className="btn btn-secondary" onClick={clearForm}>
-              {label('Huỷ sửa', 'Cancel edit')}
-            </button>
-          ) : null}
+          <button type="button" className="btn btn-secondary" onClick={clearForm}>
+            {label('Huỷ', 'Cancel')}
+          </button>
         </div>
       </div>
+      ) : null}
       <ul className="wb-module-list">
         {items.length === 0 ? (
           <li className="teacher-empty">{label('Chưa có khách hàng.', 'No clients yet.')}</li>

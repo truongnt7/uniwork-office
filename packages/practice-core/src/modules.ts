@@ -238,3 +238,51 @@ export function getWorkbenchModule(id: WorkbenchModuleId): WorkbenchModuleDef | 
 export function isWorkbenchModuleId(value: unknown): value is WorkbenchModuleId {
   return typeof value === 'string' && WORKBENCH_MODULES.some((m) => m.id === value)
 }
+
+/** Sidebar Space groups for hybrid Workbench IA (Notion-like). */
+export type WorkbenchSpaceGroupId = 'core' | 'life' | 'work'
+
+export interface WorkbenchSpaceGroup {
+  id: WorkbenchSpaceGroupId
+  labelVi: string
+  labelEn: string
+  moduleIds: readonly WorkbenchModuleId[]
+}
+
+export const WORKBENCH_SPACE_GROUPS: readonly WorkbenchSpaceGroup[] = [
+  {
+    id: 'core',
+    labelVi: 'Chính',
+    labelEn: 'Core',
+    moduleIds: ['desk', 'tasks', 'calendar', 'forms', 'notes', 'email', 'assistant'],
+  },
+  {
+    id: 'life',
+    labelVi: 'Đời sống',
+    labelEn: 'Life',
+    moduleIds: [
+      'personal',
+      'personal-finance',
+      'events',
+      'health',
+      'self-growth',
+      'family',
+      'friends',
+      'pets',
+      'travel',
+    ],
+  },
+  {
+    id: 'work',
+    labelVi: 'Công việc',
+    labelEn: 'Work',
+    moduleIds: ['clients', 'contracts', 'matters'],
+  },
+] as const
+
+export function spaceGroupForModule(id: WorkbenchModuleId): WorkbenchSpaceGroupId {
+  for (const g of WORKBENCH_SPACE_GROUPS) {
+    if (g.moduleIds.includes(id)) return g.id
+  }
+  return 'core'
+}

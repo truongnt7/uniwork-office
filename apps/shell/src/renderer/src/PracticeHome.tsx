@@ -22,6 +22,10 @@ import { useI18n } from './locale'
 import { SkillDomainTabs } from './SkillDomainTabs'
 import { readActiveSkillDomain, readPinnedSkillDomains } from './skill-domain-pins'
 import { WorkbenchModulePane } from './WorkbenchModulePanes'
+import {
+  WorkbenchCommandPalette,
+  useWorkbenchCommandPaletteHotkey,
+} from './WorkbenchCommandPalette'
 import { WorkbenchTabs } from './WorkbenchTabs'
 import { pinPillar } from './workbench-pins'
 import { WbDeleteBtn, WbOpenBtn, WbRowActions } from './WbRowActions'
@@ -87,6 +91,8 @@ export function PracticeHome({
   }
 
   const [tab, setTab] = useState<string>('desk')
+  const [cmdkOpen, setCmdkOpen] = useState(false)
+  useWorkbenchCommandPaletteHotkey(() => setCmdkOpen(true))
   const [qQuery, setQQuery] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -581,18 +587,20 @@ export function PracticeHome({
         </div>
       </section>
 
-      <WorkbenchTabs
-        practiceId={practice.id}
-        pillars={practice.pillars}
-        active={tab}
-        onSelect={setTab}
-        vi={vi}
-        onPinsChange={(pins, pillarPins) => {
-          if (isWorkbenchModuleId(tab) && !pins.includes(tab)) setTab('desk')
-          if (isPracticePillarId(tab) && !pillarPins.includes(tab)) setTab('desk')
-        }}
-      />
+      <div className="wb-shell">
+        <WorkbenchTabs
+          practiceId={practice.id}
+          pillars={practice.pillars}
+          active={tab}
+          onSelect={setTab}
+          vi={vi}
+          onPinsChange={(pins, pillarPins) => {
+            if (isWorkbenchModuleId(tab) && !pins.includes(tab)) setTab('desk')
+            if (isPracticePillarId(tab) && !pillarPins.includes(tab)) setTab('desk')
+          }}
+        />
 
+        <div className="wb-canvas">
       {error && <p className="teacher-error">{error}</p>}
       {notice && <p className="teacher-hint">{notice}</p>}
 
@@ -980,6 +988,16 @@ export function PracticeHome({
           </button>
         </section>
       )}
+        </div>
+      </div>
+
+      <WorkbenchCommandPalette
+        open={cmdkOpen}
+        onClose={() => setCmdkOpen(false)}
+        vi={vi}
+        practiceId={practice.id}
+        onOpenModule={(id) => setTab(id)}
+      />
 
       {confirmSkill && (
         <div className="modal-overlay" onClick={() => setConfirmSkill(null)}>

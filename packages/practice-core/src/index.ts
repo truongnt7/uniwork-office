@@ -35,13 +35,17 @@ export {
 export {
   CORE_PINNED_MODULES,
   WORKBENCH_MODULES,
+  WORKBENCH_SPACE_GROUPS,
   defaultPinnedModules,
   ensureCorePinnedModules,
   getWorkbenchModule,
+  spaceGroupForModule,
   isCorePinnedModule,
   isWorkbenchModuleId,
   type WorkbenchModuleDef,
   type WorkbenchModuleId,
+  type WorkbenchSpaceGroup,
+  type WorkbenchSpaceGroupId,
 } from './modules.js'
 export {
   DOMAIN_SKILLS,

@@ -10,6 +10,7 @@ import type { AgentToolCall, AgentToolDef } from '../../shared/ipc'
 import { OP_GROUPS, opGuide, opGuideCatalog, opSignatureIndex } from '@genoffice/pptx-ops/op-docs'
 import { auditSlideLayout, formatAudit } from '@genoffice/pipelines/slides/layout-audit'
 import { runLayoutScript, type LayoutScriptElement } from './layout-script'
+import { fillBuiltinTemplate } from './deck-templates'
 import { t } from '../i18n/locale'
 import systemPrompt from './prompts/system.md?raw'
 
@@ -582,6 +583,11 @@ const TOOLS: AgentToolDef[] = [
           type: 'string',
           description:
             "Optional: name of a saved style template (from list_style_templates); when passed, Step 0 is skipped and the template's styleSkill is used directly, no style regeneration",
+        },
+        builtin_template: {
+          type: 'string',
+          description:
+            'Optional: built-in gallery template id (pitch-deck | quarterly-report | product-launch | training | meeting-brief | lesson). When set with topic, the system applies that template\'s style + fixed page structure (skips ask_clarification / free-form planning).',
         },
         dataSource: {
           type: 'string',
@@ -1755,17 +1761,35 @@ async function executeTool(
       const BACKOFF_MS = access.retryBackoffMs ?? 2000 // Retry backoff base (rate limits/overload are mostly transient; immediate retries would hit them again)
 
       let coreHook = String(call.input.core_hook ?? '').trim()
-      const style = String(call.input.style ?? '').trim()
-      const pages: Array<Record<string, unknown>> = Array.isArray(call.input.pages)
+      let style = String(call.input.style ?? '').trim()
+      let pages: Array<Record<string, unknown>> = Array.isArray(call.input.pages)
         ? (call.input.pages as Array<Record<string, unknown>>)
         : []
-      const topic = String(call.input.topic ?? '').trim()
+      let topic = String(call.input.topic ?? '').trim()
       const context = String(call.input.context ?? '').trim() || undefined
       // Every per-page request re-sends the context; cap it so N pages don't multiply a huge attachment
       const PAGE_CONTEXT_MAX = 8000
       const pageContext =
         context && context.length > PAGE_CONTEXT_MAX ? context.slice(0, PAGE_CONTEXT_MAX) : context
       const styleTemplateName = String(call.input.style_template ?? '').trim() || undefined
+      const builtinTemplateId = String(call.input.builtin_template ?? '').trim() || undefined
+
+      // Gallery template: lock style + page structure from the catalog (topic fills briefs).
+      if (builtinTemplateId) {
+        const filled = fillBuiltinTemplate(builtinTemplateId, topic || builtinTemplateId)
+        if (!filled) {
+          return fail(
+            t('aiFailGenDeck'),
+            `Unknown builtin_template "${builtinTemplateId}". Use one of: pitch-deck, quarterly-report, product-launch, training, meeting-brief, lesson.`,
+          )
+        }
+        topic = filled.topic
+        if (!style) style = filled.style
+        if (!coreHook) coreHook = filled.core_hook
+        if (pages.length === 0) {
+          pages = filled.pages.map((p) => ({ ...p }))
+        }
+      }
 
       // Figure-provenance gate: a data-dense request must say where its numbers came from
       {

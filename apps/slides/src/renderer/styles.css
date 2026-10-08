@@ -1678,6 +1678,112 @@ body.vib .slide-list {
 
 /* clickable starter prompts in the empty state — suggestion chips,
  * same spec as the docs AI panel: 30px-radius outline pills, 13px/400 */
+.ai-tpl-gallery {
+  margin-top: 18px;
+  text-align: left;
+}
+
+.ai-tpl-gallery-head {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  margin-bottom: 4px;
+}
+
+.ai-tpl-gallery-hint {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+  margin-bottom: 10px;
+}
+
+.ai-tpl-gallery-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.ai-tpl-card {
+  --ai-tpl-accent: var(--accent);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 10px 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-page);
+  cursor: pointer;
+  text-align: left;
+  position: relative;
+  overflow: hidden;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.ai-tpl-card[data-tpl='pitch-deck'] {
+  --ai-tpl-accent: #2563eb;
+}
+.ai-tpl-card[data-tpl='quarterly-report'] {
+  --ai-tpl-accent: #0d9488;
+}
+.ai-tpl-card[data-tpl='product-launch'] {
+  --ai-tpl-accent: #c026d3;
+}
+.ai-tpl-card[data-tpl='training'] {
+  --ai-tpl-accent: #ea580c;
+}
+.ai-tpl-card[data-tpl='meeting-brief'] {
+  --ai-tpl-accent: #475569;
+}
+.ai-tpl-card[data-tpl='lesson'] {
+  --ai-tpl-accent: #1d4ed8;
+}
+
+.ai-tpl-card-accent {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--ai-tpl-accent, var(--accent));
+}
+
+.ai-tpl-card:hover {
+  border-color: var(--color-border-strong);
+  background: var(--color-bg-subtle);
+}
+
+.ai-tpl-card.is-selected {
+  border-color: var(--ai-tpl-accent, var(--accent));
+  background: var(--color-bg-subtle);
+}
+
+.ai-tpl-card-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  line-height: 1.3;
+}
+
+.ai-tpl-card-desc {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  line-height: 1.35;
+}
+
+.ai-tpl-card-meta {
+  font-size: 10.5px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+.ai-tpl-gallery-cta {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  text-align: center;
+}
+
 .ai-starter-list {
   display: flex;
   flex-direction: column;

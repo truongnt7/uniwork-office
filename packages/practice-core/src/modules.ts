@@ -192,11 +192,42 @@ export const WORKBENCH_MODULES: readonly WorkbenchModuleDef[] = [
 ] as const
 
 /**
- * Suggested pins when a practice has never customized Tab +.
- * Only My Space is pinned by default; other modules are opt-in via +.
+ * Always-on Workbench tabs (cannot be removed via Tab ×).
+ * Order: My Space → Tasks → Calendar → Forms. Everything else is opt-in via +.
  */
+export const CORE_PINNED_MODULES: readonly WorkbenchModuleId[] = [
+  'desk',
+  'tasks',
+  'calendar',
+  'forms',
+]
+
+/** Suggested pins when a practice has never customized Tab +. */
 export function defaultPinnedModules(_practiceId: PracticeId): WorkbenchModuleId[] {
-  return ['desk']
+  return [...CORE_PINNED_MODULES]
+}
+
+export function isCorePinnedModule(id: WorkbenchModuleId): boolean {
+  return (CORE_PINNED_MODULES as readonly string[]).includes(id)
+}
+
+/**
+ * Ensure core tabs are present. Preserves existing pin order; inserts any
+ * missing cores after the last already-pinned core (or at the front).
+ */
+export function ensureCorePinnedModules(pins: readonly WorkbenchModuleId[]): WorkbenchModuleId[] {
+  const valid = pins.filter(isWorkbenchModuleId)
+  const have = new Set(valid)
+  const missing = CORE_PINNED_MODULES.filter((id) => !have.has(id))
+  if (missing.length === 0) return valid
+  if (valid.length === 0) return [...CORE_PINNED_MODULES]
+  let insertAt = 0
+  for (let i = 0; i < valid.length; i++) {
+    if (isCorePinnedModule(valid[i]!)) insertAt = i + 1
+  }
+  const out = [...valid]
+  out.splice(insertAt, 0, ...missing)
+  return out
 }
 
 export function getWorkbenchModule(id: WorkbenchModuleId): WorkbenchModuleDef | undefined {

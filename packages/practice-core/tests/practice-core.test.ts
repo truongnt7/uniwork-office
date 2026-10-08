@@ -4,6 +4,8 @@ import {
   WORKBENCH_MODULES,
   createPracticeMeta,
   defaultPinnedModules,
+  ensureCorePinnedModules,
+  isCorePinnedModule,
   defaultPinnedSkillDomains,
   getPractice,
   isPracticeMeta,
@@ -101,10 +103,20 @@ describe('practice-core', () => {
         'matters',
       ]),
     )
-    expect(defaultPinnedModules('principal')).toEqual(['desk'])
-    expect(defaultPinnedModules('legal')).toEqual(['desk'])
-    expect(defaultPinnedModules('teacher')).toEqual(['desk'])
-    expect(defaultPinnedModules('construction')).toEqual(['desk'])
+    const core = ['desk', 'tasks', 'calendar', 'forms']
+    expect(defaultPinnedModules('principal')).toEqual(core)
+    expect(defaultPinnedModules('legal')).toEqual(core)
+    expect(defaultPinnedModules('teacher')).toEqual(core)
+    expect(defaultPinnedModules('construction')).toEqual(core)
+    expect(isCorePinnedModule('desk')).toBe(true)
+    expect(isCorePinnedModule('clients')).toBe(false)
+    expect(ensureCorePinnedModules(['desk', 'clients'])).toEqual([
+      'desk',
+      'tasks',
+      'calendar',
+      'forms',
+      'clients',
+    ])
   })
 
   it('exposes skill domains with starter skills', () => {

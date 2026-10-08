@@ -1,5 +1,7 @@
 import {
   defaultPinnedModules,
+  ensureCorePinnedModules,
+  isCorePinnedModule,
   isWorkbenchModuleId,
   type PracticeId,
   type WorkbenchModuleId,
@@ -21,7 +23,7 @@ export function readPinnedModules(practiceId: PracticeId): WorkbenchModuleId[] {
     if (raw === null) return defaultPinnedModules(practiceId)
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return defaultPinnedModules(practiceId)
-    return parsed.filter(isWorkbenchModuleId)
+    return ensureCorePinnedModules(parsed.filter(isWorkbenchModuleId))
   } catch {
     return defaultPinnedModules(practiceId)
   }
@@ -29,7 +31,7 @@ export function readPinnedModules(practiceId: PracticeId): WorkbenchModuleId[] {
 
 export function writePinnedModules(practiceId: PracticeId, pins: WorkbenchModuleId[]): void {
   try {
-    wbStoreSetRaw(PINS_PREFIX + practiceId, JSON.stringify(pins))
+    wbStoreSetRaw(PINS_PREFIX + practiceId, JSON.stringify(ensureCorePinnedModules(pins)))
   } catch {
     /* ignore quota */
   }
@@ -38,13 +40,15 @@ export function writePinnedModules(practiceId: PracticeId, pins: WorkbenchModule
 export function pinModule(practiceId: PracticeId, id: WorkbenchModuleId): WorkbenchModuleId[] {
   const cur = readPinnedModules(practiceId)
   if (cur.includes(id)) return cur
-  const next = [...cur, id]
+  const next = ensureCorePinnedModules([...cur, id])
   writePinnedModules(practiceId, next)
   return next
 }
 
 export function unpinModule(practiceId: PracticeId, id: WorkbenchModuleId): WorkbenchModuleId[] {
-  const next = readPinnedModules(practiceId).filter((x) => x !== id)
+  // Core tabs (My Space / Tasks / Calendar / Forms) stay pinned
+  if (isCorePinnedModule(id)) return readPinnedModules(practiceId)
+  const next = ensureCorePinnedModules(readPinnedModules(practiceId).filter((x) => x !== id))
   writePinnedModules(practiceId, next)
   return next
 }

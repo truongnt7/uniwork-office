@@ -33,9 +33,12 @@ export {
   requirePractice,
 } from './registry.js'
 export {
+  CORE_PINNED_MODULES,
   WORKBENCH_MODULES,
   defaultPinnedModules,
+  ensureCorePinnedModules,
   getWorkbenchModule,
+  isCorePinnedModule,
   isWorkbenchModuleId,
   type WorkbenchModuleDef,
   type WorkbenchModuleId,

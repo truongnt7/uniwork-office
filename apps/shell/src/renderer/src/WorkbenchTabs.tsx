@@ -7,6 +7,7 @@ import type {
 import {
   WORKBENCH_MODULES,
   getWorkbenchModule,
+  isCorePinnedModule,
   type PracticeId,
   type PracticePillarId,
   type PracticePillarLabels,
@@ -82,6 +83,7 @@ export function WorkbenchTabs({
 
   const remove = (id: WorkbenchModuleId, e: ReactMouseEvent) => {
     e.stopPropagation()
+    if (isCorePinnedModule(id)) return
     const next = unpinModule(practiceId, id)
     setPins(next)
     onPinsChange?.(next)
@@ -179,28 +181,25 @@ export function WorkbenchTabs({
               <WorkbenchIcon id={id} size={18} />
             </span>
             <span>{vi ? mod.labelVi : mod.labelEn}</span>
-            <span
-              className="teacher-tab-unpin"
-              role="button"
-              tabIndex={0}
-              draggable={false}
-              aria-label={label('Bỏ tab', 'Unpin tab')}
-              onClick={(e) => remove(id, e)}
-              onMouseDown={(e) => e.stopPropagation()}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  const next = unpinModule(practiceId, id)
-                  setPins(next)
-                  onPinsChange?.(next)
-                  if (active === id) {
-                    onSelect(next.includes('desk') ? 'desk' : (pillars[0]?.id ?? 'knowledge'))
+            {isCorePinnedModule(id) ? null : (
+              <span
+                className="teacher-tab-unpin"
+                role="button"
+                tabIndex={0}
+                draggable={false}
+                aria-label={label('Bỏ tab', 'Unpin tab')}
+                onClick={(e) => remove(id, e)}
+                onMouseDown={(e) => e.stopPropagation()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    remove(id, e as unknown as ReactMouseEvent)
                   }
-                }
-              }}
-            >
-              ×
-            </span>
+                }}
+              >
+                ×
+              </span>
+            )}
           </button>
         )
       })}

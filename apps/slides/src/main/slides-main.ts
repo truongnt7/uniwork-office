@@ -44,6 +44,7 @@ import {
   installRendererProtocol,
   registerRendererScheme,
   rendererUrl,
+  writeTempPrintPdf,
 } from '@genoffice/electron-utils'
 import {
   resolveGroupChildId,
@@ -4151,7 +4152,9 @@ export function registerSlidesIpc(): void {
   ipcMain.handle(
     'slides:print',
     async (e, op: PrintSlidesOp): Promise<{ ok: boolean; error?: string }> => {
-      // Page assembly is shared with the renderer's print-preview pane (print-html.ts)
+      // Page assembly is shared with the renderer's print-preview pane (print-html.ts).
+      // Print via temp PDF → OS viewer so Windows 11's empty Electron preview pane is avoided.
+      if (isHeadlessMode()) return { ok: false, error: 'print unavailable in headless mode' }
       const html = buildPrintDocumentHtml({
         srcs: op.pngsBase64.map((b64) => `data:image/png;base64,${b64}`),
         ratio: op.widthPx / op.heightPx,
@@ -4164,15 +4167,6 @@ export function registerSlidesIpc(): void {
       const win = new BrowserWindow({
         show: false,
         ...(owner && !owner.isDestroyed() ? { parent: owner } : {}),
-        ...(process.platform === 'win32'
-          ? {
-              width: 900,
-              height: 700,
-              autoHideMenuBar: true,
-              closable: false,
-              skipTaskbar: true,
-            }
-          : {}),
         webPreferences: { sandbox: true },
       })
       try {
@@ -4181,24 +4175,13 @@ export function registerSlidesIpc(): void {
           'Promise.all([document.fonts.ready, ...Array.from(document.images).map((i) => i.decode().catch(() => {}))])',
           true,
         )
-        // Chromium attaches the native Windows print dialog to the window being printed.
-        // If that owner is hidden, the dialog is hidden too and the layout buttons appear inert.
-        if (process.platform === 'win32') {
-          win.show()
-          win.focus()
-        }
-        const result = await new Promise<{ success: boolean; failureReason: string }>((resolve) => {
-          win.webContents.print(
-            { silent: false, printBackground: true },
-            (success, failureReason) => resolve({ success, failureReason }),
-          )
+        const data = await win.webContents.printToPDF({
+          printBackground: true,
+          preferCSSPageSize: true,
         })
-        if (!result.success) {
-          // Canceling is a normal completion, not a print failure: ok=false without an
-          // error keeps the renderer's print dialog (and its chosen options) open.
-          if (result.failureReason === 'Print job canceled') return { ok: false }
-          return { ok: false, error: result.failureReason }
-        }
+        const filePath = await writeTempPrintPdf(data, 'uniwork-slides-print')
+        const openErr = await shell.openPath(filePath)
+        if (openErr) return { ok: false, error: openErr }
         return { ok: true }
       } catch (err) {
         return { ok: false, error: String(err) }

@@ -2379,7 +2379,7 @@ export const workbookExportPdfResultSchema = z.union([
 export type WorkbookExportPdfRequest = z.infer<typeof workbookExportPdfRequestSchema>
 export type WorkbookExportPdfResult = z.infer<typeof workbookExportPdfResultSchema>
 
-/// Print of the same laid-out HTML through the system print dialog. `ok: false`
+/// Print of the same laid-out HTML via temp PDF opened in the OS viewer. `ok: false`
 /// without an error is the user closing the dialog.
 export const workbookPrintResultSchema = z.union([
   z.object({ ok: z.literal(true) }).strict(),

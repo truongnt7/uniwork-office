@@ -49,6 +49,7 @@ export {
   buildPrintableHtml,
   printHtmlToPdf,
   sanitizePrintableBody,
+  writeTempPrintPdf,
   type PrintableHtml,
   type PrintWindow,
 } from './print-html-pdf'

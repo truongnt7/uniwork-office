@@ -48,6 +48,7 @@ import {
   saveAsSuggestion,
   showOpenDialogWithMemory,
   showSaveDialogWithMemory,
+  writeTempPrintPdf,
   toggleDevToolsItem,
   windowMenuTemplate,
   type HeadlessExportFormat,
@@ -3962,24 +3963,27 @@ export function registerDocsIpc(): void {
 
   // renderer print scale (inverse of the preview's print zoom, see print-zoom.ts)
   const pdfScale = (scale?: number) => (scale && scale > 0 && scale !== 1 ? { scale } : {})
-  const printScale = (scale?: number) =>
-    scale && scale > 0 && scale !== 1 ? { scaleFactor: Math.round(scale * 100) } : {}
 
   ipcMain.handle('docs:print', async (event, scale?: number) => {
-    // print the calling tab's own content; zero margins — the docx page padding provides them.
-    // Resolves when the system dialog is dismissed; the print dialog stays open on cancel
-    // (ok=false without error) and surfaces real failures.
-    return new Promise<{ ok: boolean; error?: string }>((resolve) => {
-      event.sender.print(
-        { margins: { marginType: 'none' }, ...printScale(scale) },
-        (success, failureReason) => {
-          resolve({
-            ok: success,
-            ...(failureReason && !/cancel/i.test(failureReason) ? { error: failureReason } : {}),
-          })
-        },
-      )
-    })
+    // Windows 11's system print dialog cannot preview Electron content ("This app
+    // doesn't support print preview"). Render to a temp PDF and open it in the
+    // default viewer (Edge/Preview/Adobe) so the user prints from a real preview.
+    // preferCSSPageSize keeps @page / docx sheet size; margins stay 0 (page padding).
+    if (isHeadlessMode()) return { ok: false, error: 'print unavailable in headless mode' }
+    try {
+      const data = await event.sender.printToPDF({
+        printBackground: true,
+        preferCSSPageSize: true,
+        margins: { top: 0, bottom: 0, left: 0, right: 0 },
+        ...pdfScale(scale),
+      })
+      const filePath = await writeTempPrintPdf(data, 'uniwork-docs-print')
+      const openErr = await shell.openPath(filePath)
+      if (openErr) return { ok: false, error: openErr }
+      return { ok: true, path: filePath }
+    } catch (err) {
+      return { ok: false, error: String(err) }
+    }
   })
 
   ipcMain.handle(

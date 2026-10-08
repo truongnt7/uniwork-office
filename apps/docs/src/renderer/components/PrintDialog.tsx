@@ -2,8 +2,9 @@
  * Print dialog modeled on Word's print sheet (same pattern as the slides app):
  * live page preview on the left (a scaled clone of the pagination-preview page
  * that will actually print), range options on the right. "Print" hides the
- * unselected .pv-page sheets via pv-print-skip and hands the preview pages to
- * the system print dialog.
+ * unselected .pv-page sheets via pv-print-skip, renders a temp PDF, and opens
+ * it in the OS viewer (Edge/Preview/Adobe) so Windows 11's empty Electron
+ * system-print preview pane is avoided.
  *
  * The pagination preview must be mounted (the App opens it, visually hidden,
  * when the dialog opens): its .pv-page boxes are both the print source and the

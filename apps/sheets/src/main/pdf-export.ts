@@ -6,12 +6,11 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { BrowserWindow, dialog } from 'electron'
+import { BrowserWindow, dialog, shell } from 'electron'
 
-import { isHeadlessMode, showSaveDialogWithMemory } from '@genoffice/electron-utils'
+import { isHeadlessMode, showSaveDialogWithMemory, writeTempPrintPdf } from '@genoffice/electron-utils'
 
 import { evenPageRanges, stitchPlan, type PageVariant } from './pdf-page-variants'
-import { printOptionsFor } from './print-options'
 
 import type { IpcMainInvokeEvent, WebContents } from 'electron'
 import type { PDFDocument } from 'pdf-lib'
@@ -55,43 +54,29 @@ export async function exportPdf(
   }
 }
 
-/// Print: the same laid-out HTML in a hidden window, handed to the system
-/// print dialog with the sheet's page setup preselected. Header / footer
-/// templates are a printToPDF feature; the dialog's own header option stands
-/// in for them.
+/// Print: same laid-out HTML as PDF export → temp PDF → open in the OS viewer
+/// (Edge/Preview/Adobe). Avoids Windows 11's empty Electron print-preview pane.
 export async function printWorkbook(
   event: IpcMainInvokeEvent,
   request: WorkbookExportPdfRequest,
 ): Promise<WorkbookPrintResult> {
+  if (isHeadlessMode()) return { ok: false, error: 'print unavailable in headless mode' }
   const owner = BrowserWindow.fromWebContents(event.sender)
   const workDir = await mkdtemp(join(tmpdir(), 'ai-excel-print-'))
   const htmlPath = join(workDir, 'print.html')
   const window = new BrowserWindow({
     show: false,
     ...(owner && !owner.isDestroyed() ? { parent: owner } : {}),
-    // Chromium attaches the native Windows print dialog to the printed window;
-    // a hidden owner hides the dialog too, so Windows gets a real one
-    ...(process.platform === 'win32'
-      ? { width: 900, height: 700, autoHideMenuBar: true, closable: false, skipTaskbar: true }
-      : {}),
     webPreferences: { sandbox: true, javascript: false },
   })
   try {
     await writeFile(htmlPath, request.html, 'utf8')
     await window.loadFile(htmlPath)
-    if (process.platform === 'win32') {
-      window.show()
-      window.focus()
-    }
-    const outcome = await new Promise<{ success: boolean; failureReason: string }>((resolve) => {
-      window.webContents.print(printOptionsFor(request), (success, failureReason) =>
-        resolve({ success, failureReason }),
-      )
-    })
-    if (outcome.success) return { ok: true }
-    return outcome.failureReason === 'Print job canceled'
-      ? { ok: false }
-      : { ok: false, error: outcome.failureReason }
+    const pdf = await renderPdf(window.webContents, request)
+    const filePath = await writeTempPrintPdf(pdf, 'uniwork-sheets-print')
+    const openErr = await shell.openPath(filePath)
+    if (openErr) return { ok: false, error: openErr }
+    return { ok: true }
   } catch (error: unknown) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) }
   } finally {

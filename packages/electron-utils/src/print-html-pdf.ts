@@ -195,3 +195,20 @@ export async function printHtmlToPdf(
     await rm(workDir, { recursive: true, force: true })
   }
 }
+
+/**
+ * Write PDF bytes to a temp file for the OS default viewer (Edge / Preview /
+ * Adobe). Used as the Print path so Windows 11's empty "app doesn't support
+ * print preview" system dialog is avoided — the viewer has a real preview.
+ * Caller opens the path with Electron `shell.openPath`.
+ */
+export async function writeTempPrintPdf(
+  pdf: Buffer | Uint8Array,
+  stem = 'print-preview',
+): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), 'uniwork-print-'))
+  const safe = stem.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 64) || 'print-preview'
+  const filePath = join(dir, `${safe}.pdf`)
+  await writeFile(filePath, pdf)
+  return filePath
+}

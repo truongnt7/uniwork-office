@@ -322,9 +322,9 @@ export interface DesktopApi {
   fontMetrics(family: string): Promise<FaceVerticalMetrics | null>
   getAiSettings(): Promise<AiSettings>
   setAiSettings(settings: AiSettings): Promise<void>
-  /** system print dialog for the current window; ok=false without error = canceled.
+  /** Render to a temp PDF and open the OS viewer (print from Edge/Preview/Adobe).
    *  scale: print scale inverting the preview's print zoom (print-zoom.ts) */
-  print(scale?: number): Promise<{ ok: boolean; error?: string }>
+  print(scale?: number): Promise<{ ok: boolean; error?: string; path?: string }>
   /** render the document to PDF and ask where to save; size in twips.
    *  outPath is only honored when a previous export dialog chose that exact path */
   exportPdf(

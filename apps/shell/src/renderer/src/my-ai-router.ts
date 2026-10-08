@@ -13,6 +13,7 @@ import {
 import type { RecentEntry } from '../../shared/home-api'
 import { getFormById, routeFormFill } from './my-ai-forms'
 import { matchPracticePlaybook } from './my-ai-playbooks'
+import { prefersCalendarRemind } from './my-ai-remind'
 import { getTemplateById } from './my-ai-templates'
 
 export type OfficeApp = 'docs' | 'sheets' | 'slides' | 'pdf'
@@ -762,7 +763,31 @@ export function routeMyAiTextSingle(text: string): MyAiStep | Extract<MyAiRoute,
     }
   }
 
-  // 5) Workbench — add/summarize/run_skill OK; open/navigate need an open verb
+  // 5) Remind / deadline → calendar or task (due date parsed at apply time)
+  if (
+    /(?:nhắc(?:\s+tôi)?|nhac(?:\s+toi)?|remind(?:\s+me)?|đặt nhắc|dat nhac)\b/i.test(lower) ||
+    /(?:deadline|hạn chót|han chot|hạn nộp|han nop)\b/i.test(lower)
+  ) {
+    // deadline-only → tasks; remind / meeting phrasing → calendar
+    const deadlineOnly =
+      /(?:deadline|hạn chót|han chot|hạn nộp|han nop)\b/i.test(lower) &&
+      !/(?:nhắc|nhac|remind|đặt nhắc|dat nhac)\b/i.test(lower)
+    const targetModule = deadlineOnly ? 'tasks' : prefersCalendarRemind(raw) ? 'calendar' : 'tasks'
+    return {
+      kind: 'workbench',
+      intent: createAgentIntent({
+        target: { kind: 'module', id: targetModule },
+        action: 'add_item',
+        scope: 'local',
+        source: 'desktop',
+        requireConsent: false,
+        summary: targetModule === 'calendar' ? 'Thêm lịch nhắc' : 'Thêm việc có hạn',
+        text: raw,
+      }),
+    }
+  }
+
+  // 6) Workbench — add/summarize/run_skill OK; open/navigate need an open verb
   // (bare keywords like “bạn”/“note” must not yank the user out of My AI)
   const resolved = resolveAgentIntentFromText(raw, 'desktop')
   if (resolved) {

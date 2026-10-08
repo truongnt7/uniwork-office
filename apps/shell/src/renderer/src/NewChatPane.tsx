@@ -7,7 +7,7 @@ import { emitAgentIntentNavigate } from './agent-intent-bus'
 import { buildMyAiContextPack, type MyAiContextPack } from './context-manager'
 import { useI18n } from './locale'
 import { recordAiTurnUsage } from './ai-usage-ledger'
-import { appendMyAiAudit } from './my-ai-audit'
+import { appendMyAiAudit, listMyAiAudit, type MyAiAuditEntry } from './my-ai-audit'
 import {
   collectAttachmentTextBlock,
   collectImageAttachments,
@@ -61,7 +61,7 @@ import {
   looksLikeMissingAiActivation,
   softAiActivationMessage,
 } from './my-ai-activation'
-import type { RecentEntry } from '../../shared/home-api'
+import type { ActiveOfficeTab, RecentEntry } from '../../shared/home-api'
 import { FILE_EXCERPT_MAX_FILES, formatExcerptsForPrompt } from '../../shared/file-excerpt'
 
 type ChatRole = 'user' | 'assistant' | 'system'
@@ -103,6 +103,27 @@ interface Suggestion {
 
 const SUGGESTIONS: readonly Suggestion[] = [
   {
+    id: 'morning-brief',
+    labelVi: 'Hôm nay của tôi',
+    labelEn: 'My day brief',
+    promptVi: 'Hôm nay của tôi',
+    promptEn: 'Morning brief for my day',
+  },
+  {
+    id: 'prioritize-week',
+    labelVi: 'Ưu tiên việc tuần này',
+    labelEn: 'Prioritize this week',
+    promptVi: 'Sắp xếp ưu tiên việc tuần này',
+    promptEn: 'Help me prioritize tasks for this week',
+  },
+  {
+    id: 'email-triage',
+    labelVi: 'Triage email',
+    labelEn: 'Triage email',
+    promptVi: 'Triage email — đọc gì trước?',
+    promptEn: 'Triage email — what should I read first?',
+  },
+  {
     id: 'draft-doc',
     labelVi: 'Soạn Word theo yêu cầu',
     labelEn: 'Draft Word from brief',
@@ -138,6 +159,13 @@ const SUGGESTIONS: readonly Suggestion[] = [
     promptEn: 'Add a task to call the client at 3pm',
   },
   {
+    id: 'remind',
+    labelVi: 'Nhắc việc / hạn',
+    labelEn: 'Remind / deadline',
+    promptVi: 'Nhắc tôi thứ sáu gửi báo cáo tuần',
+    promptEn: 'Remind me Friday to send the weekly report',
+  },
+  {
     id: 'slide',
     labelVi: 'Tạo Slide AI',
     labelEn: 'AI Slides',
@@ -166,20 +194,6 @@ const SUGGESTIONS: readonly Suggestion[] = [
     promptEn: 'Draft a Word quote and add a follow-up task, open Clients tab',
   },
   {
-    id: 'continue',
-    labelVi: 'Tiếp tục tab đang mở',
-    labelEn: 'Continue open tab',
-    promptVi: 'Tiếp tục trên file đang mở: làm rõ phần kết luận',
-    promptEn: 'Continue on the open file: clarify the conclusion section',
-  },
-  {
-    id: 'sum-active',
-    labelVi: 'Tóm tắt tab đang mở',
-    labelEn: 'Summarize open tab',
-    promptVi: 'Tóm tắt file đang mở',
-    promptEn: 'Summarize the open file',
-  },
-  {
     id: 'sheet-ai',
     labelVi: 'Tạo Excel AI',
     labelEn: 'AI Excel',
@@ -188,6 +202,33 @@ const SUGGESTIONS: readonly Suggestion[] = [
   },
 ]
 
+function shortTabTitle(title: string, max = 28): string {
+  const t = title.trim()
+  if (t.length <= max) return t
+  return `${t.slice(0, max - 1)}…`
+}
+
+function activeTabChips(
+  tab: ActiveOfficeTab,
+  vi: boolean,
+): { id: string; label: string; prompt: string }[] {
+  const name = shortTabTitle(tab.title)
+  return [
+    {
+      id: 'continue-active',
+      label: vi ? `Tiếp “${name}”` : `Continue “${name}”`,
+      prompt: vi
+        ? `Tiếp tục trên file đang mở “${tab.title}”: làm rõ phần còn dang dở`
+        : `Continue on the open file “${tab.title}”: clarify what’s unfinished`,
+    },
+    {
+      id: 'sum-active',
+      label: vi ? `Tóm tắt “${name}”` : `Summarize “${name}”`,
+      prompt: vi ? `Tóm tắt file đang mở “${tab.title}”` : `Summarize the open file “${tab.title}”`,
+    },
+  ]
+}
+
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
 }
@@ -195,6 +236,23 @@ function newId(): string {
 async function loadRecents(limit = 80) {
   const page = await window.aiOffice.recents({ offset: 0, limit })
   return page.entries.filter((e) => !e.missing)
+}
+
+/** Recents + default-save-dir walk, scored together. */
+async function rankFilesWithLocalSearch(
+  entries: RecentEntry[],
+  query: string,
+  limit: number,
+) {
+  const disk = (await window.aiOffice.searchLocalFiles?.(query, limit)) ?? []
+  const byPath = new Map<string, RecentEntry>()
+  for (const e of entries) {
+    if (!e.missing) byPath.set(e.path, e)
+  }
+  for (const e of disk) {
+    if (!e.missing && !byPath.has(e.path)) byPath.set(e.path, e)
+  }
+  return rankRecentsScored([...byPath.values()], query, limit)
 }
 
 async function createOfficeFile(app: OfficeApp, brief?: string): Promise<string> {
@@ -223,9 +281,17 @@ async function createOfficeFile(app: OfficeApp, brief?: string): Promise<string>
 }
 
 function enrichBrief(brief: string, pack: MyAiContextPack, userText: string): string {
-  if (!wantsLocalContext(userText) && !wantsLocalContext(brief)) return brief
-  const ctx = pack.plainText.slice(0, 1_800)
-  return `${brief}\n\n---\nLocal context (on-device):\n${ctx}`
+  const personal = pack.chunks.find((c) => c.id === 'personal')?.text
+  const wantCtx = wantsLocalContext(userText) || wantsLocalContext(brief)
+  const parts: string[] = [brief]
+  if (personal) {
+    parts.push(`\n---\n${personal}`)
+  }
+  if (wantCtx) {
+    const ctx = pack.plainText.slice(0, 1_800)
+    parts.push(`\n---\nLocal context (on-device):\n${ctx}`)
+  }
+  return parts.join('\n')
 }
 
 function contextFootnote(vi: boolean, excerpts = false): string {
@@ -275,6 +341,18 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
   const streamCancelRef = useRef<(() => void) | null>(null)
   const skipPersistRef = useRef(false)
   const practiceChips = useMemo(() => practiceMyAiChips(practiceId), [practiceId])
+  const [activeTab, setActiveTab] = useState<ActiveOfficeTab | null>(null)
+  const [auditOpen, setAuditOpen] = useState(false)
+  const [auditRows, setAuditRows] = useState<MyAiAuditEntry[]>([])
+  const [aiReady, setAiReady] = useState<boolean | null>(null)
+
+  const refreshActiveTab = () => {
+    void window.aiOffice.activeOfficeTab?.().then((tab) => setActiveTab(tab))
+  }
+
+  const refreshAudit = () => {
+    setAuditRows(listMyAiAudit(12).filter((e) => e.practiceId === practiceId))
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' })
@@ -283,6 +361,29 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
   useEffect(() => {
     inputRef.current?.focus()
   }, [])
+
+  useEffect(() => {
+    refreshActiveTab()
+    void window.aiOffice.getAiSettings?.().then((s) => {
+      if (s) setAiReady(aiSettingsReady(s))
+    })
+    const onFocus = () => refreshActiveTab()
+    const onVis = () => {
+      if (document.visibilityState === 'visible') refreshActiveTab()
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVis)
+    const tick = window.setInterval(refreshActiveTab, 4000)
+    return () => {
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVis)
+      window.clearInterval(tick)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (auditOpen) refreshAudit()
+  }, [auditOpen, practiceId, messages.length])
 
   useEffect(() => {
     skipPersistRef.current = true
@@ -807,7 +908,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
           pausePlan: true,
         }
       }
-      let brief = buildTemplateBrief(resolved, vi)
+      let brief = enrichBrief(buildTemplateBrief(resolved, vi), pack, userText)
       const libForm = findFormForTemplate(practiceId, resolved.template)
       if (libForm?.filePath) {
         const excerpt = await readFormFileExcerpt(libForm.filePath)
@@ -906,12 +1007,12 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     }
 
     if (step.kind === 'open_file') {
-      const scored = rankRecentsScored(entries, step.query, 5)
+      const scored = await rankFilesWithLocalSearch(entries, step.query, 5)
       if (scored.length === 0) {
         return {
           text: label(
-            `Chưa thấy “${step.query}” trong file gần đây. Thử tên ngắn hơn?`,
-            `No recent file like “${step.query}”. Try a shorter name?`,
+            `Chưa thấy “${step.query}” trong file gần đây hay thư mục lưu. Thử tên ngắn hơn?`,
+            `No file like “${step.query}” in recents or your save folder. Try a shorter name?`,
           ),
           choices: [
             {
@@ -962,12 +1063,12 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     }
 
     if (step.kind === 'search_files') {
-      const scored = rankRecentsScored(entries, step.query, 8)
+      const scored = await rankFilesWithLocalSearch(entries, step.query, 8)
       if (scored.length === 0) {
         return {
           text: label(
-            `Chưa thấy “${step.query}” trong file gần đây.`,
-            `No recent files matched “${step.query}”.`,
+            `Chưa thấy “${step.query}” trong file gần đây hay thư mục lưu.`,
+            `No files matched “${step.query}” in recents or your save folder.`,
           ),
           pausePlan: true,
         }
@@ -1684,11 +1785,71 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
               'Saved per role · on-device adds support Undo · AI/Tokens ask first.',
             )}
           </span>
+          {aiReady !== null && (
+            <span
+              className={`new-chat-mode-badge${aiReady ? ' is-ai' : ' is-local'}`}
+              title={
+                aiReady
+                  ? label('Đã sẵn sàng gọi AI (Token).', 'AI cloud ready (Token).')
+                  : label(
+                      'Chế độ trên máy — lịch/việc/file không cần Token.',
+                      'On-device mode — calendar/tasks/files need no Token.',
+                    )
+              }
+            >
+              {aiReady
+                ? label('AI sẵn sàng', 'AI ready')
+                : label('Trên máy', 'On device')}
+            </span>
+          )}
         </div>
-        <button type="button" className="btn" onClick={resetChat} disabled={busy && empty}>
-          {label('Chat mới', 'New chat')}
-        </button>
+        <div className="new-chat-bar-actions">
+          <button
+            type="button"
+            className={`btn${auditOpen ? ' primary' : ''}`}
+            aria-expanded={auditOpen}
+            onClick={() => setAuditOpen((v) => !v)}
+          >
+            {label('Nhật ký', 'Activity')}
+          </button>
+          <button type="button" className="btn" onClick={resetChat} disabled={busy && empty}>
+            {label('Chat mới', 'New chat')}
+          </button>
+        </div>
       </header>
+
+      {auditOpen && (
+        <div className="new-chat-audit" aria-label={label('Nhật ký My AI', 'My AI activity')}>
+          {auditRows.length === 0 ? (
+            <p className="new-chat-audit-empty">
+              {label('Chưa có hành động nào trong nhật ký.', 'No activity logged yet.')}
+            </p>
+          ) : (
+            <ul className="new-chat-audit-list">
+              {auditRows.map((row) => (
+                <li key={row.id} data-ok={row.ok ? '1' : '0'}>
+                  <span className="new-chat-audit-time">
+                    {new Date(row.at).toLocaleString(vi ? 'vi-VN' : undefined, {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                  <span className="new-chat-audit-sum">{row.summary}</span>
+                  <span className="new-chat-audit-kind">{row.stepKind || row.routeKind}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="new-chat-audit-hint">
+            {label(
+              'Hoàn tác thêm mục Workbench: nút “Hoàn tác” ngay dưới câu trả lời vừa rồi.',
+              'To undo a Workbench add: use “Undo” under the last reply.',
+            )}
+          </p>
+        </div>
+      )}
 
       <div className="new-chat-body">
         {empty ? (
@@ -1702,6 +1863,20 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
               )}
             </p>
             <div className="new-chat-suggestions" role="list">
+              {activeTab
+                ? activeTabChips(activeTab, vi).map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      className="new-chat-chip is-active-tab"
+                      role="listitem"
+                      disabled={busy}
+                      onClick={() => submit(s.prompt)}
+                    >
+                      {s.label}
+                    </button>
+                  ))
+                : null}
               {practiceChips.map((s) => (
                 <button
                   key={`p-${s.id}`}

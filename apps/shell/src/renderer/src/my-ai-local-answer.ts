@@ -13,6 +13,8 @@ export type LocalAnswerTopic =
   | 'notes'
   | 'email'
   | 'pulse'
+  | 'brief'
+  | 'plan'
   | 'off_topic'
   | 'fallback'
 
@@ -24,11 +26,27 @@ export interface LocalAnswer {
   contextUsed: boolean
 }
 
+export type LocalTaskHint = {
+  title: string
+  done: boolean
+  priority?: 'low' | 'medium' | 'high' | 'urgent'
+  dueDate?: string
+}
+
+export type LocalEmailHint = {
+  subject: string
+  folder: string
+  to?: string
+  from?: string
+  unread?: boolean
+  starred?: boolean
+}
+
 export interface LocalAnswerSnapshot {
-  tasks: { title: string; done: boolean }[]
+  tasks: LocalTaskHint[]
   calendar: { date: string; title: string }[]
   notes: string
-  emails: { subject: string; folder: string; to?: string; from?: string }[]
+  emails: LocalEmailHint[]
   recents: { name: string; ext: string }[]
 }
 
@@ -43,6 +61,13 @@ function tomorrowIsoLocal(now = new Date()): string {
   const t = new Date(now)
   t.setDate(t.getDate() + 1)
   return todayIsoLocal(t)
+}
+
+function addDaysIso(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(y!, m! - 1, d!)
+  dt.setDate(dt.getDate() + days)
+  return todayIsoLocal(dt)
 }
 
 function bullets(items: string[], emptyVi: string, emptyEn: string, vi: boolean): string {
@@ -62,11 +87,14 @@ function wantsCalendar(lower: string): boolean {
   )
 }
 
+function wantsPrioritize(lower: string): boolean {
+  return /(?:sắp xếp|sap xep|ưu tiên|uu tien|priorit|kế hoạch tuần|ke hoach tuan|plan (?:my |the )?week|week plan|việc quan trọng|viec quan trong)/i.test(
+    lower,
+  )
+}
+
 function wantsTasks(lower: string): boolean {
-  // Listing open work — not “help me prioritize / plan my week” (that stays fallback + AI offer)
-  if (/(?:sắp xếp|sap xep|ưu tiên|uu tien|priorit|kế hoạch tuần|ke hoach tuan)/i.test(lower)) {
-    return false
-  }
+  if (wantsPrioritize(lower)) return false
   return /(?:việc đang|viec dang|việc mở|viec mo|việc chưa|open tasks?|todo list|danh sách việc|danh sach viec|có việc gì|co viec gi)/i.test(
     lower,
   ) ||
@@ -84,8 +112,20 @@ function wantsNotes(lower: string): boolean {
   return /(?:ghi chú|ghi chu|\bnotes?\b|sticky)/i.test(lower)
 }
 
+function wantsEmailTriage(lower: string): boolean {
+  return /(?:triage|ưu tiên email|uu tien email|email quan trọng|email quan trong|đọc gì trước|doc gi truoc|unread|chưa đọc|chua doc|hộp thư ưu tiên|hop thu uu tien)/i.test(
+    lower,
+  )
+}
+
 function wantsEmail(lower: string): boolean {
   return /(?:\bemail\b|hộp thư|hop thu|thư đến|thu den|mailbox)/i.test(lower)
+}
+
+function wantsMorningBrief(lower: string): boolean {
+  return /(?:morning brief|brief buổi sáng|brief buoi sang|hôm nay của tôi|hom nay cua toi|tổng quan hôm nay|tong quan hom nay|buổi sáng của tôi|buoi sang cua toi|start (?:my )?day|bắt đầu ngày|bat dau ngay)/i.test(
+    lower,
+  )
 }
 
 function wantsPulse(lower: string): boolean {
@@ -101,6 +141,64 @@ function isQuestiony(lower: string): boolean {
       lower,
     )
   )
+}
+
+const PRIORITY_RANK: Record<string, number> = {
+  urgent: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+}
+
+function priorityLabel(p: string | undefined, vi: boolean): string {
+  if (p === 'urgent') return vi ? 'Khẩn' : 'Urgent'
+  if (p === 'high') return vi ? 'Cao' : 'High'
+  if (p === 'low') return vi ? 'Thấp' : 'Low'
+  return vi ? 'TB' : 'Med'
+}
+
+function sortOpenTasks(tasks: LocalTaskHint[]): LocalTaskHint[] {
+  return tasks
+    .filter((t) => !t.done)
+    .slice()
+    .sort((a, b) => {
+      const pa = PRIORITY_RANK[a.priority ?? 'medium'] ?? 2
+      const pb = PRIORITY_RANK[b.priority ?? 'medium'] ?? 2
+      if (pa !== pb) return pa - pb
+      const da = a.dueDate || '9999'
+      const db = b.dueDate || '9999'
+      if (da !== db) return da.localeCompare(db)
+      return a.title.localeCompare(b.title)
+    })
+}
+
+function formatTaskLine(t: LocalTaskHint, vi: boolean): string {
+  const bits = [`[${priorityLabel(t.priority, vi)}] ${t.title}`]
+  if (t.dueDate) bits.push(vi ? `hạn ${t.dueDate}` : `due ${t.dueDate}`)
+  return bits.join(' — ')
+}
+
+function triageEmails(emails: LocalEmailHint[], vi: boolean): string[] {
+  const inboxish = emails.filter((m) => m.folder === 'inbox' || m.folder === 'Inbox')
+  const pool = inboxish.length > 0 ? inboxish : emails.filter((m) => m.folder !== 'drafts')
+  const ranked = pool
+    .slice()
+    .sort((a, b) => {
+      const sa = (a.starred ? 0 : 2) + (a.unread ? 0 : 1)
+      const sb = (b.starred ? 0 : 2) + (b.unread ? 0 : 1)
+      if (sa !== sb) return sa - sb
+      return (a.subject || '').localeCompare(b.subject || '')
+    })
+    .slice(0, 6)
+  return ranked.map((m) => {
+    const flags: string[] = []
+    if (m.unread) flags.push(vi ? 'chưa đọc' : 'unread')
+    if (m.starred) flags.push(vi ? 'sao' : 'star')
+    const flag = flags.length ? ` (${flags.join(', ')})` : ''
+    const who = m.from?.trim() ? ` — ${m.from.trim()}` : ''
+    const sub = m.subject?.trim() || (vi ? '(không tiêu đề)' : '(no subject)')
+    return `${sub}${who}${flag}`
+  })
 }
 
 /**
@@ -137,22 +235,117 @@ export function answerMyAiLocally(
     }
   }
 
-  const openTasks = snap.tasks.filter((t) => !t.done).map((t) => t.title)
+  const openSorted = sortOpenTasks(snap.tasks)
+  const openTasks = openSorted.map((t) => t.title)
   const today = todayIsoLocal(now)
   const tomorrow = tomorrowIsoLocal(now)
+  const weekEnd = addDaysIso(today, 6)
   const calToday = snap.calendar.filter((c) => c.date === today).map((c) => c.title)
   const calTomorrow = snap.calendar.filter((c) => c.date === tomorrow).map((c) => c.title)
+  const calWeek = snap.calendar
+    .filter((c) => c.date >= today && c.date <= weekEnd)
+    .slice(0, 10)
+    .map((c) => `${c.date} — ${c.title}`)
   const calAll = snap.calendar.slice(0, 8).map((c) => `${c.date} — ${c.title}`)
   const recentLines = snap.recents.slice(0, 6).map((e) => `${e.name} (.${e.ext})`)
   const notePreview = snap.notes.trim()
+  const unread = snap.emails.filter((m) => m.unread && m.folder !== 'drafts')
   const mailLines = snap.emails.slice(0, 5).map((m) => {
     const sub = m.subject?.trim() || (vi ? '(không tiêu đề)' : '(no subject)')
     return `[${m.folder}] ${sub}`
   })
+  const triageLines = triageEmails(snap.emails, vi)
 
   const calendarFocused = /(?:calendar|lịch|lich|cuộc họp|cuoc hop|meeting|sự kiện|su kien)/i.test(
     lower,
   )
+
+  if (wantsMorningBrief(lower) || (wantsPulse(lower) && /(?:brief|buổi sáng|buoi sang|start)/i.test(lower))) {
+    const parts: string[] = []
+    parts.push(
+      vi ? `Hôm nay của bạn (${today}):` : `Your day (${today}):`,
+      bullets(calToday, '• Chưa có sự kiện trên lịch.', '• No calendar events.', vi),
+    )
+    parts.push(
+      '',
+      vi ? 'Ưu tiên việc:' : 'Top tasks:',
+      bullets(
+        openSorted.slice(0, 5).map((t) => formatTaskLine(t, vi)),
+        '• Không có việc đang mở.',
+        '• No open tasks.',
+        vi,
+      ),
+    )
+    parts.push(
+      '',
+      vi
+        ? `Email: ${unread.length} chưa đọc` +
+          (triageLines.length
+            ? `\n${triageLines
+                .slice(0, 3)
+                .map((l) => `• ${l}`)
+                .join('\n')}`
+            : '')
+        : `Email: ${unread.length} unread` +
+          (triageLines.length
+            ? `\n${triageLines
+                .slice(0, 3)
+                .map((l) => `• ${l}`)
+                .join('\n')}`
+            : ''),
+    )
+    if (recentLines.length > 0) {
+      parts.push(
+        '',
+        vi ? 'File gần đây:' : 'Recent files:',
+        ...recentLines.slice(0, 3).map((l) => `• ${l}`),
+      )
+    }
+    parts.push(
+      '',
+      vi
+        ? 'Gợi ý: nói “ưu tiên việc tuần này” hoặc “triage email” để đi sâu hơn.'
+        : 'Tip: say “prioritize this week” or “triage email” to go deeper.',
+    )
+    return {
+      text: parts.join('\n'),
+      topic: 'brief',
+      offerAi: false,
+      contextUsed: true,
+    }
+  }
+
+  if (wantsPrioritize(lower)) {
+    const parts: string[] = []
+    parts.push(
+      vi ? 'Ưu tiên việc (trên máy):' : 'Task priorities (on device):',
+      bullets(
+        openSorted.slice(0, 8).map((t) => formatTaskLine(t, vi)),
+        '• Không có việc đang mở.',
+        '• No open tasks.',
+        vi,
+      ),
+    )
+    parts.push(
+      '',
+      vi ? `Lịch 7 ngày (${today} → ${weekEnd}):` : `Next 7 days (${today} → ${weekEnd}):`,
+      bullets(calWeek, '• Lịch trống tuần này.', '• No events this week.', vi),
+    )
+    if (openSorted.length >= 2) {
+      parts.push(
+        '',
+        vi
+          ? `Gợi ý: làm trước “${openSorted[0]!.title}”, rồi “${openSorted[1]!.title}”.`
+          : `Suggestion: start with “${openSorted[0]!.title}”, then “${openSorted[1]!.title}”.`,
+      )
+    }
+    return {
+      text: parts.join('\n'),
+      topic: 'plan',
+      offerAi: openSorted.length > 6,
+      contextUsed: true,
+    }
+  }
 
   // Calendar-only questions before broad pulse (“what's on today?”)
   if (
@@ -260,6 +453,24 @@ export function answerMyAiLocally(
     }
   }
 
+  if (wantsEmailTriage(lower) || (wantsEmail(lower) && /(?:ưu tiên|uu tien|quan trọng|quan trong|unread|chưa đọc)/i.test(lower))) {
+    return {
+      text: [
+        vi
+          ? `Triage email (${unread.length} chưa đọc):`
+          : `Email triage (${unread.length} unread):`,
+        bullets(triageLines, '• Hộp thư trống.', '• Mailbox empty.', vi),
+        '',
+        vi
+          ? 'Muốn nháp trả lời: “Nháp email cho … về …”.'
+          : 'To draft a reply: “Draft email to … about …”.',
+      ].join('\n'),
+      topic: 'email',
+      offerAi: triageLines.length > 0,
+      contextUsed: true,
+    }
+  }
+
   if (wantsEmail(lower)) {
     return {
       text: [
@@ -310,7 +521,12 @@ export function buildLocalAnswerSnapshot(
   recents?: readonly MyAiRecentHint[],
 ): LocalAnswerSnapshot {
   return {
-    tasks: readTasks(practiceId).map((t) => ({ title: t.title, done: t.done })),
+    tasks: readTasks(practiceId).map((t) => ({
+      title: t.title,
+      done: t.done,
+      priority: t.priority,
+      ...(t.dueDate ? { dueDate: t.dueDate } : {}),
+    })),
     calendar: readCalendar(practiceId).map((c) => ({ date: c.date, title: c.title })),
     notes: readNotes(practiceId) || '',
     emails: readEmails(practiceId).map((m) => ({
@@ -318,6 +534,8 @@ export function buildLocalAnswerSnapshot(
       folder: m.folder,
       to: m.to,
       from: m.from,
+      ...(m.unread ? { unread: true } : {}),
+      ...(m.starred ? { starred: true } : {}),
     })),
     recents: (recents ?? []).map((e) => ({ name: e.name, ext: e.ext })),
   }

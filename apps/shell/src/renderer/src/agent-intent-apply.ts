@@ -30,6 +30,8 @@ import {
   writeTasks,
 } from './workbench-pins'
 import { pinSkillDomain, writeActiveSkillDomain } from './skill-domain-pins'
+import { parseEmailDraftText } from './my-ai-email-draft'
+import { parseScheduleFromText } from './my-ai-remind'
 import { workbenchModuleLabel } from './my-ai-consent'
 
 export interface AgentAddUndo {
@@ -72,21 +74,27 @@ function addItem(
   if (moduleId === 'tasks') {
     const id = newId()
     const now = new Date().toISOString()
+    const sched = parseScheduleFromText(text)
+    const taskTitle = sched.title || title
     writeTasks(practiceId, [
       {
         id,
-        title,
+        title: taskTitle,
         done: false,
         status: 'todo',
         priority: 'medium',
+        ...(sched.usedDateToken ? { dueDate: sched.date } : {}),
         createdAt: now,
         updatedAt: now,
       },
       ...readTasks(practiceId),
     ])
+    const dueNote = sched.usedDateToken
+      ? { vi: ` (hạn ${sched.date})`, en: ` (due ${sched.date})` }
+      : { vi: '', en: '' }
     return {
-      vi: `Đã thêm vào ${place}: ${title}`,
-      en: `Added to ${placeEn}: ${title}`,
+      vi: `Đã thêm vào ${place}: ${taskTitle}${dueNote.vi}`,
+      en: `Added to ${placeEn}: ${taskTitle}${dueNote.en}`,
       undo: { moduleId, itemId: id },
     }
   }
@@ -99,19 +107,27 @@ function addItem(
     }
   }
   if (moduleId === 'email') {
-    const draft = createEmailDraft(practiceId, { subject: title, body: '' })
+    const parsed = parseEmailDraftText(text, true)
+    const draft = createEmailDraft(practiceId, {
+      subject: parsed.subject,
+      body: parsed.body,
+      ...(parsed.to ? { to: parsed.to } : {}),
+    })
     return {
-      vi: `Đã tạo nháp trong ${place}: ${title}`,
-      en: `Created draft in ${placeEn}: ${title}`,
+      vi: `Đã tạo nháp trong ${place}: ${parsed.subject}`,
+      en: `Created draft in ${placeEn}: ${parsed.subject}`,
       undo: { moduleId, itemId: draft.id },
     }
   }
   if (moduleId === 'calendar') {
     const id = newId()
-    writeCalendar(practiceId, [{ id, date: todayIso(), title }, ...readCalendar(practiceId)])
+    const sched = parseScheduleFromText(text)
+    const eventTitle = sched.title || title
+    const date = sched.usedDateToken ? sched.date : todayIso()
+    writeCalendar(practiceId, [{ id, date, title: eventTitle }, ...readCalendar(practiceId)])
     return {
-      vi: `Đã thêm vào ${place}: ${title}`,
-      en: `Added to ${placeEn}: ${title}`,
+      vi: `Đã thêm vào ${place}: ${eventTitle} (${date})`,
+      en: `Added to ${placeEn}: ${eventTitle} (${date})`,
       undo: { moduleId, itemId: id },
     }
   }

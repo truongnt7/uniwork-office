@@ -132,6 +132,11 @@ export interface HomeApi {
    * Paths outside recents/starred are skipped.
    */
   fileExcerpts(paths: string[]): Promise<FileExcerpt[]>
+  /**
+   * My AI: match office files under the default save folder (shallow walk)
+   * when Recents miss. Empty query returns newest matches in that folder.
+   */
+  searchLocalFiles(query: string, limit?: number): Promise<RecentEntry[]>
   /** file picker accepting every supported extension, then routes */
   browse(): Promise<void>
   /** open a docs window at its start screen (optional HTML seed for teacher templates) */
@@ -212,6 +217,8 @@ export interface HomeApi {
   accountLogout(): Promise<void>
   /** Editor AI “Buy AI plan” → open Settings section (e.g. account); unsubscribe returned */
   onOpenSettingsEvent?(handler: (section: string) => void): () => void
+  /** Menu / accelerator → open Home My AI chat; unsubscribe returned */
+  onOpenMyAiEvent?(handler: () => void): () => void
   /** app version (from package.json / electron app.getVersion) */
   getAppVersion(): Promise<string>
   /** whether the first-run onboarding has been completed or skipped (persisted in userData/app-settings.json) */
@@ -652,6 +659,8 @@ export const HOME_CHANNELS = {
   accountLogout: 'home:account-logout',
   /** Main → shell renderer: open Settings to a section (from editor AI billing CTA). */
   openSettingsEvent: 'home:open-settings-event',
+  /** Main → shell renderer: open My AI (menu / CmdOrCtrl+Shift+A). */
+  openMyAiEvent: 'home:open-my-ai-event',
   getAppVersion: 'home:get-app-version',
   onboardingSeen: 'home:onboarding-seen',
   setOnboardingSeen: 'home:set-onboarding-seen',
@@ -681,6 +690,7 @@ export const HOME_CHANNELS = {
   resolveAgentIntent: 'home:resolve-agent-intent',
   submitAgentIntent: 'home:submit-agent-intent',
   fileExcerpts: 'home:file-excerpts',
+  searchLocalFiles: 'home:search-local-files',
   activeOfficeTab: 'home:active-office-tab',
   pushAiPreset: 'home:push-ai-preset',
   wbLoadAll: 'home:wb-load-all',

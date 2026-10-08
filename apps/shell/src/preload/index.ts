@@ -98,6 +98,14 @@ const homeApi: HomeApi = {
     const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.fileExcerpts, paths)
     return Array.isArray(result) ? (result as import('../shared/file-excerpt').FileExcerpt[]) : []
   },
+  async searchLocalFiles(query, limit) {
+    const result: unknown = await ipcRenderer.invoke(
+      HOME_CHANNELS.searchLocalFiles,
+      typeof query === 'string' ? query : '',
+      typeof limit === 'number' ? limit : undefined,
+    )
+    return Array.isArray(result) ? (result as import('../shared/home-api').RecentEntry[]) : []
+  },
   async activeOfficeTab() {
     const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.activeOfficeTab)
     if (!result || typeof result !== 'object') return null
@@ -245,6 +253,11 @@ const homeApi: HomeApi = {
     }
     ipcRenderer.on(HOME_CHANNELS.openSettingsEvent, listener)
     return () => ipcRenderer.removeListener(HOME_CHANNELS.openSettingsEvent, listener)
+  },
+  onOpenMyAiEvent(handler) {
+    const listener = () => handler()
+    ipcRenderer.on(HOME_CHANNELS.openMyAiEvent, listener)
+    return () => ipcRenderer.removeListener(HOME_CHANNELS.openMyAiEvent, listener)
   },
   async getAppVersion() {
     const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.getAppVersion)

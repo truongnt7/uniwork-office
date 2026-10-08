@@ -310,40 +310,6 @@ export function IntegrationsPane({
         ))}
       </div>
       <div className="set-field-desc set-intg-lead">{t('intgStep2Note')}</div>
-
-      <details className="set-intg-details set-intg-cli">
-        <summary>{t('intgCliTitle')}</summary>
-        <div className="set-field-desc set-intg-lead">
-          {status.cli.ephemeral
-            ? t('intgCliEphemeral')
-            : status.cli.status === 'present'
-              ? t('intgCliReady', { v: status.cli.version, path: status.cli.location ?? '' })
-              : t('intgCliNotOnPath', { v: status.cli.version })}
-        </div>
-        {status.cli.status !== 'present' && status.cli.manual && !status.cli.ephemeral && (
-          <div className="set-intg-code">
-            <code>{status.cli.manual}</code>
-            <button className="set-btn" onClick={() => copy(status.cli.manual!, 'manual')}>
-              {copied === 'manual' ? t('intgCopied') : t('intgCopy')}
-            </button>
-          </div>
-        )}
-        <div className="set-field">
-          <div className="set-field-text">
-            <div className="set-field-stack">
-              <div className="set-field-desc">{t('intgCliLauncher')}</div>
-              <div className="set-field-value set-intg-path" data-tip={status.cli.launcherDir}>
-                {status.cli.launcherDir}
-              </div>
-            </div>
-          </div>
-          <div className="set-intg-actions">
-            <button className="set-btn" onClick={() => copy(status.cli.launcherDir, 'path')}>
-              {copied === 'path' ? t('intgCopied') : t('intgCopyPath')}
-            </button>
-          </div>
-        </div>
-      </details>
     </>
   )
 }

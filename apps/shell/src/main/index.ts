@@ -234,6 +234,7 @@ import type {
 } from '../shared/home-api'
 import { HOME_CHANNELS } from '../shared/home-api'
 import { extractAllowedFileExcerpts } from './file-excerpts'
+import { collectLocalOfficePaths, filterPathsByQuery } from './search-local-files'
 import { isAllowedWbKey, tryGetWorkbenchDb, type WbKvMap } from './workbench-db'
 import { exportWorkbenchBackup, importWorkbenchBackup } from './workbench-backup'
 import {
@@ -598,6 +599,7 @@ const tMain = createI18n({
     menuWindow: '窗口',
     menuHome: '首页',
     backToHome: '返回首页',
+    menuMyAi: '我的 AI',
     saveToUniWork: '保存到 UniWork',
     uwOpening: '正在从 UniWork 打开…',
     uwSaving: '正在保存到 UniWork…',
@@ -688,6 +690,7 @@ const tMain = createI18n({
     menuWindow: 'Window',
     menuHome: 'Home',
     backToHome: 'Back to Home',
+    menuMyAi: 'My AI',
     saveToUniWork: 'Save to UniWork',
     uwOpening: 'Opening from UniWork…',
     uwSaving: 'Saving to UniWork…',
@@ -786,6 +789,7 @@ const tMain = createI18n({
     menuWindow: 'ウィンドウ',
     menuHome: 'ホーム',
     backToHome: 'ホームに戻る',
+    menuMyAi: 'マイ AI',
     saveToUniWork: 'UniWork に保存',
     uwOpening: 'UniWork から開いています…',
     uwSaving: 'UniWork に保存しています…',
@@ -884,6 +888,7 @@ const tMain = createI18n({
     menuWindow: '창',
     menuHome: '홈',
     backToHome: '홈으로 돌아가기',
+    menuMyAi: 'My AI',
     saveToUniWork: 'UniWork에 저장',
     uwOpening: 'UniWork에서 여는 중…',
     uwSaving: 'UniWork에 저장하는 중…',
@@ -981,6 +986,7 @@ const tMain = createI18n({
     menuWindow: 'Fenêtre',
     menuHome: 'Accueil',
     backToHome: "Retour à l'accueil",
+    menuMyAi: "My AI",
     saveToUniWork: 'Enregistrer dans UniWork',
     uwOpening: 'Ouverture depuis UniWork…',
     uwSaving: 'Enregistrement dans UniWork…',
@@ -1080,6 +1086,7 @@ const tMain = createI18n({
     menuWindow: 'Fenster',
     menuHome: 'Startseite',
     backToHome: 'Zurück zur Startseite',
+    menuMyAi: 'My AI',
     saveToUniWork: 'In UniWork speichern',
     uwOpening: 'Wird von UniWork geöffnet…',
     uwSaving: 'Wird in UniWork gespeichert…',
@@ -1179,6 +1186,7 @@ const tMain = createI18n({
     menuWindow: 'Ventana',
     menuHome: 'Inicio',
     backToHome: 'Volver al inicio',
+    menuMyAi: 'My AI',
     saveToUniWork: 'Guardar en UniWork',
     uwOpening: 'Abriendo desde UniWork…',
     uwSaving: 'Guardando en UniWork…',
@@ -1278,6 +1286,7 @@ const tMain = createI18n({
     menuWindow: 'หน้าต่าง',
     menuHome: 'หน้าแรก',
     backToHome: 'กลับไปหน้าแรก',
+    menuMyAi: 'My AI',
     saveToUniWork: 'บันทึกไปยัง UniWork',
     uwOpening: 'กำลังเปิดจาก UniWork…',
     uwSaving: 'กำลังบันทึกไปยัง UniWork…',
@@ -1373,6 +1382,7 @@ const tMain = createI18n({
     menuWindow: 'Jendela',
     menuHome: 'Beranda',
     backToHome: 'Kembali ke Beranda',
+    menuMyAi: 'My AI',
     saveToUniWork: 'Simpan ke UniWork',
     uwOpening: 'Membuka dari UniWork…',
     uwSaving: 'Menyimpan ke UniWork…',
@@ -1472,6 +1482,7 @@ const tMain = createI18n({
     menuWindow: 'Окно',
     menuHome: 'Главная',
     backToHome: 'Вернуться на главную',
+    menuMyAi: 'My AI',
     saveToUniWork: 'Сохранить в UniWork',
     uwOpening: 'Открытие из UniWork…',
     uwSaving: 'Сохранение в UniWork…',
@@ -1571,6 +1582,7 @@ const tMain = createI18n({
     menuWindow: 'نافذة',
     menuHome: 'الصفحة الرئيسية',
     backToHome: 'العودة إلى الصفحة الرئيسية',
+    menuMyAi: 'My AI',
     saveToUniWork: 'حفظ إلى UniWork',
     uwOpening: 'جارٍ الفتح من UniWork…',
     uwSaving: 'جارٍ الحفظ إلى UniWork…',
@@ -1666,6 +1678,7 @@ const tMain = createI18n({
     menuWindow: 'Janela',
     menuHome: 'Início',
     backToHome: 'Voltar ao início',
+    menuMyAi: 'My AI',
     saveToUniWork: 'Salvar no UniWork',
     uwOpening: 'Abrindo do UniWork…',
     uwSaving: 'Salvando no UniWork…',
@@ -1765,6 +1778,7 @@ const tMain = createI18n({
     menuWindow: 'Finestra',
     menuHome: 'Home',
     backToHome: 'Torna alla Home',
+    menuMyAi: 'My AI',
     saveToUniWork: 'Salva su UniWork',
     uwOpening: 'Apertura da UniWork…',
     uwSaving: 'Salvataggio su UniWork…',
@@ -1864,6 +1878,7 @@ const tMain = createI18n({
     menuWindow: 'Okno',
     menuHome: 'Strona główna',
     backToHome: 'Wróć do strony głównej',
+    menuMyAi: 'My AI',
     saveToUniWork: 'Zapisz w UniWork',
     uwOpening: 'Otwieranie z UniWork…',
     uwSaving: 'Zapisywanie w UniWork…',
@@ -1963,6 +1978,7 @@ const tMain = createI18n({
     menuWindow: 'Okno',
     menuHome: 'Domů',
     backToHome: 'Zpět na domovskou stránku',
+    menuMyAi: 'My AI',
     saveToUniWork: 'Uložit do UniWork',
     uwOpening: 'Otevírání z UniWork…',
     uwSaving: 'Ukládání do UniWork…',
@@ -2060,6 +2076,7 @@ const tMain = createI18n({
     menuWindow: 'Venster',
     menuHome: 'Start',
     backToHome: 'Terug naar start',
+    menuMyAi: 'My AI',
     saveToUniWork: 'Opslaan in UniWork',
     uwOpening: 'Openen vanuit UniWork…',
     uwSaving: 'Opslaan in UniWork…',
@@ -2159,6 +2176,7 @@ const tMain = createI18n({
     menuWindow: 'Tetingkap',
     menuHome: 'Laman Utama',
     backToHome: 'Kembali ke Laman Utama',
+    menuMyAi: 'My AI',
     saveToUniWork: 'Simpan ke UniWork',
     uwOpening: 'Membuka dari UniWork…',
     uwSaving: 'Menyimpan ke UniWork…',
@@ -2257,6 +2275,7 @@ const tMain = createI18n({
     menuWindow: 'חלון',
     menuHome: 'דף הבית',
     backToHome: 'חזרה לדף הבית',
+    menuMyAi: 'My AI',
     saveToUniWork: 'שמירה ל-UniWork',
     uwOpening: 'פתיחה מ-UniWork…',
     uwSaving: 'שמירה ל-UniWork…',
@@ -2353,6 +2372,7 @@ const tMain = createI18n({
     menuWindow: 'विंडो',
     menuHome: 'होम',
     backToHome: 'होम पर वापस जाएँ',
+    menuMyAi: 'My AI',
     saveToUniWork: 'UniWork में सहेजें',
     uwOpening: 'UniWork से खोला जा रहा है…',
     uwSaving: 'UniWork में सहेजा जा रहा है…',
@@ -2452,6 +2472,7 @@ const tMain = createI18n({
     menuWindow: 'Cửa sổ',
     menuHome: 'Trang chủ',
     backToHome: 'Quay lại trang chủ',
+    menuMyAi: 'Trợ lý của bạn',
     saveToUniWork: 'Lưu vào UniWork',
     uwOpening: 'Đang mở từ UniWork…',
     uwSaving: 'Đang lưu vào UniWork…',
@@ -2549,6 +2570,7 @@ const tMain = createI18n({
     menuWindow: '視窗',
     menuHome: '首頁',
     backToHome: '返回首頁',
+    menuMyAi: '我的 AI',
     saveToUniWork: '儲存到 UniWork',
     uwOpening: '正在從 UniWork 開啟…',
     uwSaving: '正在儲存到 UniWork…',
@@ -3520,6 +3542,28 @@ function registerHomeIpc(): void {
     extractAllowedFileExcerpts(paths, tabManager?.openFilePaths() ?? []),
   )
 
+  ipcMain.handle(
+    HOME_CHANNELS.searchLocalFiles,
+    (_event, query: unknown, limit: unknown): RecentEntry[] => {
+      const q = typeof query === 'string' ? query : ''
+      const lim = typeof limit === 'number' && limit > 0 ? Math.min(limit, 24) : 12
+      try {
+        const paths = filterPathsByQuery(collectLocalOfficePaths([defaultSaveDir()]), q, lim * 2)
+        const byPath = new Map(statEntries(paths).map((e) => [e.path, e]))
+        const ordered: RecentEntry[] = []
+        for (const p of paths) {
+          const e = byPath.get(p)
+          if (e && !e.missing) ordered.push(e)
+          if (ordered.length >= lim) break
+        }
+        return ordered
+      } catch (err) {
+        console.error('[search-local-files] failed', err)
+        return []
+      }
+    },
+  )
+
   ipcMain.handle(HOME_CHANNELS.wbLoadAll, () => {
     try {
       const db = tryGetWorkbenchDb(app.getPath('userData'))
@@ -4233,6 +4277,12 @@ async function openFileViaDialog(): Promise<void> {
   if (!result.canceled) for (const path of result.filePaths) openDocumentPath(path)
 }
 
+function openMyAiFromMenu(): void {
+  tabManager?.openHomeTab()
+  const wc = shellWindow?.webContents
+  if (wc && !wc.isDestroyed()) wc.send(HOME_CHANNELS.openMyAiEvent)
+}
+
 function buildHomeMenu(): void {
   const isMac = process.platform === 'darwin'
   const template: MenuItemConstructorOptions[] = [
@@ -4259,6 +4309,11 @@ function buildHomeMenu(): void {
           label: tm('menuOpen'),
           accelerator: 'CmdOrCtrl+O',
           click: () => void openFileViaDialog(),
+        },
+        {
+          label: tm('menuMyAi'),
+          accelerator: 'CmdOrCtrl+Shift+A',
+          click: () => openMyAiFromMenu(),
         },
         { type: 'separator' },
         { role: 'close', label: tm('menuClose') },
@@ -4290,6 +4345,11 @@ function buildPdfMenu(): void {
           click: () => void openFileViaDialog(),
         },
         { type: 'separator' },
+        {
+          label: tm('menuMyAi'),
+          accelerator: 'CmdOrCtrl+Shift+A',
+          click: () => openMyAiFromMenu(),
+        },
         {
           label: tm('backToHome'),
           accelerator: 'Shift+CmdOrCtrl+H',
@@ -4368,6 +4428,11 @@ function buildMarkdownMenu(): void {
           click: () => void openFileViaDialog(),
         },
         { type: 'separator' },
+        {
+          label: tm('menuMyAi'),
+          accelerator: 'CmdOrCtrl+Shift+A',
+          click: () => openMyAiFromMenu(),
+        },
         {
           label: tm('backToHome'),
           accelerator: 'Shift+CmdOrCtrl+H',
@@ -4455,6 +4520,11 @@ function buildHtmlMenu(): void {
           click: () => void openFileViaDialog(),
         },
         { type: 'separator' },
+        {
+          label: tm('menuMyAi'),
+          accelerator: 'CmdOrCtrl+Shift+A',
+          click: () => openMyAiFromMenu(),
+        },
         {
           label: tm('backToHome'),
           accelerator: 'Shift+CmdOrCtrl+H',
@@ -4952,15 +5022,20 @@ function installBackToHomeItems(): void {
     accelerator: 'Shift+CmdOrCtrl+H',
     click: () => tabManager?.openHomeTab(),
   }
+  const openMyAiItem: MenuItemConstructorOptions = {
+    label: tm('menuMyAi'),
+    accelerator: 'CmdOrCtrl+Shift+A',
+    click: () => openMyAiFromMenu(),
+  }
   const saveToUniWorkItem: MenuItemConstructorOptions = {
     label: tm('saveToUniWork'),
     click: () => {
       void saveActiveTabToUniWork()
     },
   }
-  setDocsExtraFileMenuItems([saveToUniWorkItem, backToHomeItem])
-  setSheetsExtraFileMenuItems([saveToUniWorkItem, backToHomeItem])
-  setSlidesExtraFileMenuItems([saveToUniWorkItem, backToHomeItem])
+  setDocsExtraFileMenuItems([saveToUniWorkItem, openMyAiItem, backToHomeItem])
+  setSheetsExtraFileMenuItems([saveToUniWorkItem, openMyAiItem, backToHomeItem])
+  setSlidesExtraFileMenuItems([saveToUniWorkItem, openMyAiItem, backToHomeItem])
 }
 
 function installDockMenu(): void {

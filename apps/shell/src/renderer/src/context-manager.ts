@@ -17,6 +17,7 @@ import {
   readFinance,
   readEmails,
   readNotes,
+  readPersonal,
   readTasks,
 } from './workbench-pins'
 
@@ -246,6 +247,25 @@ export function buildMyAiContextPack(
     source: 'local:practice',
     text: vi ? `Practice đang chọn: ${practiceId}` : `Active practice: ${practiceId}`,
   })
+
+  const profile = readPersonal()
+  const profileBits = [
+    profile.fullName && (vi ? `Họ tên: ${profile.fullName}` : `Name: ${profile.fullName}`),
+    profile.org && (vi ? `Tổ chức: ${profile.org}` : `Org: ${profile.org}`),
+    profile.title && (vi ? `Chức danh: ${profile.title}` : `Title: ${profile.title}`),
+    profile.email && `Email: ${profile.email}`,
+    profile.phone && (vi ? `ĐT: ${profile.phone}` : `Phone: ${profile.phone}`),
+    profile.address && (vi ? `Địa chỉ: ${profile.address}` : `Address: ${profile.address}`),
+  ].filter(Boolean) as string[]
+  if (profileBits.length > 0) {
+    chunks.unshift({
+      id: 'personal',
+      source: 'local:personal',
+      text: vi
+        ? `Hồ sơ cá nhân (trên máy):\n${profileBits.join('\n')}`
+        : `Personal profile (on device):\n${profileBits.join('\n')}`,
+    })
+  }
 
   const packed = packChunks(chunks)
   const plainText = packed.map((c) => `[${c.source}] ${c.text}`).join('\n')

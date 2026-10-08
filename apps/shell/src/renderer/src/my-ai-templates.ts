@@ -38,6 +38,61 @@ export interface PracticeDocTemplate {
 
 const TEMPLATES: readonly PracticeDocTemplate[] = [
   {
+    id: 'personal-leave',
+    playbookId: 'personal-leave',
+    labelVi: 'Đơn xin nghỉ',
+    labelEn: 'Leave request',
+    app: 'docs',
+    slots: [
+      { id: 'topic', required: true, labelVi: 'Loại nghỉ / lý do', labelEn: 'Leave type / reason' },
+      { id: 'deadline', required: true, labelVi: 'Thời gian nghỉ', labelEn: 'Leave dates' },
+      { id: 'party', required: false, labelVi: 'Người nhận / quản lý', labelEn: 'Manager / recipient' },
+    ],
+    outlineVi: [
+      'Kính gửi',
+      'Họ tên / bộ phận người xin nghỉ',
+      'Loại nghỉ & lý do ngắn',
+      'Thời gian (từ — đến)',
+      'Bàn giao công việc (nếu có)',
+      'Lời cảm ơn / chữ ký',
+    ],
+    outlineEn: [
+      'Addressee',
+      'Requester name / team',
+      'Leave type & short reason',
+      'Dates (from — to)',
+      'Handover notes (if any)',
+      'Thanks / signature',
+    ],
+  },
+  {
+    id: 'personal-cv',
+    playbookId: 'personal-cv',
+    labelVi: 'CV / sơ yếu lý lịch',
+    labelEn: 'CV / resume',
+    app: 'docs',
+    slots: [
+      { id: 'topic', required: true, labelVi: 'Vị trí ứng tuyển', labelEn: 'Target role' },
+      { id: 'scope', required: false, labelVi: 'Kinh nghiệm nổi bật', labelEn: 'Highlight experience' },
+    ],
+    outlineVi: [
+      'Thông tin liên hệ',
+      'Tóm tắt nghề nghiệp',
+      'Kinh nghiệm làm việc',
+      'Học vấn',
+      'Kỹ năng',
+      'Thành tựu / dự án',
+    ],
+    outlineEn: [
+      'Contact',
+      'Professional summary',
+      'Work experience',
+      'Education',
+      'Skills',
+      'Achievements / projects',
+    ],
+  },
+  {
     id: 'sales-quote',
     playbookId: 'sales-quote',
     labelVi: 'Báo giá',

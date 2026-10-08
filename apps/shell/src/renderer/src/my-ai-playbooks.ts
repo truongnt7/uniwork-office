@@ -78,6 +78,75 @@ const AND_TAIL = /(?:và|rồi|then|and).+$/i
 
 const PLAYBOOKS: readonly MyAiPlaybook[] = [
   {
+    id: 'personal-leave',
+    practiceIds: [],
+    labelVi: 'Đơn xin nghỉ',
+    labelEn: 'Leave request',
+    chip: {
+      id: 'personal-leave',
+      labelVi: 'Đơn nghỉ + việc',
+      labelEn: 'Leave + task',
+      promptVi: 'Soạn đơn xin nghỉ phép và thêm việc bàn giao',
+      promptEn: 'Draft a leave request and add a handover task',
+    },
+    match: (lower, norm) =>
+      /(?:đơn xin nghỉ|don xin nghi|xin nghỉ phép|xin nghi phep|leave request|time[\s-]?off)/i.test(
+        lower,
+      ) || /(?:don xin nghi|nghi phep|leave request)/i.test(norm),
+    buildSteps: (raw) => [
+      fillTemplate('personal-leave', raw),
+      wb('add_item', 'tasks', `Bàn giao khi nghỉ: ${residualBrief(raw, [AND_TAIL]).slice(0, 80) || 'handover'}`, 'Thêm việc bàn giao'),
+    ],
+  },
+  {
+    id: 'personal-cv',
+    practiceIds: [],
+    labelVi: 'CV cá nhân',
+    labelEn: 'Personal CV',
+    chip: {
+      id: 'personal-cv',
+      labelVi: 'CV + việc nộp',
+      labelEn: 'CV + apply task',
+      promptVi: 'Soạn CV ứng tuyển và thêm việc nộp hồ sơ',
+      promptEn: 'Draft a CV and add an application follow-up task',
+    },
+    match: (lower, norm) =>
+      /(?:\bcv\b|sơ yếu lý lịch|so yeu ly lich|resume|curriculum vitae)/i.test(lower) ||
+      /(?:so yeu ly lich|\bcv\b|resume)/i.test(norm),
+    buildSteps: (raw) => [
+      fillTemplate('personal-cv', raw),
+      wb('add_item', 'tasks', `Nộp hồ sơ / theo dõi: ${residualBrief(raw, [AND_TAIL]).slice(0, 80) || 'CV'}`, 'Thêm việc nộp hồ sơ'),
+    ],
+  },
+  {
+    id: 'personal-budget',
+    practiceIds: [],
+    labelVi: 'Ngân sách tháng',
+    labelEn: 'Monthly budget',
+    chip: {
+      id: 'personal-budget',
+      labelVi: 'Excel ngân sách',
+      labelEn: 'Budget sheet',
+      promptVi: 'Tạo bảng Excel ngân sách tháng và thêm việc đối soát chi tiêu',
+      promptEn: 'Create a monthly budget Excel sheet and add a reconcile task',
+    },
+    match: (lower, norm) =>
+      /(?:ngân sách tháng|ngan sach thang|monthly budget|chi tiêu tháng|chi tieu thang)/i.test(
+        lower,
+      ) || /(?:ngan sach|monthly budget|chi tieu)/i.test(norm),
+    buildSteps: (raw) => {
+      const topic =
+        residualBrief(raw, [
+          AND_TAIL,
+          /(?:tạo|tao|create|bảng|bang|excel|ngân sách|ngan sach|budget)/gi,
+        ]) || 'Thu / chi / tiết kiệm tháng này'
+      return [
+        createSheets(`Ngân sách tháng: ${topic}. Cột: hạng mục, dự chi, thực chi, chênh lệch.`),
+        wb('add_item', 'tasks', `Đối soát chi tiêu: ${topic.slice(0, 80)}`, 'Thêm việc đối soát'),
+      ]
+    },
+  },
+  {
     id: 'sales-quote',
     practiceIds: ['sales', 'entrepreneur', 'freelancer', 'real-estate'],
     labelVi: 'Báo giá + follow-up',
@@ -542,13 +611,16 @@ export function matchPracticePlaybook(
   return null
 }
 
-/** Hero chips: playbooks for this practice + top skills as Word drafts. */
+/** Hero chips: 1–2 personal + practice playbooks + top skills as Word drafts. */
 export function practiceMyAiChips(practiceId: PracticeId): MyAiPlaybookChip[] {
-  const chips: MyAiPlaybookChip[] = []
+  const personal: MyAiPlaybookChip[] = []
+  const role: MyAiPlaybookChip[] = []
   for (const book of PLAYBOOKS) {
     if (!practiceAllows(book, practiceId)) continue
-    chips.push(book.chip)
+    if (book.practiceIds.length === 0) personal.push(book.chip)
+    else role.push(book.chip)
   }
+  const chips: MyAiPlaybookChip[] = [...personal.slice(0, 2), ...role]
   const practice = getPractice(practiceId)
   if (practice) {
     for (const skill of practice.skills.slice(0, 2)) {

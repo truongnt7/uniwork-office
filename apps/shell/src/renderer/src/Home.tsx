@@ -19,6 +19,7 @@ import type {
 import type { IntegrationsApi } from '../../shared/integrations-api'
 import { useDismissablePopover } from '@genoffice/ui'
 import { fileCountKey, visiblePageCount } from './counts'
+import { groupRecentByDay, type RecentDayBucket } from './recent-timeline'
 import { useI18n } from './locale'
 import type { I18n, StringKey } from './locale'
 import { CreditWallet } from './CreditWallet'
@@ -101,14 +102,34 @@ function FileBadge({ ext, size }: { ext: string; size: number }) {
 
 function formatModified(mtimeMs: number, i18n: I18n): string {
   const date = new Date(mtimeMs)
-  const now = new Date()
-  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-  const days = Math.round((startOfDay(now) - startOfDay(date)) / 86400000)
-  if (days <= 0) {
-    return `${i18n.t('today')} · ${date.toLocaleTimeString(i18n.dateLocale, { hour: '2-digit', minute: '2-digit' })}`
+  const now = Date.now()
+  const startOfDay = (ms: number) => {
+    const d = new Date(ms)
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
   }
-  if (days === 1) return i18n.t('yesterday')
+  const days = Math.round((startOfDay(now) - startOfDay(mtimeMs)) / 86_400_000)
+  if (days <= 0) {
+    const mins = Math.max(0, Math.floor((now - mtimeMs) / 60_000))
+    if (mins < 1) return i18n.t('justNow')
+    if (mins < 60) return i18n.t('minutesAgo', { n: mins })
+    const hours = Math.floor(mins / 60)
+    if (hours < 12) return i18n.t('hoursAgo', { n: hours })
+    return date.toLocaleTimeString(i18n.dateLocale, { hour: '2-digit', minute: '2-digit' })
+  }
+  if (days === 1) {
+    return `${i18n.t('yesterday')} · ${date.toLocaleTimeString(i18n.dateLocale, { hour: '2-digit', minute: '2-digit' })}`
+  }
+  if (days < 7) {
+    return date.toLocaleDateString(i18n.dateLocale, { weekday: 'short', hour: '2-digit', minute: '2-digit' })
+  }
   return date.toLocaleDateString(i18n.dateLocale, { month: 'short', day: 'numeric' })
+}
+
+function recentGroupLabel(bucket: RecentDayBucket, i18n: I18n): string {
+  if (bucket === 'today') return i18n.t('today')
+  if (bucket === 'yesterday') return i18n.t('yesterday')
+  if (bucket === 'week') return i18n.t('recentGroupThisWeek')
+  return i18n.t('recentGroupOlder')
 }
 
 function formatSize(bytes: number): string {
@@ -1240,9 +1261,11 @@ export function Home() {
     }
     window.addEventListener('uniwork:open-my-ai', openMyAi)
     window.addEventListener('uniwork:agent-summarize', onSummarize)
+    const unsub = window.aiOffice.onOpenMyAiEvent?.(() => openMyAi())
     return () => {
       window.removeEventListener('uniwork:open-my-ai', openMyAi)
       window.removeEventListener('uniwork:agent-summarize', onSummarize)
+      unsub?.()
     }
   }, [])
   const [greetAskKey] = useState(
@@ -1715,12 +1738,14 @@ export function Home() {
     const otherProjects = projects.filter(
       (p) => p.id !== (context === 'project' ? selectedProjectId : undefined),
     )
+    const locationHint = parentDir(entry.path)
     return (
       <li className="recent-row" key={entry.path}>
         <div
           className={`recent-item${entry.missing ? ' missing' : ''}`}
           role="button"
           tabIndex={0}
+          title={entry.missing ? entry.path : `${entry.path}${locationHint ? `\n${locationHint}` : ''}`}
           onClick={() => {
             if (isRenaming) return
             if (entry.missing) setConfirmMissing(entry)
@@ -1743,7 +1768,7 @@ export function Home() {
             />
           </span>
           <span className="recent-icon">
-            <FileBadge ext={entry.ext} size={24} />
+            <FileBadge ext={entry.ext} size={28} />
           </span>
           {isRenaming ? (
             <input
@@ -1762,9 +1787,12 @@ export function Home() {
               }}
             />
           ) : (
-            <span className="recent-name">{entry.name}</span>
+            <span className="recent-name-block">
+              <span className="recent-name">{entry.name}</span>
+              {locationHint ? <span className="recent-path-hint">{locationHint}</span> : null}
+            </span>
           )}
-          <span className="recent-path">{parentDir(entry.path)}</span>
+          <span className="recent-path">{locationHint}</span>
           <span className="recent-time">
             {entry.missing ? '—' : formatModified(entry.mtimeMs, i18n)}
           </span>
@@ -1951,15 +1979,18 @@ export function Home() {
           {renderQuickCards()}
         </section>
 
-        <section className="recents" aria-label={t('secProjectFiles')}>
-          <div className="recents-toolbar">
-            <div className="recents-heading">
-              <span className="section-label">{t('secProjectFiles')}</span>
-              <span className="file-count">
-                {t(fileCountKey(projectFileEntries.length), { n: projectFileEntries.length })}
-              </span>
+        <section className="recents recents--timeline" aria-label={t('secProjectFiles')}>
+          <div className="recents-toolbar recents-toolbar--timeline">
+            <div className="recents-heading-row">
+              <div className="recents-heading">
+                <span className="section-label section-label--recents">{t('secProjectFiles')}</span>
+                <span className="file-count">
+                  {t(fileCountKey(projectFileEntries.length), { n: projectFileEntries.length })}
+                </span>
+              </div>
+              {renderModifiedHeader()}
             </div>
-            {projSelectedPaths.length > 0 && (
+            {projSelectedPaths.length > 0 ? (
               <div className="selection-bar">
                 <span className="selection-count">
                   {t('selectedCount', { n: projSelectedPaths.length })}
@@ -1998,7 +2029,7 @@ export function Home() {
                   {t('cancel')}
                 </button>
               </div>
-            )}
+            ) : null}
           </div>
 
           {projectFileEntries.length === 0 ? (
@@ -2025,29 +2056,17 @@ export function Home() {
               <span className="empty-hint">{t('projEmptyHint')}</span>
             </p>
           ) : (
-            <div className="recent-table">
-              <div className="recent-columns">
-                <span className="col-check">
-                  <input
-                    type="checkbox"
-                    checked={projAllSelected}
-                    onChange={toggleSelectAllProject}
-                    aria-label={t('selectAll')}
-                  />
-                </span>
-                <span className="col-name">{t('colName')}</span>
-                <span className="col-path">{t('colLocation')}</span>
-                {renderModifiedHeader()}
-                <span className="col-size">{t('colSize')}</span>
-                <span />
-                <span />
-              </div>
-              <ul className="recent-list">
-                {(fileSort === 'oldest'
-                  ? [...projectFileEntries].reverse()
-                  : projectFileEntries
-                ).map((entry) => renderFileRow(entry, 'project'))}
-              </ul>
+            <div
+              className={`recent-table recent-table--timeline${projSelectedPaths.length > 0 ? ' has-selection' : ''}`}
+            >
+              {groupRecentByDay(projectFileEntries, fileSort === 'oldest').map((group) => (
+                <div className="recent-group" key={group.bucket}>
+                  <h4 className="recent-group-label">{recentGroupLabel(group.bucket, i18n)}</h4>
+                  <ul className="recent-list">
+                    {group.entries.map((entry) => renderFileRow(entry, 'project'))}
+                  </ul>
+                </div>
+              ))}
             </div>
           )}
         </section>
@@ -2083,10 +2102,19 @@ export function Home() {
         </section>
 
         <section
-          className="recents"
+          className="recents recents--timeline"
           aria-label={view === 'recent' ? t('secRecent') : t('secStarred')}
         >
-          <div className="recents-toolbar">
+          <div className="recents-toolbar recents-toolbar--timeline">
+            <div className="recents-heading-row">
+              <div className="recents-heading">
+                <span className="section-label section-label--recents">
+                  {view === 'recent' ? t('secRecent') : t('secStarred')}
+                </span>
+                <span className="file-count">{t(fileCountKey(listTotal), { n: listTotal })}</span>
+              </div>
+              {renderModifiedHeader()}
+            </div>
             {selectedPaths.length > 0 ? (
               <div className="selection-bar">
                 <span className="selection-count">
@@ -2106,11 +2134,11 @@ export function Home() {
                 </button>
               </div>
             ) : (
-              <div className="filter-pills" role="tablist" aria-label={t('filterAria')}>
+              <div className="filter-chips" role="tablist" aria-label={t('filterAria')}>
                 {FILTERS.map((f) => (
                   <button
                     key={f.key}
-                    className={`filter-pill${filter === f.key ? ' active' : ''}`}
+                    className={`filter-chip${filter === f.key ? ' active' : ''}`}
                     onClick={() => changeFilter(f.key)}
                   >
                     {t(f.label)}
@@ -2118,12 +2146,6 @@ export function Home() {
                 ))}
               </div>
             )}
-            <div className="recents-heading">
-              <span className="section-label">
-                {view === 'recent' ? t('secRecent') : t('secStarred')}
-              </span>
-              <span className="file-count">{t(fileCountKey(listTotal), { n: listTotal })}</span>
-            </div>
           </div>
 
           {entries.length === 0 ? (
@@ -2156,28 +2178,17 @@ export function Home() {
               </span>
             </p>
           ) : (
-            <div className={`recent-table${selectedPaths.length > 0 ? ' has-selection' : ''}`}>
-              <div className="recent-columns">
-                <span className="col-check">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={toggleSelectAll}
-                    aria-label={t('selectAll')}
-                  />
-                </span>
-                <span className="col-name">{t('colName')}</span>
-                <span className="col-path">{t('colLocation')}</span>
-                {renderModifiedHeader()}
-                <span className="col-size">{t('colSize')}</span>
-                <span />
-                <span />
-              </div>
-              <ul className="recent-list">
-                {(fileSort === 'oldest' ? [...entries].reverse() : entries).map((entry) =>
-                  renderFileRow(entry, 'global'),
-                )}
-              </ul>
+            <div
+              className={`recent-table recent-table--timeline${selectedPaths.length > 0 ? ' has-selection' : ''}`}
+            >
+              {groupRecentByDay(entries, fileSort === 'oldest').map((group) => (
+                <div className="recent-group" key={group.bucket}>
+                  <h4 className="recent-group-label">{recentGroupLabel(group.bucket, i18n)}</h4>
+                  <ul className="recent-list">
+                    {group.entries.map((entry) => renderFileRow(entry, 'global'))}
+                  </ul>
+                </div>
+              ))}
               {hasMore && (
                 <div ref={sentinelRef} className="load-more" aria-hidden="true">
                   <span className="load-more-spinner" />

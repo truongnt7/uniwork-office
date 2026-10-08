@@ -9,28 +9,40 @@ import {
 import {
   pinModule,
   readCalendar,
+  readEmails,
   readEvents,
   readFinance,
   readGrowth,
   readHealth,
+  readStickyNotes,
   createEmailDraft,
   createStickyNote,
   readPinnedModules,
   readTasks,
   writeCalendar,
+  writeEmails,
   writeEvents,
   writeFinance,
   writeGrowth,
   writeHealth,
+  writeStickyNotes,
   writeTasks,
 } from './workbench-pins'
 import { pinSkillDomain, writeActiveSkillDomain } from './skill-domain-pins'
+import { workbenchModuleLabel } from './my-ai-consent'
+
+export interface AgentAddUndo {
+  moduleId: WorkbenchModuleId
+  itemId: string
+}
 
 export interface AgentIntentApplyResult {
   ok: boolean
   tabId: string
   messageVi: string
   messageEn: string
+  /** Present when add_item created a row — soft mutate can offer Undo. */
+  undo?: AgentAddUndo
 }
 
 function newId(): string {
@@ -50,15 +62,18 @@ function addItem(
   practiceId: PracticeId,
   moduleId: WorkbenchModuleId,
   text: string,
-): { vi: string; en: string } | null {
+): { vi: string; en: string; undo: AgentAddUndo } | null {
   const title = text.trim() || 'Untitled'
   if (!moduleSupportsAddItem(moduleId)) return null
+  const place = workbenchModuleLabel(moduleId, true)
+  const placeEn = workbenchModuleLabel(moduleId, false)
 
   if (moduleId === 'tasks') {
+    const id = newId()
     const now = new Date().toISOString()
     writeTasks(practiceId, [
       {
-        id: newId(),
+        id,
         title,
         done: false,
         status: 'todo',
@@ -68,58 +83,130 @@ function addItem(
       },
       ...readTasks(practiceId),
     ])
-    return { vi: `Đã thêm việc: ${title}`, en: `Added task: ${title}` }
+    return {
+      vi: `Đã thêm vào ${place}: ${title}`,
+      en: `Added to ${placeEn}: ${title}`,
+      undo: { moduleId, itemId: id },
+    }
   }
   if (moduleId === 'notes') {
-    createStickyNote(practiceId, title)
-    return { vi: 'Đã ghim note mới.', en: 'Pinned a new sticky note.' }
+    const note = createStickyNote(practiceId, title)
+    return {
+      vi: `Đã thêm vào ${place}: ${title}`,
+      en: `Added to ${placeEn}: ${title}`,
+      undo: { moduleId, itemId: note.id },
+    }
   }
   if (moduleId === 'email') {
-    createEmailDraft(practiceId, { subject: title, body: '' })
-    return { vi: `Đã tạo nháp email: ${title}`, en: `Created email draft: ${title}` }
+    const draft = createEmailDraft(practiceId, { subject: title, body: '' })
+    return {
+      vi: `Đã tạo nháp trong ${place}: ${title}`,
+      en: `Created draft in ${placeEn}: ${title}`,
+      undo: { moduleId, itemId: draft.id },
+    }
   }
   if (moduleId === 'calendar') {
-    writeCalendar(practiceId, [
-      { id: newId(), date: todayIso(), title },
-      ...readCalendar(practiceId),
-    ])
-    return { vi: `Đã thêm lịch: ${title}`, en: `Added calendar item: ${title}` }
+    const id = newId()
+    writeCalendar(practiceId, [{ id, date: todayIso(), title }, ...readCalendar(practiceId)])
+    return {
+      vi: `Đã thêm vào ${place}: ${title}`,
+      en: `Added to ${placeEn}: ${title}`,
+      undo: { moduleId, itemId: id },
+    }
   }
   if (moduleId === 'events') {
-    writeEvents(practiceId, [
-      { id: newId(), date: todayIso(), title },
-      ...readEvents(practiceId),
-    ])
-    return { vi: `Đã thêm sự kiện: ${title}`, en: `Added event: ${title}` }
+    const id = newId()
+    writeEvents(practiceId, [{ id, date: todayIso(), title }, ...readEvents(practiceId)])
+    return {
+      vi: `Đã thêm vào ${place}: ${title}`,
+      en: `Added to ${placeEn}: ${title}`,
+      undo: { moduleId, itemId: id },
+    }
   }
   if (moduleId === 'personal-finance') {
+    const id = newId()
     writeFinance([
-      {
-        id: newId(),
-        date: todayIso(),
-        kind: 'expense',
-        amount: 0,
-        label: title,
-      },
+      { id, date: todayIso(), kind: 'expense', amount: 0, label: title },
       ...readFinance(),
     ])
-    return { vi: `Đã ghi chi tiêu nháp: ${title}`, en: `Logged draft expense: ${title}` }
+    return {
+      vi: `Đã ghi trong ${place}: ${title}`,
+      en: `Logged in ${placeEn}: ${title}`,
+      undo: { moduleId, itemId: id },
+    }
   }
   if (moduleId === 'health') {
-    writeHealth([
-      { id: newId(), date: todayIso(), kind: 'other', note: title },
-      ...readHealth(),
-    ])
-    return { vi: `Đã ghi sức khoẻ: ${title}`, en: `Logged health note: ${title}` }
+    const id = newId()
+    writeHealth([{ id, date: todayIso(), kind: 'other', note: title }, ...readHealth()])
+    return {
+      vi: `Đã ghi trong ${place}: ${title}`,
+      en: `Logged in ${placeEn}: ${title}`,
+      undo: { moduleId, itemId: id },
+    }
   }
   if (moduleId === 'self-growth') {
-    writeGrowth([
-      { id: newId(), title, progress: 0, done: false },
-      ...readGrowth(),
-    ])
-    return { vi: `Đã thêm mục tiêu: ${title}`, en: `Added growth goal: ${title}` }
+    const id = newId()
+    writeGrowth([{ id, title, progress: 0, done: false }, ...readGrowth()])
+    return {
+      vi: `Đã thêm vào ${place}: ${title}`,
+      en: `Added to ${placeEn}: ${title}`,
+      undo: { moduleId, itemId: id },
+    }
   }
   return null
+}
+
+/** Soft-mutate Undo — remove the row created by the last add_item. */
+export function undoAgentAddItem(
+  practiceId: PracticeId,
+  undo: AgentAddUndo,
+): { ok: boolean; messageVi: string; messageEn: string } {
+  const { moduleId, itemId } = undo
+  const place = workbenchModuleLabel(moduleId, true)
+  const placeEn = workbenchModuleLabel(moduleId, false)
+  if (moduleId === 'tasks') {
+    writeTasks(
+      practiceId,
+      readTasks(practiceId).filter((t) => t.id !== itemId),
+    )
+  } else if (moduleId === 'notes') {
+    writeStickyNotes(
+      practiceId,
+      readStickyNotes(practiceId).filter((n) => n.id !== itemId),
+    )
+  } else if (moduleId === 'email') {
+    writeEmails(
+      practiceId,
+      readEmails(practiceId).filter((m) => m.id !== itemId),
+    )
+  } else if (moduleId === 'calendar') {
+    writeCalendar(
+      practiceId,
+      readCalendar(practiceId).filter((c) => c.id !== itemId),
+    )
+  } else if (moduleId === 'events') {
+    writeEvents(
+      practiceId,
+      readEvents(practiceId).filter((e) => e.id !== itemId),
+    )
+  } else if (moduleId === 'personal-finance') {
+    writeFinance(readFinance().filter((f) => f.id !== itemId))
+  } else if (moduleId === 'health') {
+    writeHealth(readHealth().filter((h) => h.id !== itemId))
+  } else if (moduleId === 'self-growth') {
+    writeGrowth(readGrowth().filter((g) => g.id !== itemId))
+  } else {
+    return {
+      ok: false,
+      messageVi: 'Không hoàn tác được mục này.',
+      messageEn: 'Could not undo this item.',
+    }
+  }
+  return {
+    ok: true,
+    messageVi: `Đã hoàn tác mục vừa thêm vào ${place}.`,
+    messageEn: `Undid the item just added to ${placeEn}.`,
+  }
 }
 
 /** Apply a consented intent on-device (pin tab + optional store write). */
@@ -142,7 +229,13 @@ export function applyAgentIntent(
   if (intent.action === 'add_item' && intent.target.kind === 'module') {
     const msg = addItem(practiceId, intent.target.id, intent.text ?? intent.summary)
     if (msg) {
-      return { ok: true, tabId, messageVi: msg.vi, messageEn: msg.en }
+      return {
+        ok: true,
+        tabId,
+        messageVi: msg.vi,
+        messageEn: msg.en,
+        undo: msg.undo,
+      }
     }
   }
 
@@ -155,8 +248,8 @@ export function applyAgentIntent(
     return {
       ok: true,
       tabId: 'assistant',
-      messageVi: 'Đã mở My AI để tóm tắt ngữ cảnh máy (cần xác nhận Token nếu hỏi AI).',
-      messageEn: 'Opened My AI to summarize on-device context (Token confirm if AI is used).',
+      messageVi: 'Đã mở My AI để tóm tắt ngữ cảnh trên máy.',
+      messageEn: 'Opened My AI to summarize on-device context.',
     }
   }
 
@@ -170,14 +263,25 @@ export function applyAgentIntent(
     return {
       ok: true,
       tabId: 'skills',
-      messageVi: 'Đã chuyển tới Skills — chọn kỹ năng và xác nhận Token để chạy.',
-      messageEn: 'Opened Skills — pick a skill and confirm Tokens to run.',
+      messageVi: 'Đã mở Skills — chọn kỹ năng rồi chạy khi sẵn sàng.',
+      messageEn: 'Opened Skills — pick a skill and run when ready.',
     }
   }
 
-  const openMsg = {
-    vi: `Đã chuyển tới tab tương ứng.`,
-    en: `Navigated to the matching tab.`,
+  if (intent.target.kind === 'module') {
+    const nameVi = workbenchModuleLabel(intent.target.id, true)
+    const nameEn = workbenchModuleLabel(intent.target.id, false)
+    return {
+      ok: true,
+      tabId,
+      messageVi: `Đã mở ${nameVi}.`,
+      messageEn: `Opened ${nameEn}.`,
+    }
   }
-  return { ok: true, tabId, messageVi: openMsg.vi, messageEn: openMsg.en }
+  return {
+    ok: true,
+    tabId,
+    messageVi: 'Đã chuyển tới tab tương ứng.',
+    messageEn: 'Navigated to the matching tab.',
+  }
 }

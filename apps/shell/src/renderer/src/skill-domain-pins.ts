@@ -3,13 +3,14 @@ import {
   isSkillDomainId,
   type SkillDomainId,
 } from '@uniwork/practice-core'
+import { wbStoreGetRaw, wbStoreSetRaw } from './workbench-store-client'
 
 const KEY = 'uniwork.skill.domain.pins'
 const ACTIVE_KEY = 'uniwork.skill.domain.active'
 
 export function readPinnedSkillDomains(): SkillDomainId[] {
   try {
-    const raw = localStorage.getItem(KEY)
+    const raw = wbStoreGetRaw(KEY)
     if (raw === null) return defaultPinnedSkillDomains()
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return defaultPinnedSkillDomains()
@@ -21,11 +22,7 @@ export function readPinnedSkillDomains(): SkillDomainId[] {
 }
 
 export function writePinnedSkillDomains(pins: SkillDomainId[]): void {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(pins))
-  } catch {
-    /* ignore */
-  }
+  wbStoreSetRaw(KEY, JSON.stringify(pins))
 }
 
 export function pinSkillDomain(id: SkillDomainId): SkillDomainId[] {
@@ -60,19 +57,11 @@ export function reorderPinnedSkillDomains(
 }
 
 export function readActiveSkillDomain(pins: SkillDomainId[]): SkillDomainId {
-  try {
-    const raw = localStorage.getItem(ACTIVE_KEY)
-    if (raw && isSkillDomainId(raw) && pins.includes(raw)) return raw
-  } catch {
-    /* ignore */
-  }
+  const raw = wbStoreGetRaw(ACTIVE_KEY)
+  if (raw && isSkillDomainId(raw) && pins.includes(raw)) return raw
   return pins[0] ?? 'education'
 }
 
 export function writeActiveSkillDomain(id: SkillDomainId): void {
-  try {
-    localStorage.setItem(ACTIVE_KEY, id)
-  } catch {
-    /* ignore */
-  }
+  wbStoreSetRaw(ACTIVE_KEY, id)
 }

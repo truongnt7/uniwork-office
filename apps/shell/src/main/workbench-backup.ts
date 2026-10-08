@@ -1,11 +1,12 @@
 /**
- * Local Workbench backup: ZIP containing SQLite DB (+ manifest).
+ * Local Workbench backup: ZIP containing SQLite DB (+ optional IndexedDB media).
  */
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { app, BrowserWindow, dialog } from 'electron'
 import JSZip from 'jszip'
+import type { WorkbenchIdbMediaDump } from '../shared/home-api'
 import { getWorkbenchDb, type WbKvMap } from './workbench-db'
 
 export interface WorkbenchBackupManifest {
@@ -14,14 +15,32 @@ export interface WorkbenchBackupManifest {
   createdAt: string
   app: 'shell'
   keyCount: number
+  /** Present when ZIP includes idb_media.json */
+  hasIdbMedia?: boolean
+}
+
+function isMediaDump(value: unknown): value is WorkbenchIdbMediaDump {
+  if (!value || typeof value !== 'object') return false
+  const v = value as WorkbenchIdbMediaDump
+  return (
+    v.version === 1 &&
+    typeof v.tasks === 'object' &&
+    v.tasks != null &&
+    typeof v.pets === 'object' &&
+    v.pets != null &&
+    typeof v.health === 'object' &&
+    v.health != null
+  )
 }
 
 export async function exportWorkbenchBackup(
   parent: BrowserWindow | null,
+  media?: WorkbenchIdbMediaDump | null,
 ): Promise<{ ok: true; path: string } | { ok: false; error: string; canceled?: boolean }> {
   try {
     const db = getWorkbenchDb(app.getPath('userData'))
     const keys = db.loadAll()
+    const hasMedia = isMediaDump(media)
     const zip = new JSZip()
     const manifest: WorkbenchBackupManifest = {
       version: 1,
@@ -29,9 +48,13 @@ export async function exportWorkbenchBackup(
       createdAt: new Date().toISOString(),
       app: 'shell',
       keyCount: Object.keys(keys).length,
+      ...(hasMedia ? { hasIdbMedia: true } : {}),
     }
     zip.file('manifest.json', JSON.stringify(manifest, null, 2))
     zip.file('wb_kv.json', JSON.stringify(keys))
+    if (hasMedia) {
+      zip.file('idb_media.json', JSON.stringify(media))
+    }
     // Also embed a raw copy of the sqlite file for forensics / future restores
     if (existsSync(db.dbPath)) {
       zip.file('workbench.sqlite', readFileSync(db.dbPath))
@@ -60,7 +83,7 @@ export async function exportWorkbenchBackup(
 export async function importWorkbenchBackup(
   parent: BrowserWindow | null,
 ): Promise<
-  | { ok: true; keyCount: number; keys: WbKvMap }
+  | { ok: true; keyCount: number; keys: WbKvMap; media?: WorkbenchIdbMediaDump }
   | { ok: false; error: string; canceled?: boolean }
 > {
   try {
@@ -98,6 +121,16 @@ export async function importWorkbenchBackup(
     const manifestEntry = zip.file('manifest.json')
     const kvEntry = zip.file('wb_kv.json')
     const sqliteEntry = zip.file('workbench.sqlite')
+    const mediaEntry = zip.file('idb_media.json')
+    let media: WorkbenchIdbMediaDump | undefined
+    if (mediaEntry) {
+      try {
+        const parsed: unknown = JSON.parse(await mediaEntry.async('string'))
+        if (isMediaDump(parsed)) media = parsed
+      } catch {
+        /* optional */
+      }
+    }
 
     if (manifestEntry) {
       const manifest = JSON.parse(await manifestEntry.async('string')) as WorkbenchBackupManifest
@@ -110,7 +143,7 @@ export async function importWorkbenchBackup(
       const keys = JSON.parse(await kvEntry.async('string')) as WbKvMap
       const n = db.replaceAll(keys)
       db.setMeta('migrated_from_localstorage', '1')
-      return { ok: true, keyCount: n, keys: db.loadAll() }
+      return { ok: true, keyCount: n, keys: db.loadAll(), ...(media ? { media } : {}) }
     }
 
     if (sqliteEntry) {
@@ -119,7 +152,12 @@ export async function importWorkbenchBackup(
         const incoming = join(dir, 'workbench.sqlite')
         writeFileSync(incoming, await sqliteEntry.async('nodebuffer'))
         db.replaceDatabaseFile(incoming)
-        return { ok: true, keyCount: db.keyCount(), keys: db.loadAll() }
+        return {
+          ok: true,
+          keyCount: db.keyCount(),
+          keys: db.loadAll(),
+          ...(media ? { media } : {}),
+        }
       } finally {
         try {
           rmSync(dir, { recursive: true, force: true })

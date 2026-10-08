@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
-import type { PracticeId } from '@uniwork/practice-core'
+import type { PracticeId, WorkbenchModuleId } from '@uniwork/practice-core'
 import { AiTypingIndicator, IconStop } from '@genoffice/ui'
-import { applyAgentIntent } from './agent-intent-apply'
+import { applyAgentIntent, undoAgentAddItem } from './agent-intent-apply'
 import { emitAgentIntentNavigate } from './agent-intent-bus'
 import { buildMyAiContextPack, type MyAiContextPack } from './context-manager'
 import { useI18n } from './locale'
@@ -15,8 +15,17 @@ import {
   mergeAttachmentResult,
   type AttachmentMeta,
 } from './my-ai-attachments'
-import { describeConsent, routeNeedsConsent } from './my-ai-consent'
+import {
+  describeConsent,
+  describeRouteDone,
+  routeNeedsConsent,
+  workbenchModuleLabel,
+} from './my-ai-consent'
 import { clearMyAiHistory, loadMyAiHistory, saveMyAiHistory } from './my-ai-history'
+import {
+  answerMyAiLocally,
+  buildLocalAnswerSnapshot,
+} from './my-ai-local-answer'
 import { practiceMyAiChips } from './my-ai-playbooks'
 import {
   isAmbiguousRecentMatch,
@@ -38,8 +47,8 @@ type ChatRole = 'user' | 'assistant' | 'system'
 interface ChatChoice {
   id: string
   label: string
-  /** Path to open, prompt text, or consent decision */
-  kind: 'open_path' | 'prompt' | 'confirm' | 'cancel'
+  /** Path to open, prompt text, consent, or soft-mutate undo */
+  kind: 'open_path' | 'prompt' | 'confirm' | 'cancel' | 'undo'
   value: string
 }
 
@@ -237,6 +246,8 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     steps: MyAiStep[]
     userText: string
     consentGranted: boolean
+    goalVi?: string
+    goalEn?: string
   } | null>(null)
   const turnAttachmentsRef = useRef<AttachmentMeta[]>([])
   const streamCancelRef = useRef<(() => void) | null>(null)
@@ -478,18 +489,20 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       const resume = pendingResumeRef.current
       pendingResumeRef.current = null
       if (resume && resume.steps.length > 0) {
+        // P4: soft ack — no “▶ continuing the rest / plan” language
         push({
           role: 'assistant',
-          text: label(
-            `Đã mở file: ${name}\n▶ Tiếp tục ${resume.steps.length} bước còn lại của plan…`,
-            `Opened: ${name}\n▶ Resuming ${resume.steps.length} remaining plan step(s)…`,
-          ),
+          text: label(`Đã mở “${name}”.`, `Opened “${name}”.`),
         })
+        const goalVi = resume.goalVi?.trim() || 'Hoàn thành phần còn lại'
+        const goalEn = resume.goalEn?.trim() || 'Finish the rest'
         const resumeRoute: MyAiRoute = {
           kind: 'plan',
           steps: resume.steps,
-          summaryVi: `Tiếp tục plan (${resume.steps.length} bước)`,
-          summaryEn: `Resume plan (${resume.steps.length} steps)`,
+          goalVi,
+          goalEn,
+          summaryVi: goalVi,
+          summaryEn: goalEn,
         }
         await runRoute(resumeRoute, resume.userText, {
           consentGranted: resume.consentGranted,
@@ -500,7 +513,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       }
       push({
         role: 'assistant',
-        text: label(`Đã mở file: ${name}`, `Opened: ${name}`),
+        text: label(`Đã mở “${name}”.`, `Opened “${name}”.`),
       })
     } catch (err) {
       pendingResumeRef.current = null
@@ -541,8 +554,27 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       }
       push({
         role: 'assistant',
-        text: label('Đã hủy — không chạy thao tác cần xác nhận.', 'Canceled — consent action not run.'),
+        text: label('Đã hủy.', 'Canceled.'),
       })
+      return
+    }
+    if (choice.kind === 'undo') {
+      try {
+        const parsed = JSON.parse(choice.value) as { moduleId: string; itemId: string }
+        const r = undoAgentAddItem(practiceId, {
+          moduleId: parsed.moduleId as WorkbenchModuleId,
+          itemId: parsed.itemId,
+        })
+        push({
+          role: 'assistant',
+          text: label(r.messageVi, r.messageEn),
+        })
+      } catch {
+        push({
+          role: 'assistant',
+          text: label('Không hoàn tác được.', 'Could not undo.'),
+        })
+      }
       return
     }
     if (choice.kind === 'confirm') {
@@ -596,13 +628,13 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       if (scored.length === 0) {
         return {
           text: label(
-            `Không thấy file gần đây khớp “${step.query}”. Thử tên ngắn hơn hoặc “Tìm file …”.`,
-            `No recent file matched “${step.query}”. Try a shorter name or “Find file …”.`,
+            `Chưa thấy “${step.query}” trong file gần đây. Thử tên ngắn hơn?`,
+            `No recent file like “${step.query}”. Try a shorter name?`,
           ),
           choices: [
             {
               id: 'search',
-              label: label(`Tìm file ${step.query}`, `Find file ${step.query}`),
+              label: label(`Tìm “${step.query}”`, `Find “${step.query}”`),
               kind: 'prompt',
               value: label(`Tìm file ${step.query}`, `Find file ${step.query}`),
             },
@@ -612,9 +644,14 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       }
       if (isAmbiguousRecentMatch(scored)) {
         return {
+          // P4: short ask — choices carry the list
           text: label(
-            `Có vài file khớp “${step.query}”. Chọn file cần mở:`,
-            `A few files match “${step.query}”. Pick one to open:`,
+            step.query.trim()
+              ? `Vài file khớp “${step.query}” — mở cái nào?`
+              : 'Mở file nào?',
+            step.query.trim()
+              ? `A few match “${step.query}” — which one?`
+              : 'Which file?',
           ),
           choices: scored.map((s) => ({
             id: s.entry.path,
@@ -629,7 +666,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       await window.aiOffice.openPath(best.path)
       const rest = scored.slice(1)
       return {
-        text: label(`Đã mở file: ${best.name}`, `Opened: ${best.name}`),
+        text: label(`Đã mở “${best.name}”.`, `Opened “${best.name}”.`),
         choices:
           rest.length > 0
             ? rest.map((s) => ({
@@ -647,19 +684,17 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       if (scored.length === 0) {
         return {
           text: label(
-            `Không tìm thấy file khớp “${step.query}” trong danh sách gần đây.`,
+            `Chưa thấy “${step.query}” trong file gần đây.`,
             `No recent files matched “${step.query}”.`,
           ),
           pausePlan: true,
         }
       }
-      const lines = scored
-        .map((s, i) => `${i + 1}. ${s.entry.name} (.${s.entry.ext})`)
-        .join('\n')
       return {
+        // P4: short ask — file buttons are the list (no Recent dump)
         text: label(
-          `Kết quả tìm (Recent):\n${lines}\n\nChọn file bên dưới để mở.`,
-          `Search results (Recent):\n${lines}\n\nPick a file below to open.`,
+          step.query.trim() ? `Mở file nào cho “${step.query}”?` : 'Mở file nào?',
+          step.query.trim() ? `Which file for “${step.query}”?` : 'Which file?',
         ),
         choices: scored.map((s) => ({
           id: s.entry.path,
@@ -899,13 +934,52 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     ensureWorkbench()
     const result = applyAgentIntent(step.intent, practiceId)
     emitAgentIntentNavigate(result.tabId, step.intent)
-    return {
-      text: label(
-        `${vi ? result.messageVi : result.messageEn}\n→ Workbench: ${result.tabId}`,
-        `${vi ? result.messageVi : result.messageEn}\n→ Workbench: ${result.tabId}`,
-      ),
-      contextUsed: true,
+    const tabName = workbenchModuleLabel(result.tabId, vi)
+    const openChoice: ChatChoice = {
+      id: `open-wb-${result.tabId}`,
+      label: label(`Mở ${tabName}`, `Open ${tabName}`),
+      kind: 'prompt',
+      value: label(`Mở tab ${tabName}`, `Open ${tabName} tab`),
     }
+    const choices: ChatChoice[] = result.undo
+      ? [
+          {
+            id: `undo-${result.undo.itemId}`,
+            label: label('Hoàn tác', 'Undo'),
+            kind: 'undo',
+            value: JSON.stringify(result.undo),
+          },
+          openChoice,
+        ]
+      : step.intent.action === 'add_item' ||
+          step.intent.action === 'open' ||
+          step.intent.action === 'navigate'
+        ? [openChoice]
+        : []
+    return {
+      text: label(result.messageVi, result.messageEn),
+      contextUsed: true,
+      ...(choices.length > 0 ? { choices } : {}),
+    }
+  }
+
+  /** Merge CTAs from plan steps: undos first, then unique open-tab / file picks. */
+  const mergePlanChoices = (outs: StepOutcome[]): ChatChoice[] | undefined => {
+    const undos: ChatChoice[] = []
+    const opens: ChatChoice[] = []
+    const rest: ChatChoice[] = []
+    const seen = new Set<string>()
+    for (const out of outs) {
+      for (const c of out.choices ?? []) {
+        if (seen.has(c.id)) continue
+        seen.add(c.id)
+        if (c.kind === 'undo') undos.push(c)
+        else if (c.id.startsWith('open-wb-') || c.kind === 'open_path') opens.push(c)
+        else rest.push(c)
+      }
+    }
+    const merged = [...undos, ...opens, ...rest]
+    return merged.length > 0 ? merged : undefined
   }
 
   const runRoute = async (
@@ -932,25 +1006,15 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       const needs = routeNeedsConsent(route)
       if (needs.length > 0 && !opts?.consentGranted) {
         pendingConsentRef.current = { route, userText }
-        const tokenish = needs.some((n) => n.reason === 'ai_token' || n.reason === 'deep_read')
         push({
           role: 'assistant',
           text:
             describeConsent(route, vi) +
-            label(
-              tokenish
-                ? '\n\nCho phép trên máy / dùng Token AI để tiếp tục?'
-                : '\n\nCho phép trên máy để tiếp tục? (Thêm mục Workbench cần xác nhận.)',
-              tokenish
-                ? '\n\nAllow on this device / use AI Tokens to continue?'
-                : '\n\nAllow on this device to continue? (Workbench adds need confirmation.)',
-            ),
+            label('\n\nLàm luôn?', '\n\nDo it now?'),
           choices: [
             {
               id: 'consent-ok',
-              label: tokenish
-                ? label('Cho phép · dùng Token', 'Allow · use Tokens')
-                : label('Cho phép trên máy', 'Allow on device'),
+              label: label('Làm luôn', 'Do it'),
               kind: 'confirm',
               value: 'ok',
             },
@@ -984,23 +1048,14 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       })
 
       if (route.kind === 'plan') {
-        const lines: string[] = [
-          opts?.resumeMode
-            ? label(
-                `▶ Tiếp tục plan — ${route.steps.length} bước:`,
-                `▶ Resuming plan — ${route.steps.length} step(s):`,
-              )
-            : label(`Đang chạy ${route.steps.length} bước:`, `Running ${route.steps.length} steps:`),
-          vi ? route.summaryVi : route.summaryEn,
-          '',
-        ]
-        let lastChoices: ChatChoice[] | undefined
+        const stepOuts: StepOutcome[] = []
         let contextUsed = false
         let paused = false
+        let completedSteps = 0
         for (let i = 0; i < route.steps.length; i++) {
           const step = route.steps[i]!
           const out = await executeStep(step, userText, entries, pack, { showAiBubble: false })
-          lines.push(`${i + 1}. ${out.text}`)
+          stepOuts.push(out)
           appendMyAiAudit({
             practiceId,
             userText,
@@ -1011,7 +1066,6 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
             consented: opts?.consentGranted === true || needs.length === 0,
           })
           if (out.contextUsed) contextUsed = true
-          if (out.choices?.length) lastChoices = out.choices
           if (out.pausePlan) {
             paused = true
             const remaining = route.steps.slice(i + 1)
@@ -1020,38 +1074,68 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
                 steps: remaining,
                 userText,
                 consentGranted: opts?.consentGranted === true || needs.length === 0,
+                goalVi: route.goalVi,
+                goalEn: route.goalEn,
               }
-              lines.push(
-                label(
-                  `\n⏸ Dừng plan — còn ${remaining.length} bước. Chọn file bên dưới để mở rồi plan sẽ tự chạy tiếp.`,
-                  `\n⏸ Plan paused — ${remaining.length} step(s) left. Pick a file below; the plan will resume automatically.`,
-                ),
-              )
-            } else if (remaining.length > 0) {
-              pendingResumeRef.current = null
-              lines.push(
-                label(
-                  `\n⏸ Dừng plan — còn ${remaining.length} bước. Gửi lại phần còn lại nếu cần.`,
-                  `\n⏸ Plan paused — ${remaining.length} step(s) left. Re-send the rest if needed.`,
-                ),
-              )
             } else {
               pendingResumeRef.current = null
             }
             break
           }
+          completedSteps++
         }
-        if (!paused) {
-          pendingResumeRef.current = null
-          lines.push(
-            label('\n✓ Đã xong các bước trong một câu.', '\n✓ Finished all steps from one request.'),
+        if (!paused) pendingResumeRef.current = null
+
+        // P2/P4 result card: one headline + CTAs (no plan-pause jargon)
+        const lastOut = stepOuts[stepOuts.length - 1]
+        const pickingFile =
+          paused && Boolean(lastOut?.choices?.some((c) => c.kind === 'open_path'))
+        let headline: string
+        let showDetail: boolean
+        if (pickingFile) {
+          // Soft ask — choice chips are the file list; skip “Chi tiết” dump
+          headline =
+            lastOut?.text?.trim() ||
+            describeRouteDone(route, vi, { paused: true })
+          showDetail = false
+        } else if (paused) {
+          // Blocked / not found — step copy is the message
+          headline =
+            lastOut?.text?.trim() ||
+            label('Chưa làm tiếp được.', 'Couldn’t continue yet.')
+          showDetail = false
+        } else {
+          headline = describeRouteDone(route, vi, {
+            completedSteps: route.steps.length,
+          })
+          const detailLines = stepOuts
+            .map((o) => o.text.trim())
+            .filter(Boolean)
+            .filter((t, idx, arr) => arr.indexOf(t) === idx)
+          showDetail = detailLines.some(
+            (t) =>
+              /không|no recent|không thấy|không tìm|chưa thấy|error|lỗi/i.test(t) ||
+              t.length > 120,
           )
+          const text =
+            headline +
+            (showDetail && detailLines.length > 0
+              ? `\n\n${label('Chi tiết:', 'Details:')}\n${detailLines.map((t) => `• ${t}`).join('\n')}`
+              : '')
+          push({
+            role: 'assistant',
+            text,
+            contextUsed,
+            choices: mergePlanChoices(stepOuts),
+          })
+          return
         }
+
         push({
           role: 'assistant',
-          text: lines.join('\n'),
+          text: headline,
           contextUsed,
-          choices: lastChoices,
+          choices: mergePlanChoices(stepOuts),
         })
         return
       }
@@ -1080,13 +1164,13 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
         return
       }
 
-      // unknown — local context first; Hub AI only after Token consent
-      let clarify = vi ? route.hintVi : route.hintEn
-      const pulse = pack.chunks
-        .filter((c) => ['tasks-open', 'calendar', 'recents'].includes(c.id))
-        .map((c) => `• ${c.text}`)
-        .join('\n')
-
+      // unknown — Local Q&A first; Hub AI only after Token consent (Settings model)
+      const localSnap = buildLocalAnswerSnapshot(
+        practiceId,
+        entries.slice(0, 8).map((e) => ({ name: e.name, ext: e.ext, mtimeMs: e.mtimeMs })),
+      )
+      const local = answerMyAiLocally(userText, localSnap, vi)
+      let clarify = local.text
       let usedAi = false
       let streamedMessageId: string | undefined
       const attachBlock = await collectAttachmentTextBlock(turnAttachmentsRef.current)
@@ -1096,8 +1180,8 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
           if (userText.length >= 8 || attachBlock || images.length > 0) {
             const res = await runStreamedAi({
               system: vi
-                ? `Bạn là Trợ lý UniWork trên desktop. Người dùng hỏi mơ hồ. Trả lời ngắn (≤4 câu) tiếng Việt: đoán ý, hỏi lại 1 câu clarify, đề xuất 2–3 hành động cụ thể (tạo Word / mở file / thêm việc / mở lịch). Chỉ dựa ngữ cảnh máy / tệp đính kèm — không bịa file.\n\n${pack.plainText.slice(0, 2_500)}`
-                : `You are UniWork desktop My AI. The user request is ambiguous. Reply briefly (≤4 sentences): best-guess intent, one clarifying question, and 2–3 concrete next actions (draft Word / open file / add task / open calendar). Use only on-device context / attachments — do not invent files.\n\n${pack.plainText.slice(0, 2_500)}`,
+                ? `Bạn là Trợ lý UniWork trên desktop. Trả lời ngắn (≤4 câu) tiếng Việt dựa ngữ cảnh máy / tệp đính kèm — không bịa file. Nếu chưa rõ, hỏi 1 câu và đề xuất 2–3 hành động (soạn Word / mở file / thêm việc / mở lịch).\n\n${pack.plainText.slice(0, 2_500)}`
+                : `You are UniWork desktop My AI. Reply briefly (≤4 sentences) using only on-device context / attachments — do not invent files. If unclear, ask one question and suggest 2–3 actions (draft Word / open file / add task / open calendar).\n\n${pack.plainText.slice(0, 2_500)}`,
               user: [userText, attachBlock ? `\n\nAttachments:\n${attachBlock}` : ''].join(''),
               images,
               showBubble: true,
@@ -1109,48 +1193,96 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
             }
           }
         } catch {
-          /* keep static hint */
+          /* keep local answer */
         }
       }
 
+      const topicChoices: ChatChoice[] = []
+      if (local.topic === 'calendar' || local.topic === 'pulse') {
+        topicChoices.push({
+          id: 'cal',
+          label: label('Mở lịch', 'Open calendar'),
+          kind: 'prompt',
+          value: label('Mở tab lịch của tôi', 'Open my calendar tab'),
+        })
+      }
+      if (local.topic === 'tasks' || local.topic === 'pulse') {
+        topicChoices.push({
+          id: 'task-open',
+          label: label('Mở việc', 'Open tasks'),
+          kind: 'prompt',
+          value: label('Mở tab công việc', 'Open tasks tab'),
+        })
+      }
+      if (local.topic === 'recents') {
+        topicChoices.push({
+          id: 'open',
+          label: label('Mở file…', 'Open file…'),
+          kind: 'prompt',
+          value: label('Mở file ', 'Open file '),
+        })
+      }
+      if (local.topic === 'notes') {
+        topicChoices.push({
+          id: 'notes',
+          label: label('Mở ghi chú', 'Open notes'),
+          kind: 'prompt',
+          value: label('Mở tab ghi chú', 'Open notes tab'),
+        })
+      }
+      if (local.topic === 'email') {
+        topicChoices.push({
+          id: 'email',
+          label: label('Mở email', 'Open email'),
+          kind: 'prompt',
+          value: label('Mở tab email', 'Open email tab'),
+        })
+      }
+
       const clarifyChoices: ChatChoice[] = [
+        ...topicChoices,
         {
           id: 'draft',
           label: label('Soạn Word…', 'Draft Word…'),
           kind: 'prompt',
           value: label('Soạn văn bản Word: ', 'Draft a Word doc: '),
         },
-        {
-          id: 'open',
-          label: label('Mở file…', 'Open file…'),
-          kind: 'prompt',
-          value: label('Mở file ', 'Open file '),
-        },
-        {
-          id: 'task',
-          label: label('Thêm việc…', 'Add a task…'),
-          kind: 'prompt',
-          value: label('Thêm công việc ', 'Add a task '),
-        },
-        {
-          id: 'cal',
-          label: label('Mở lịch', 'Open calendar'),
-          kind: 'prompt',
-          value: label('Mở tab lịch của tôi', 'Open my calendar tab'),
-        },
-        {
-          id: 'multi',
-          label: label('1 câu nhiều bước…', 'Multi-step…'),
-          kind: 'prompt',
-          value: label(
-            'Soạn báo giá Word và thêm công việc follow-up, mở tab Clients',
-            'Draft a Word quote and add a follow-up task, open Clients tab',
-          ),
-        },
+        ...(topicChoices.some((c) => c.id === 'open')
+          ? []
+          : [
+              {
+                id: 'open-generic',
+                label: label('Mở file…', 'Open file…'),
+                kind: 'prompt' as const,
+                value: label('Mở file ', 'Open file '),
+              },
+            ]),
+        ...(topicChoices.some((c) => c.id === 'task-open')
+          ? []
+          : [
+              {
+                id: 'task',
+                label: label('Thêm việc…', 'Add a task…'),
+                kind: 'prompt' as const,
+                value: label('Thêm công việc ', 'Add a task '),
+              },
+            ]),
       ]
-      if (!usedAi && (userText.length >= 8 || turnAttachmentsRef.current.length > 0)) {
+      // Dedupe by id
+      const seenChoice = new Set<string>()
+      const uniqueChoices = clarifyChoices.filter((c) => {
+        if (seenChoice.has(c.id)) return false
+        seenChoice.add(c.id)
+        return true
+      })
+
+      const offerAi =
+        !usedAi &&
+        local.offerAi &&
+        (userText.length >= 8 || turnAttachmentsRef.current.length > 0)
+      if (offerAi) {
         pendingConsentRef.current = { route, userText }
-        clarifyChoices.unshift({
+        uniqueChoices.unshift({
           id: 'ai-clarify',
           label: label('Làm rõ bằng AI (Token)', 'Clarify with AI (Tokens)'),
           kind: 'confirm',
@@ -1160,29 +1292,31 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
 
       const text =
         clarify +
-        (pulse
-          ? label(`\n\nNgữ cảnh hiện tại:\n${pulse}`, `\n\nCurrent context:\n${pulse}`)
-          : '') +
         (usedAi
           ? contextFootnote(vi)
-          : label(
-              '\n\n_(Gợi ý cục bộ — chưa gọi Hub AI. Bấm “Làm rõ bằng AI” nếu muốn dùng Token.)_',
-              '\n\n_(Local hint — Hub AI not called. Tap “Clarify with AI” to spend Tokens.)_',
-            ))
+          : local.topic === 'fallback' || local.topic === 'off_topic'
+            ? label(
+                '\n\n_(Trên máy — chưa dùng Token. Bấm “Làm rõ bằng AI” nếu cần.)_',
+                '\n\n_(On-device — no Tokens used. Tap “Clarify with AI” if needed.)_',
+              )
+            : label(
+                '\n\n_(Trả lời trên máy — chưa dùng Token.)_',
+                '\n\n_(Answered on-device — no Tokens used.)_',
+              ))
 
       if (streamedMessageId) {
         patchMessage(streamedMessageId, {
           text,
-          contextUsed: true,
-          choices: clarifyChoices,
+          contextUsed: usedAi || local.contextUsed,
+          choices: uniqueChoices,
           streaming: false,
         })
       } else {
         push({
           role: 'assistant',
           text,
-          contextUsed: true,
-          choices: clarifyChoices,
+          contextUsed: usedAi || local.contextUsed,
+          choices: uniqueChoices,
         })
       }
     } catch (err) {
@@ -1258,8 +1392,8 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
           <strong>{label('Trợ lý của bạn', 'My AI')}</strong>
           <span>
             {label(
-              'Lưu theo vai · resume plan · xác nhận Token / đọc sâu / thêm mục.',
-              'Saved per role · resume plans · confirm Tokens / deep-read / adds.',
+              'Lưu theo vai · thêm mục trên máy có Hoàn tác · AI/Token hỏi trước khi chạy.',
+              'Saved per role · on-device adds support Undo · AI/Tokens ask first.',
             )}
           </span>
         </div>

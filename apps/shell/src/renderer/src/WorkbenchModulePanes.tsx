@@ -181,11 +181,13 @@ function FormsPane({
 }): ReactElement {
   const label = (a: string, b: string) => (vi ? a : b)
   const [items, setItems] = useState<WbFormItem[]>(() => readForms(practiceId))
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [note, setNote] = useState('')
 
   useEffect(() => {
     setItems(readForms(practiceId))
+    setEditingId(null)
   }, [practiceId])
 
   const persist = (next: WbFormItem[]) => {
@@ -193,20 +195,38 @@ function FormsPane({
     writeForms(practiceId, next)
   }
 
-  const add = () => {
-    const t = title.trim()
-    if (!t) return
-    persist([
-      {
-        id: newId(),
-        title: t,
-        ...(note.trim() ? { note: note.trim() } : {}),
-        ...(packId ? { linkedProjectId: packId } : {}),
-      },
-      ...items,
-    ])
+  const clearForm = () => {
+    setEditingId(null)
     setTitle('')
     setNote('')
+  }
+
+  const startEdit = (it: WbFormItem) => {
+    setEditingId(it.id)
+    setTitle(it.title)
+    setNote(it.note ?? '')
+  }
+
+  const save = () => {
+    const t = title.trim()
+    if (!t) return
+    const existing = editingId ? items.find((x) => x.id === editingId) : undefined
+    const row: WbFormItem = {
+      id: editingId ?? newId(),
+      title: t,
+      ...(note.trim() ? { note: note.trim() } : {}),
+      ...(existing?.linkedProjectId
+        ? { linkedProjectId: existing.linkedProjectId }
+        : packId
+          ? { linkedProjectId: packId }
+          : {}),
+    }
+    if (editingId) {
+      persist(items.map((x) => (x.id === editingId ? row : x)))
+    } else {
+      persist([row, ...items])
+    }
+    clearForm()
   }
 
   const openForm = async (item: WbFormItem) => {
@@ -258,7 +278,7 @@ function FormsPane({
             onChange={(e) => setTitle(e.target.value)}
             placeholder={label('VD: Đơn xin nghỉ phép', 'e.g. Leave request')}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') add()
+              if (e.key === 'Enter') save()
             }}
           />
         </label>
@@ -266,9 +286,16 @@ function FormsPane({
           <span>{label('Ghi chú (tuỳ chọn)', 'Note (optional)')}</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm vào thư viện', 'Add to library')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={save}>
+            {editingId ? label('Lưu biểu mẫu', 'Save form') : label('Thêm vào thư viện', 'Add to library')}
+          </button>
+          {editingId ? (
+            <button type="button" className="btn btn-secondary" onClick={clearForm}>
+              {label('Huỷ sửa', 'Cancel edit')}
+            </button>
+          ) : null}
+        </div>
       </div>
       <ul className="wb-module-list">
         {items.length === 0 ? (
@@ -288,6 +315,9 @@ function FormsPane({
                   ) : null}
                 </div>
                 <div className="teacher-chip-row">
+                  <button type="button" className="btn btn-secondary" onClick={() => startEdit(it)}>
+                    {label('Sửa', 'Edit')}
+                  </button>
                   <button
                     type="button"
                     className="btn btn-primary"
@@ -304,7 +334,10 @@ function FormsPane({
                   <button
                     type="button"
                     className="btn btn-secondary"
-                    onClick={() => persist(items.filter((x) => x.id !== it.id))}
+                    onClick={() => {
+                      if (editingId === it.id) clearForm()
+                      persist(items.filter((x) => x.id !== it.id))
+                    }}
                   >
                     {label('Xóa', 'Delete')}
                   </button>
@@ -1102,6 +1135,7 @@ function ContractsPane({
 }): ReactElement {
   const label = (a: string, b: string) => (vi ? a : b)
   const [items, setItems] = useState<WbContractItem[]>(() => readContracts(practiceId))
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [party, setParty] = useState('')
   const [startDate, setStartDate] = useState('')
@@ -1111,6 +1145,7 @@ function ContractsPane({
 
   useEffect(() => {
     setItems(readContracts(practiceId))
+    setEditingId(null)
   }, [practiceId])
 
   const persist = (next: WbContractItem[]) => {
@@ -1131,28 +1166,50 @@ function ContractsPane({
     }
   }
 
-  const add = () => {
-    const t = title.trim()
-    if (!t) return
-    persist([
-      {
-        id: newId(),
-        title: t,
-        status,
-        ...(party.trim() ? { party: party.trim() } : {}),
-        ...(startDate ? { startDate } : {}),
-        ...(endDate ? { endDate } : {}),
-        ...(note.trim() ? { note: note.trim() } : {}),
-        ...(packId ? { linkedProjectId: packId } : {}),
-      },
-      ...items,
-    ])
+  const clearForm = () => {
+    setEditingId(null)
     setTitle('')
     setParty('')
     setStartDate('')
     setEndDate('')
     setNote('')
     setStatus('draft')
+  }
+
+  const startEdit = (it: WbContractItem) => {
+    setEditingId(it.id)
+    setTitle(it.title)
+    setParty(it.party ?? '')
+    setStartDate(it.startDate ?? '')
+    setEndDate(it.endDate ?? '')
+    setStatus(it.status)
+    setNote(it.note ?? '')
+  }
+
+  const save = () => {
+    const t = title.trim()
+    if (!t) return
+    const existing = editingId ? items.find((x) => x.id === editingId) : undefined
+    const row: WbContractItem = {
+      id: editingId ?? newId(),
+      title: t,
+      status,
+      ...(party.trim() ? { party: party.trim() } : {}),
+      ...(startDate ? { startDate } : {}),
+      ...(endDate ? { endDate } : {}),
+      ...(note.trim() ? { note: note.trim() } : {}),
+      ...(existing?.linkedProjectId
+        ? { linkedProjectId: existing.linkedProjectId }
+        : packId
+          ? { linkedProjectId: packId }
+          : {}),
+    }
+    if (editingId) {
+      persist(items.map((x) => (x.id === editingId ? row : x)))
+    } else {
+      persist([row, ...items])
+    }
+    clearForm()
   }
 
   const openDraft = async (item: WbContractItem) => {
@@ -1198,7 +1255,7 @@ function ContractsPane({
             onChange={(e) => setTitle(e.target.value)}
             placeholder={label('VD: HĐ thuê văn phòng', 'e.g. Office lease')}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') add()
+              if (e.key === 'Enter') save()
             }}
           />
         </label>
@@ -1227,9 +1284,16 @@ function ContractsPane({
           <span>{label('Ghi chú', 'Note')}</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm hợp đồng', 'Add contract')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={save}>
+            {editingId ? label('Lưu hợp đồng', 'Save contract') : label('Thêm hợp đồng', 'Add contract')}
+          </button>
+          {editingId ? (
+            <button type="button" className="btn btn-secondary" onClick={clearForm}>
+              {label('Huỷ sửa', 'Cancel edit')}
+            </button>
+          ) : null}
+        </div>
       </div>
       <ul className="wb-module-list">
         {items.length === 0 ? (
@@ -1256,6 +1320,9 @@ function ContractsPane({
                   ) : null}
                 </div>
                 <div className="teacher-chip-row">
+                  <button type="button" className="btn btn-secondary" onClick={() => startEdit(it)}>
+                    {label('Sửa', 'Edit')}
+                  </button>
                   <button
                     type="button"
                     className="btn btn-primary"
@@ -1272,7 +1339,10 @@ function ContractsPane({
                   <button
                     type="button"
                     className="btn btn-secondary"
-                    onClick={() => persist(items.filter((x) => x.id !== it.id))}
+                    onClick={() => {
+                      if (editingId === it.id) clearForm()
+                      persist(items.filter((x) => x.id !== it.id))
+                    }}
                   >
                     {label('Xóa', 'Delete')}
                   </button>
@@ -1299,6 +1369,7 @@ function MattersPane({
 }): ReactElement {
   const label = (a: string, b: string) => (vi ? a : b)
   const [items, setItems] = useState<WbMatterItem[]>(() => readMatters(practiceId))
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [client, setClient] = useState('')
   const [matterType, setMatterType] = useState(vi ? 'Hợp đồng' : 'Contract')
@@ -1308,6 +1379,7 @@ function MattersPane({
 
   useEffect(() => {
     setItems(readMatters(practiceId))
+    setEditingId(null)
   }, [practiceId])
 
   const persist = (next: WbMatterItem[]) => {
@@ -1326,27 +1398,50 @@ function MattersPane({
     }
   }
 
-  const add = () => {
-    const t = title.trim()
-    if (!t) return
-    persist([
-      {
-        id: newId(),
-        title: t,
-        status,
-        ...(client.trim() ? { client: client.trim() } : {}),
-        ...(matterType.trim() ? { matterType: matterType.trim() } : {}),
-        ...(nextDate ? { nextDate } : {}),
-        ...(note.trim() ? { note: note.trim() } : {}),
-        ...(packId ? { linkedProjectId: packId } : {}),
-      },
-      ...items,
-    ])
+  const clearForm = () => {
+    setEditingId(null)
     setTitle('')
     setClient('')
+    setMatterType(vi ? 'Hợp đồng' : 'Contract')
     setNextDate('')
     setNote('')
     setStatus('open')
+  }
+
+  const startEdit = (it: WbMatterItem) => {
+    setEditingId(it.id)
+    setTitle(it.title)
+    setClient(it.client ?? '')
+    setMatterType(it.matterType ?? (vi ? 'Hợp đồng' : 'Contract'))
+    setStatus(it.status)
+    setNextDate(it.nextDate ?? '')
+    setNote(it.note ?? '')
+  }
+
+  const save = () => {
+    const t = title.trim()
+    if (!t) return
+    const existing = editingId ? items.find((x) => x.id === editingId) : undefined
+    const row: WbMatterItem = {
+      id: editingId ?? newId(),
+      title: t,
+      status,
+      ...(client.trim() ? { client: client.trim() } : {}),
+      ...(matterType.trim() ? { matterType: matterType.trim() } : {}),
+      ...(nextDate ? { nextDate } : {}),
+      ...(note.trim() ? { note: note.trim() } : {}),
+      ...(existing?.linkedProjectId
+        ? { linkedProjectId: existing.linkedProjectId }
+        : packId
+          ? { linkedProjectId: packId }
+          : {}),
+    }
+    if (editingId) {
+      persist(items.map((x) => (x.id === editingId ? row : x)))
+    } else {
+      persist([row, ...items])
+    }
+    clearForm()
   }
 
   const openBrief = async (item: WbMatterItem) => {
@@ -1398,7 +1493,7 @@ function MattersPane({
             onChange={(e) => setTitle(e.target.value)}
             placeholder={label('VD: Tranh chấp HĐ mua bán', 'e.g. Sales contract dispute')}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') add()
+              if (e.key === 'Enter') save()
             }}
           />
         </label>
@@ -1435,9 +1530,16 @@ function MattersPane({
           <span>{label('Ghi chú', 'Note')}</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm vụ việc', 'Add matter')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={save}>
+            {editingId ? label('Lưu vụ việc', 'Save matter') : label('Thêm vụ việc', 'Add matter')}
+          </button>
+          {editingId ? (
+            <button type="button" className="btn btn-secondary" onClick={clearForm}>
+              {label('Huỷ sửa', 'Cancel edit')}
+            </button>
+          ) : null}
+        </div>
       </div>
       <ul className="wb-module-list">
         {items.length === 0 ? (
@@ -1464,6 +1566,9 @@ function MattersPane({
                   ) : null}
                 </div>
                 <div className="teacher-chip-row">
+                  <button type="button" className="btn btn-secondary" onClick={() => startEdit(it)}>
+                    {label('Sửa', 'Edit')}
+                  </button>
                   <button
                     type="button"
                     className="btn btn-primary"
@@ -1480,7 +1585,10 @@ function MattersPane({
                   <button
                     type="button"
                     className="btn btn-secondary"
-                    onClick={() => persist(items.filter((x) => x.id !== it.id))}
+                    onClick={() => {
+                      if (editingId === it.id) clearForm()
+                      persist(items.filter((x) => x.id !== it.id))
+                    }}
                   >
                     {label('Xóa', 'Delete')}
                   </button>

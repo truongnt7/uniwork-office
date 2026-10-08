@@ -300,6 +300,14 @@ export interface HomeApi {
   wb: WorkbenchStoreApi
 }
 
+/** IndexedDB media blobs embedded in Workbench ZIP backup (optional). */
+export interface WorkbenchIdbMediaDump {
+  version: 1
+  tasks: Record<string, string>
+  pets: Record<string, string>
+  health: Record<string, string>
+}
+
 /** Renderer ↔ main bridge for Workbench key/value persistence. */
 export interface WorkbenchStoreApi {
   loadAll(): Promise<{ keys: Record<string, string>; keyCount: number; dbPath: string }>
@@ -307,11 +315,17 @@ export interface WorkbenchStoreApi {
   setKey(key: string, value: string): Promise<void>
   removeKey(key: string): Promise<void>
   importKeys(keys: Record<string, string>): Promise<{ imported: number }>
-  exportBackup(): Promise<{ ok: boolean; path?: string; error?: string; canceled?: boolean }>
+  exportBackup(media?: WorkbenchIdbMediaDump | null): Promise<{
+    ok: boolean
+    path?: string
+    error?: string
+    canceled?: boolean
+  }>
   importBackup(): Promise<{
     ok: boolean
     keyCount?: number
     keys?: Record<string, string>
+    media?: WorkbenchIdbMediaDump
     error?: string
     canceled?: boolean
   }>

@@ -4,9 +4,11 @@
  */
 import {
   createAgentIntent,
+  getWorkbenchModule,
   resolveAgentIntentFromText,
   type AgentIntent,
   type PracticeId,
+  type WorkbenchModuleId,
 } from '@uniwork/practice-core'
 import type { RecentEntry } from '../../shared/home-api'
 import { matchPracticePlaybook } from './my-ai-playbooks'
@@ -53,6 +55,13 @@ export type MyAiRoute =
   | {
       kind: 'plan'
       steps: MyAiStep[]
+      /**
+       * P3 — one user-facing goal (not a step pipeline).
+       * Internal `steps` still run in order; UI only shows this goal.
+       */
+      goalVi: string
+      goalEn: string
+      /** @deprecated alias of goal — kept for older call sites / resume */
       summaryVi: string
       summaryEn: string
       /** Phase C playbook id when matched */
@@ -356,18 +365,163 @@ function dedupeSteps(steps: MyAiStep[]): MyAiStep[] {
   return out
 }
 
-function labelStep(step: MyAiStep, vi: boolean): string {
-  if (step.kind === 'create_file') {
-    const app = officeAppLabel(step.app, vi)
-    return vi ? `Tạo ${app}` : `Create ${app}`
+function moduleLabel(id: string, vi: boolean): string {
+  const meta = getWorkbenchModule(id as WorkbenchModuleId)
+  if (meta) return vi ? meta.labelVi : meta.labelEn
+  return id
+}
+
+/**
+ * Collapse internal steps into one human goal (P3).
+ * Prefer playbook title; else pattern-match common combos.
+ */
+export function synthesizePlanGoal(
+  steps: MyAiStep[],
+  opts?: { playbookLabelVi?: string; playbookLabelEn?: string },
+): { goalVi: string; goalEn: string } {
+  if (opts?.playbookLabelVi || opts?.playbookLabelEn) {
+    return {
+      goalVi: opts.playbookLabelVi ?? opts.playbookLabelEn ?? 'Hoàn thành yêu cầu',
+      goalEn: opts.playbookLabelEn ?? opts.playbookLabelVi ?? 'Complete the request',
+    }
   }
-  if (step.kind === 'open_file') return vi ? `Mở file “${step.query}”` : `Open file “${step.query}”`
-  if (step.kind === 'search_files')
-    return vi ? `Tìm file “${step.query}”` : `Find file “${step.query}”`
-  if (step.kind === 'summarize_recents') return vi ? 'Tóm tắt Recent' : 'Summarize Recents'
-  if (step.kind === 'continue_active') return vi ? 'Tiếp tục tab' : 'Continue tab'
-  if (step.kind === 'summarize_active') return vi ? 'Tóm tắt tab đang mở' : 'Summarize open tab'
-  return step.intent.summary || (vi ? 'Workbench' : 'Workbench')
+
+  const creates = steps.filter((s): s is Extract<MyAiStep, { kind: 'create_file' }> => s.kind === 'create_file')
+  const adds = steps.filter(
+    (s): s is Extract<MyAiStep, { kind: 'workbench' }> =>
+      s.kind === 'workbench' && s.intent.action === 'add_item',
+  )
+  const opens = steps.filter(
+    (s): s is Extract<MyAiStep, { kind: 'workbench' }> =>
+      s.kind === 'workbench' && (s.intent.action === 'open' || s.intent.action === 'navigate'),
+  )
+  const hasSummarize = steps.some(
+    (s) => s.kind === 'summarize_recents' || s.kind === 'summarize_active',
+  )
+  const hasContinue = steps.some((s) => s.kind === 'continue_active')
+  const hasOpenFile = steps.some((s) => s.kind === 'open_file' || s.kind === 'search_files')
+
+  const addNamesVi = [
+    ...new Set(
+      adds
+        .map((s) => (s.intent.target.kind === 'module' ? moduleLabel(s.intent.target.id, true) : null))
+        .filter(Boolean),
+    ),
+  ] as string[]
+  const addNamesEn = [
+    ...new Set(
+      adds
+        .map((s) => (s.intent.target.kind === 'module' ? moduleLabel(s.intent.target.id, false) : null))
+        .filter(Boolean),
+    ),
+  ] as string[]
+  const openNamesVi = [
+    ...new Set(
+      opens
+        .map((s) => (s.intent.target.kind === 'module' ? moduleLabel(s.intent.target.id, true) : null))
+        .filter(Boolean),
+    ),
+  ] as string[]
+  const openNamesEn = [
+    ...new Set(
+      opens
+        .map((s) => (s.intent.target.kind === 'module' ? moduleLabel(s.intent.target.id, false) : null))
+        .filter(Boolean),
+    ),
+  ] as string[]
+
+  const joinVi = (xs: string[]) =>
+    xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} và ${xs[xs.length - 1]}`
+  const joinEn = (xs: string[]) =>
+    xs.length <= 1 ? (xs[0] ?? '') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`
+
+  if (hasSummarize && addNamesVi.length > 0) {
+    return {
+      goalVi: `Tóm tắt ngữ cảnh và lưu vào ${joinVi(addNamesVi)}`,
+      goalEn: `Summarize context and save to ${joinEn(addNamesEn)}`,
+    }
+  }
+
+  if (creates.length > 0 && (adds.length > 0 || opens.length > 0)) {
+    const app = officeAppLabel(creates[0]!.app, true)
+    const appEn = officeAppLabel(creates[0]!.app, false)
+    const tailVi = [...addNamesVi, ...openNamesVi.filter((n) => !addNamesVi.includes(n))]
+    const tailEn = [...addNamesEn, ...openNamesEn.filter((n) => !addNamesEn.includes(n))]
+    if (tailVi.length > 0) {
+      return {
+        goalVi: `Soạn ${app} và cập nhật ${joinVi(tailVi)}`,
+        goalEn: `Draft ${appEn} and update ${joinEn(tailEn)}`,
+      }
+    }
+    return {
+      goalVi: `Soạn ${app}`,
+      goalEn: `Draft ${appEn}`,
+    }
+  }
+
+  if (adds.length > 0 && opens.length > 0) {
+    return {
+      goalVi: `Cập nhật ${joinVi(addNamesVi)} và mở ${joinVi(openNamesVi)}`,
+      goalEn: `Update ${joinEn(addNamesEn)} and open ${joinEn(openNamesEn)}`,
+    }
+  }
+
+  if (adds.length >= 2) {
+    return {
+      goalVi: `Cập nhật ${joinVi(addNamesVi)}`,
+      goalEn: `Update ${joinEn(addNamesEn)}`,
+    }
+  }
+
+  if (hasContinue && creates.length === 0) {
+    return {
+      goalVi: 'Tiếp tục trên tài liệu đang mở',
+      goalEn: 'Continue on the open document',
+    }
+  }
+
+  if (hasOpenFile && adds.length > 0) {
+    return {
+      goalVi: `Mở file và cập nhật ${joinVi(addNamesVi)}`,
+      goalEn: `Open a file and update ${joinEn(addNamesEn)}`,
+    }
+  }
+
+  // Fallback: short goal from first + last step kinds — still one phrase, not a pipeline dump
+  if (creates.length > 0) {
+    const app = officeAppLabel(creates[0]!.app, true)
+    const appEn = officeAppLabel(creates[0]!.app, false)
+    return { goalVi: `Soạn ${app}`, goalEn: `Draft ${appEn}` }
+  }
+  if (addNamesVi.length === 1) {
+    return {
+      goalVi: `Cập nhật ${addNamesVi[0]}`,
+      goalEn: `Update ${addNamesEn[0]}`,
+    }
+  }
+  return {
+    goalVi: 'Hoàn thành yêu cầu của bạn',
+    goalEn: 'Complete your request',
+  }
+}
+
+function makePlan(
+  steps: MyAiStep[],
+  extra?: { playbookId?: string; playbookLabelVi?: string; playbookLabelEn?: string },
+): Extract<MyAiRoute, { kind: 'plan' }> {
+  const { goalVi, goalEn } = synthesizePlanGoal(steps, {
+    playbookLabelVi: extra?.playbookLabelVi,
+    playbookLabelEn: extra?.playbookLabelEn,
+  })
+  return {
+    kind: 'plan',
+    steps,
+    goalVi,
+    goalEn,
+    summaryVi: goalVi,
+    summaryEn: goalEn,
+    ...(extra?.playbookId ? { playbookId: extra.playbookId } : {}),
+  }
 }
 
 function tryBuildPlan(raw: string): Extract<MyAiRoute, { kind: 'plan' }> | null {
@@ -405,14 +559,7 @@ function tryBuildPlan(raw: string): Extract<MyAiRoute, { kind: 'plan' }> | null 
     if (!(steps.every((s) => s.kind === 'workbench') && steps.length >= 2)) return null
   }
 
-  const labelsVi = steps.map((s) => labelStep(s, true)).join(' → ')
-  const labelsEn = steps.map((s) => labelStep(s, false)).join(' → ')
-  return {
-    kind: 'plan',
-    steps,
-    summaryVi: `${steps.length} bước: ${labelsVi}`,
-    summaryEn: `${steps.length} steps: ${labelsEn}`,
-  }
+  return makePlan(steps)
 }
 
 /**
@@ -570,15 +717,11 @@ export function routeMyAiText(text: string, opts?: RouteMyAiOptions): MyAiRoute 
   if (opts?.practiceId) {
     const hit = matchPracticePlaybook(opts.practiceId, raw)
     if (hit) {
-      const labelsVi = hit.steps.map((s) => labelStep(s, true)).join(' → ')
-      const labelsEn = hit.steps.map((s) => labelStep(s, false)).join(' → ')
-      return {
-        kind: 'plan',
-        steps: hit.steps,
+      return makePlan(hit.steps, {
         playbookId: hit.playbook.id,
-        summaryVi: `${hit.playbook.labelVi}: ${labelsVi}`,
-        summaryEn: `${hit.playbook.labelEn}: ${labelsEn}`,
-      }
+        playbookLabelVi: hit.playbook.labelVi,
+        playbookLabelEn: hit.playbook.labelEn,
+      })
     }
   }
 

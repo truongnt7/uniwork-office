@@ -1,4 +1,5 @@
 import type { PracticeId } from '@uniwork/practice-core'
+import { wbStoreGetRaw, wbStoreSetRaw } from './workbench-store-client'
 
 /** Dashboard widget ids for Tab My Space (module id: desk). */
 export type DeskWidgetId =
@@ -186,7 +187,7 @@ export function isDeskWidgetId(value: unknown): value is DeskWidgetId {
 
 export function readDeskLayout(practiceId: PracticeId): DeskWidgetId[] {
   try {
-    const raw = localStorage.getItem(LAYOUT_PREFIX + practiceId)
+    const raw = wbStoreGetRaw(LAYOUT_PREFIX + practiceId)
     if (raw === null) return defaultDeskLayout()
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return defaultDeskLayout()
@@ -198,11 +199,7 @@ export function readDeskLayout(practiceId: PracticeId): DeskWidgetId[] {
 }
 
 export function writeDeskLayout(practiceId: PracticeId, ids: DeskWidgetId[]): void {
-  try {
-    localStorage.setItem(LAYOUT_PREFIX + practiceId, JSON.stringify(ids))
-  } catch {
-    /* ignore */
-  }
+  wbStoreSetRaw(LAYOUT_PREFIX + practiceId, JSON.stringify(ids))
 }
 
 export function monthKey(d: Date | string): string {

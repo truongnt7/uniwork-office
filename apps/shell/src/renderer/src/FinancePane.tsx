@@ -68,6 +68,7 @@ export function FinancePane({ vi }: { vi: boolean }): ReactElement {
 function GoalsSub({ vi }: { vi: boolean }): ReactElement {
   const label = (a: string, b: string) => (vi ? a : b)
   const [items, setItems] = useState<WbFinanceGoal[]>(() => readFinanceGoals())
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [targetAmount, setTargetAmount] = useState('')
   const [currentAmount, setCurrentAmount] = useState('0')
@@ -79,29 +80,46 @@ function GoalsSub({ vi }: { vi: boolean }): ReactElement {
     writeFinanceGoals(next)
   }
 
-  const add = () => {
+  const clearForm = () => {
+    setEditingId(null)
+    setTitle('')
+    setTargetAmount('')
+    setCurrentAmount('0')
+    setDeadline('')
+    setNote('')
+  }
+
+  const startEdit = (g: WbFinanceGoal) => {
+    setEditingId(g.id)
+    setTitle(g.title)
+    setTargetAmount(String(g.targetAmount))
+    setCurrentAmount(String(g.currentAmount))
+    setDeadline(g.deadline ?? '')
+    setNote(g.note ?? '')
+  }
+
+  const save = () => {
     const t = title.trim()
     const target = Number(targetAmount)
     const current = Number(currentAmount || '0')
     if (!t || !Number.isFinite(target) || target <= 0 || !Number.isFinite(current) || current < 0) {
       return
     }
-    persist([
-      {
-        id: newId(),
-        title: t,
-        targetAmount: target,
-        currentAmount: current,
-        done: current >= target,
-        ...(deadline ? { deadline } : {}),
-        ...(note.trim() ? { note: note.trim() } : {}),
-      },
-      ...items,
-    ])
-    setTitle('')
-    setTargetAmount('')
-    setCurrentAmount('0')
-    setNote('')
+    const row: WbFinanceGoal = {
+      id: editingId ?? newId(),
+      title: t,
+      targetAmount: target,
+      currentAmount: current,
+      done: current >= target,
+      ...(deadline ? { deadline } : {}),
+      ...(note.trim() ? { note: note.trim() } : {}),
+    }
+    if (editingId) {
+      persist(items.map((x) => (x.id === editingId ? row : x)))
+    } else {
+      persist([row, ...items])
+    }
+    clearForm()
   }
 
   const bump = (id: string, delta: number) => {
@@ -145,7 +163,7 @@ function GoalsSub({ vi }: { vi: boolean }): ReactElement {
             onChange={(e) => setTitle(e.target.value)}
             placeholder={label('VD: Quỹ khẩn cấp 6 tháng', 'e.g. 6-month emergency fund')}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') add()
+              if (e.key === 'Enter') save()
             }}
           />
         </label>
@@ -174,9 +192,16 @@ function GoalsSub({ vi }: { vi: boolean }): ReactElement {
           <span>{label('Ghi chú', 'Note')}</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm mục tiêu', 'Add goal')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={save}>
+            {editingId ? label('Lưu mục tiêu', 'Save goal') : label('Thêm mục tiêu', 'Add goal')}
+          </button>
+          {editingId ? (
+            <button type="button" className="btn btn-secondary" onClick={clearForm}>
+              {label('Huỷ sửa', 'Cancel edit')}
+            </button>
+          ) : null}
+        </div>
       </div>
       <ul className="wb-module-list">
         {items.length === 0 ? (
@@ -205,6 +230,9 @@ function GoalsSub({ vi }: { vi: boolean }): ReactElement {
                   <span className="teacher-hint">{pct}%</span>
                 </div>
                 <div className="teacher-chip-row">
+                  <button type="button" className="btn btn-secondary" onClick={() => startEdit(g)}>
+                    {label('Sửa', 'Edit')}
+                  </button>
                   <button type="button" className="btn btn-secondary" onClick={() => bump(g.id, 500_000)}>
                     +500k
                   </button>
@@ -214,7 +242,10 @@ function GoalsSub({ vi }: { vi: boolean }): ReactElement {
                   <button
                     type="button"
                     className="btn btn-secondary"
-                    onClick={() => persist(items.filter((x) => x.id !== g.id))}
+                    onClick={() => {
+                      if (editingId === g.id) clearForm()
+                      persist(items.filter((x) => x.id !== g.id))
+                    }}
                   >
                     {label('Xóa', 'Delete')}
                   </button>
@@ -231,6 +262,7 @@ function GoalsSub({ vi }: { vi: boolean }): ReactElement {
 function SpendingSub({ vi }: { vi: boolean }): ReactElement {
   const label = (a: string, b: string) => (vi ? a : b)
   const [items, setItems] = useState<WbFinanceItem[]>(() => readFinance())
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [kind, setKind] = useState<'income' | 'expense'>('expense')
   const [amount, setAmount] = useState('')
@@ -261,25 +293,41 @@ function SpendingSub({ vi }: { vi: boolean }): ReactElement {
     }
   }
 
-  const add = () => {
+  const clearForm = () => {
+    setEditingId(null)
+    setDate(new Date().toISOString().slice(0, 10))
+    setKind('expense')
+    setAmount('')
+    setItemLabel('')
+    setCategory('living')
+  }
+
+  const startEdit = (it: WbFinanceItem) => {
+    setEditingId(it.id)
+    setDate(it.date)
+    setKind(it.kind)
+    setAmount(String(it.amount))
+    setItemLabel(it.label)
+    setCategory(it.category ?? 'living')
+  }
+
+  const save = () => {
     const n = Number(amount)
     const t = itemLabel.trim()
     if (!t || !Number.isFinite(n) || n <= 0 || !date) return
-    persist(
-      [
-        {
-          id: newId(),
-          date,
-          kind,
-          amount: Math.round(n * 100) / 100,
-          label: t,
-          ...(kind === 'expense' ? { category } : {}),
-        },
-        ...items,
-      ].sort((a, b) => b.date.localeCompare(a.date)),
-    )
-    setAmount('')
-    setItemLabel('')
+    const row: WbFinanceItem = {
+      id: editingId ?? newId(),
+      date,
+      kind,
+      amount: Math.round(n * 100) / 100,
+      label: t,
+      ...(kind === 'expense' ? { category } : {}),
+    }
+    const next = editingId
+      ? items.map((x) => (x.id === editingId ? row : x))
+      : [row, ...items]
+    persist(next.sort((a, b) => b.date.localeCompare(a.date)))
+    clearForm()
   }
 
   const month = new Date().toISOString().slice(0, 7)
@@ -352,13 +400,20 @@ function SpendingSub({ vi }: { vi: boolean }): ReactElement {
             onChange={(e) => setItemLabel(e.target.value)}
             placeholder={label('VD: Xăng xe', 'e.g. Fuel')}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') add()
+              if (e.key === 'Enter') save()
             }}
           />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm giao dịch', 'Add entry')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={save}>
+            {editingId ? label('Lưu giao dịch', 'Save entry') : label('Thêm giao dịch', 'Add entry')}
+          </button>
+          {editingId ? (
+            <button type="button" className="btn btn-secondary" onClick={clearForm}>
+              {label('Huỷ sửa', 'Cancel edit')}
+            </button>
+          ) : null}
+        </div>
       </div>
       <ul className="wb-module-list">
         {items.length === 0 ? (
@@ -376,13 +431,21 @@ function SpendingSub({ vi }: { vi: boolean }): ReactElement {
                   {it.kind === 'expense' && it.category ? ` · ${catLabel(it.category)}` : ''}
                 </span>
               </div>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => persist(items.filter((x) => x.id !== it.id))}
-              >
-                {label('Xóa', 'Delete')}
-              </button>
+              <div className="teacher-chip-row">
+                <button type="button" className="btn btn-secondary" onClick={() => startEdit(it)}>
+                  {label('Sửa', 'Edit')}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    if (editingId === it.id) clearForm()
+                    persist(items.filter((x) => x.id !== it.id))
+                  }}
+                >
+                  {label('Xóa', 'Delete')}
+                </button>
+              </div>
             </li>
           ))
         )}
@@ -394,6 +457,7 @@ function SpendingSub({ vi }: { vi: boolean }): ReactElement {
 function InvestSub({ vi }: { vi: boolean }): ReactElement {
   const label = (a: string, b: string) => (vi ? a : b)
   const [items, setItems] = useState<WbFinanceInvest[]>(() => readFinanceInvest())
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [kind, setKind] = useState<WbFinanceInvest['kind']>('savings')
   const [amount, setAmount] = useState('')
@@ -426,26 +490,41 @@ function InvestSub({ vi }: { vi: boolean }): ReactElement {
     }
   }
 
-  const add = () => {
+  const clearForm = () => {
+    setEditingId(null)
+    setName('')
+    setKind('savings')
+    setAmount('')
+    setDate(new Date().toISOString().slice(0, 10))
+    setNote('')
+  }
+
+  const startEdit = (it: WbFinanceInvest) => {
+    setEditingId(it.id)
+    setName(it.name)
+    setKind(it.kind)
+    setAmount(String(it.amount))
+    setDate(it.date)
+    setNote(it.note ?? '')
+  }
+
+  const save = () => {
     const n = name.trim()
     const a = Number(amount)
     if (!n || !date || !Number.isFinite(a) || a <= 0) return
-    persist(
-      [
-        {
-          id: newId(),
-          name: n,
-          kind,
-          amount: Math.round(a * 100) / 100,
-          date,
-          ...(note.trim() ? { note: note.trim() } : {}),
-        },
-        ...items,
-      ].sort((x, y) => y.date.localeCompare(x.date)),
-    )
-    setName('')
-    setAmount('')
-    setNote('')
+    const row: WbFinanceInvest = {
+      id: editingId ?? newId(),
+      name: n,
+      kind,
+      amount: Math.round(a * 100) / 100,
+      date,
+      ...(note.trim() ? { note: note.trim() } : {}),
+    }
+    const next = editingId
+      ? items.map((x) => (x.id === editingId ? row : x))
+      : [row, ...items]
+    persist(next.sort((x, y) => y.date.localeCompare(x.date)))
+    clearForm()
   }
 
   const total = items.reduce((s, i) => s + i.amount, 0)
@@ -503,7 +582,7 @@ function InvestSub({ vi }: { vi: boolean }): ReactElement {
             onChange={(e) => setName(e.target.value)}
             placeholder={label('VD: Tiết kiệm Sacombank / FUEVFVND', 'e.g. High-yield savings / VOO')}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') add()
+              if (e.key === 'Enter') save()
             }}
           />
         </label>
@@ -532,9 +611,16 @@ function InvestSub({ vi }: { vi: boolean }): ReactElement {
           <span>{label('Ghi chú', 'Note')}</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm vị thế', 'Add holding')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={save}>
+            {editingId ? label('Lưu vị thế', 'Save holding') : label('Thêm vị thế', 'Add holding')}
+          </button>
+          {editingId ? (
+            <button type="button" className="btn btn-secondary" onClick={clearForm}>
+              {label('Huỷ sửa', 'Cancel edit')}
+            </button>
+          ) : null}
+        </div>
       </div>
       <ul className="wb-module-list">
         {items.length === 0 ? (
@@ -551,13 +637,21 @@ function InvestSub({ vi }: { vi: boolean }): ReactElement {
                 </span>
                 {it.note ? <span>{it.note}</span> : null}
               </div>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => persist(items.filter((x) => x.id !== it.id))}
-              >
-                {label('Xóa', 'Delete')}
-              </button>
+              <div className="teacher-chip-row">
+                <button type="button" className="btn btn-secondary" onClick={() => startEdit(it)}>
+                  {label('Sửa', 'Edit')}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    if (editingId === it.id) clearForm()
+                    persist(items.filter((x) => x.id !== it.id))
+                  }}
+                >
+                  {label('Xóa', 'Delete')}
+                </button>
+              </div>
             </li>
           ))
         )}

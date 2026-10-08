@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { routeNeedsConsent } from '../src/renderer/src/my-ai-consent'
+import {
+  describeRouteDone,
+  describeRouteOutcome,
+  routeNeedsConsent,
+} from '../src/renderer/src/my-ai-consent'
 import { matchPracticePlaybook, practiceMyAiChips } from '../src/renderer/src/my-ai-playbooks'
 import { routeMyAiText } from '../src/renderer/src/my-ai-router'
 
@@ -99,8 +103,8 @@ describe('Phase C / P1 practice playbooks', () => {
   })
 })
 
-describe('Phase D / P0 consent', () => {
-  it('requires consent for summarize and add_item, not for blank create', () => {
+describe('My AI consent P0/P1', () => {
+  it('requires consent for summarize / AI brief, not blank create or soft mutate', () => {
     expect(
       routeNeedsConsent({ kind: 'summarize_recents', limit: 8 }).map((n) => n.reason),
     ).toContain('deep_read')
@@ -112,11 +116,29 @@ describe('Phase D / P0 consent', () => {
       }),
     ).toEqual([])
 
+    // Workbench add_item is soft — no hard consent
+    expect(
+      routeNeedsConsent({
+        kind: 'workbench',
+        intent: {
+          intentId: 't',
+          action: 'add_item',
+          target: { kind: 'module', id: 'notes' },
+          summary: 'add note',
+          text: 'hello',
+          scope: 'local',
+          source: 'desktop',
+          requireConsent: false,
+          createdAt: new Date().toISOString(),
+        },
+      }),
+    ).toEqual([])
+
     const sales = routeMyAiText('Soạn báo giá Pro', { practiceId: 'sales' })
     expect(sales.kind).toBe('plan')
     if (sales.kind === 'plan') {
       const reasons = routeNeedsConsent(sales).map((n) => n.reason)
-      expect(reasons).toContain('mutate')
+      expect(reasons).not.toContain('mutate')
       expect(reasons).toContain('ai_token')
     }
   })
@@ -133,5 +155,43 @@ describe('Phase D / P0 consent', () => {
     expect(
       routeNeedsConsent({ kind: 'continue_active', brief: 'Làm rõ kết luận' }).map((n) => n.reason),
     ).toContain('ai_token')
+  })
+
+  it('P2/P3 result card: one goal, no step jargon', () => {
+    const plan = {
+      kind: 'plan' as const,
+      steps: [
+        { kind: 'summarize_recents' as const, limit: 8 },
+        {
+          kind: 'workbench' as const,
+          intent: {
+            intentId: 't',
+            action: 'add_item' as const,
+            target: { kind: 'module' as const, id: 'notes' as const },
+            summary: 'note',
+            text: 'hello',
+            scope: 'local' as const,
+            source: 'desktop' as const,
+            requireConsent: false,
+            createdAt: new Date().toISOString(),
+          },
+        },
+      ],
+      goalVi: 'Tóm tắt ngữ cảnh và lưu vào Ghi chú',
+      goalEn: 'Summarize context and save to Notes',
+      summaryVi: 'Tóm tắt ngữ cảnh và lưu vào Ghi chú',
+      summaryEn: 'Summarize context and save to Notes',
+    }
+    const ahead = describeRouteOutcome(plan, true)
+    expect(ahead).toBe('Tôi sẽ: Tóm tắt ngữ cảnh và lưu vào Ghi chú.')
+    expect(ahead).not.toMatch(/bước|→/)
+    const done = describeRouteDone(plan, true)
+    expect(done).toBe('Đã xong: Tóm tắt ngữ cảnh và lưu vào Ghi chú.')
+    expect(done).not.toMatch(/bước|Plan|✓/)
+    expect(describeRouteDone(plan, true, { paused: true })).toBe('Mở file nào?')
+    expect(describeRouteDone(plan, false, { paused: true })).toBe('Which file?')
+    expect(describeRouteDone(plan, true, { paused: true })).not.toMatch(
+      /dừng|plan|tiếp tục|bên dưới/i,
+    )
   })
 })

@@ -6,7 +6,8 @@ import {
   modelHasFixedSampling,
   modelLacksVision,
 } from '../src/registry'
-import { AI_PROVIDERS, GENSPARK_LLM_BASE_URLS } from '../src/providers'
+import { OPENROUTER_API_BASE } from '../src/openrouter'
+import { AI_PROVIDERS } from '../src/providers'
 import type { AiProviderConfig, AiProviderId } from '../src/types'
 
 function config(model: string, baseUrl?: string): AiProviderConfig {
@@ -21,16 +22,15 @@ describe('provider registry', () => {
     expect(Object.keys(AI_PROVIDER_ADAPTERS).sort()).toEqual(AI_PROVIDERS.map((m) => m.id).sort())
   })
 
-  it('routes genspark by model id prefix onto the two proxy endpoints', () => {
+  it('routes UniAI (genspark) chat through OpenRouter', () => {
     const resolve = (model: string) => AI_PROVIDER_ADAPTERS.genspark.resolveEndpoint(config(model))
-    expect(resolve('claude-opus-4-7')).toEqual({
-      protocol: 'anthropic',
-      baseUrl: GENSPARK_LLM_BASE_URLS.anthropic,
-    })
-    // gpt-5.x fixes sampling, so the proxy's OpenAI route also drops temperature
-    expect(resolve('gpt-5.2')).toEqual({
+    expect(resolve('openrouter/auto')).toEqual({
       protocol: 'openai-compatible',
-      baseUrl: GENSPARK_LLM_BASE_URLS.openai,
+      baseUrl: OPENROUTER_API_BASE,
+    })
+    expect(resolve('openai/gpt-5.6-terra')).toEqual({
+      protocol: 'openai-compatible',
+      baseUrl: OPENROUTER_API_BASE,
       omitTemperature: true,
     })
   })
@@ -212,11 +212,9 @@ describe('provider registry', () => {
     )
   })
 
-  it('only genspark authenticates through the gsk login', () => {
+  it('only Codex uses CLI auth; UniAI and the rest use api-key', () => {
     for (const [id, adapter] of Object.entries(AI_PROVIDER_ADAPTERS)) {
-      expect(adapter.capabilities.auth).toBe(
-        id === 'genspark' ? 'gsk-login' : id === 'codex' ? 'codex-chatgpt' : 'api-key',
-      )
+      expect(adapter.capabilities.auth).toBe(id === 'codex' ? 'codex-chatgpt' : 'api-key')
     }
   })
 

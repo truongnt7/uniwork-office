@@ -8,7 +8,6 @@ import {
   EDU_SUBJECTS,
   EDU_TEMPLATES,
   EDU_WORKFLOWS,
-  OPENROUTER_HUB_BASE_URL,
   eduMatchesFilter,
   eduMaterialSeedHtml,
   eduMaterialSeedTitle,
@@ -18,7 +17,6 @@ import {
   eduTemplateTitle,
   eduWorkflowPrompt,
   inferMaterialRole,
-  isOpenRouterHubUrl,
   materialRoleLabel,
   uniqueGrades,
   uniqueSubjects,
@@ -243,16 +241,7 @@ export function TeacherHome({
 
   useEffect(() => {
     void window.aiOffice.getAiSettings?.().then((s) => {
-      const openrouter = s.providers.openrouter
       const custom = s.providers.custom
-      if (s.provider === 'openrouter' && openrouter?.apiKey) {
-        setHubBaseUrl(openrouter.baseUrl || OPENROUTER_HUB_BASE_URL)
-        setHubToken(openrouter.apiKey)
-        setHubModel(openrouter.model ?? '')
-        setHubStatus(label('Đang dùng OpenRouter.', 'Using OpenRouter.'))
-        setHubOk(true)
-        return
-      }
       setHubBaseUrl(custom?.baseUrl ?? '')
       setHubToken(custom?.apiKey ?? '')
       setHubModel(custom?.model ?? '')
@@ -297,40 +286,20 @@ export function TeacherHome({
         setHubStatus(label('Cần Base URL và Token.', 'Base URL and token are required.'))
         return
       }
-      const asOpenRouter = isOpenRouterHubUrl(baseUrl)
-      const normalizedBase = asOpenRouter ? OPENROUTER_HUB_BASE_URL : baseUrl
-      const defaultModel = asOpenRouter ? 'openrouter/auto' : 'gpt-4o'
-      if (asOpenRouter) {
-        await window.aiOffice.setAiSettings({
-          ...current,
-          provider: 'openrouter',
-          providers: {
-            ...current.providers,
-            openrouter: {
-              ...current.providers.openrouter,
-              apiKey,
-              baseUrl: normalizedBase,
-              model: model || current.providers.openrouter?.model || defaultModel,
-            },
+      await window.aiOffice.setAiSettings({
+        ...current,
+        provider: 'custom',
+        providers: {
+          ...current.providers,
+          custom: {
+            ...current.providers.custom,
+            apiKey,
+            baseUrl,
+            model: model || current.providers.custom.model || 'gpt-4o',
           },
-        })
-        if (hubBaseUrl.trim() !== normalizedBase) setHubBaseUrl(normalizedBase)
-      } else {
-        await window.aiOffice.setAiSettings({
-          ...current,
-          provider: 'custom',
-          providers: {
-            ...current.providers,
-            custom: {
-              ...current.providers.custom,
-              apiKey,
-              baseUrl: normalizedBase,
-              model: model || current.providers.custom.model || defaultModel,
-            },
-          },
-        })
-      }
-      const probe = await window.aiOffice.probeAiHub({ baseUrl: normalizedBase, apiKey })
+        },
+      })
+      const probe = await window.aiOffice.probeAiHub({ baseUrl, apiKey })
       setHubOk(probe.ok)
       setHubStatus(
         probe.ok
@@ -448,6 +417,54 @@ export function TeacherHome({
     const materials = { ...(current?.materials ?? {}), [`role:${role}`]: role }
     await window.aiOfficeProject!.patchEduMeta({ projectId, patch: { materials } })
     onRefresh()
+  }
+
+  const deletePack = async () => {
+    if (!selected) return
+    const ok = window.confirm(
+      label(
+        `Xóa gói “${meta?.lessonTitle ?? selected.name}”?\nFile trong gói sẽ về dự án mặc định, không mất nội dung.`,
+        `Delete pack “${meta?.lessonTitle ?? selected.name}”?\nFiles move to the default project; content is not lost.`,
+      ),
+    )
+    if (!ok) return
+    setBusy('delete-pack')
+    setError(null)
+    try {
+      await window.aiOfficeProject!.deleteProject(selected.id)
+      onSelectPack(null)
+      onRefresh()
+      setNotice(label('Đã xóa gói khỏi Tri thức.', 'Pack removed from Knowledge.'))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const deleteMaterialFile = async (filePath: string) => {
+    if (!selected) return
+    const base = filePath.split(/[/\\]/).pop() || filePath
+    const ok = window.confirm(label(`Xóa tệp “${base}”?`, `Delete file “${base}”?`))
+    if (!ok) return
+    setBusy(`del-file:${filePath}`)
+    setError(null)
+    try {
+      await window.aiOffice.deleteFiles([filePath])
+      const current = await window.aiOfficeProject!.getEduMeta(selected.id)
+      if (current?.materials) {
+        const materials = { ...current.materials }
+        delete materials[filePath]
+        await window.aiOfficeProject!.patchEduMeta({ projectId: selected.id, patch: { materials } })
+      }
+      const next = await window.aiOfficeProject!.listFiles(selected.id)
+      setPackFiles(next)
+      onRefresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
   }
 
   const openTemplate = async (templateId: EduTemplateId) => {
@@ -818,6 +835,14 @@ export function TeacherHome({
                     >
                       {busy === 'export' ? label('Đang xuất…', 'Exporting…') : label('Xuất ZIP', 'Export ZIP')}
                     </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={busy === 'delete-pack'}
+                      onClick={() => void deletePack()}
+                    >
+                      {label('Xóa gói', 'Delete pack')}
+                    </button>
                   </div>
                   {exportMsg && <p className="teacher-hint">{exportMsg}</p>}
                   <div className="teacher-form teacher-form-spaced">
@@ -877,13 +902,23 @@ export function TeacherHome({
                         <span>{materialRoleLabel(row.role, vi)}</span>
                       </div>
                       {row.kind === 'file' ? (
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          onClick={() => void window.aiOffice.openPath(row.key)}
-                        >
-                          {label('Mở', 'Open')}
-                        </button>
+                        <div className="teacher-chip-row">
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => void window.aiOffice.openPath(row.key)}
+                          >
+                            {label('Mở', 'Open')}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            disabled={busy === `del-file:${row.key}`}
+                            onClick={() => void deleteMaterialFile(row.key)}
+                          >
+                            {label('Xóa', 'Delete')}
+                          </button>
+                        </div>
                       ) : (
                         <em className="teacher-hint">{label('Đã seed', 'Seeded')}</em>
                       )}
@@ -1064,29 +1099,17 @@ export function TeacherHome({
             <div className="teacher-hub teacher-hub-nested">
               <p className="teacher-hint">
                 {label(
-                  'Gateway OpenAI-compatible (kể cả OpenRouter). Mở mẫu / xuất zip không trừ Token.',
-                  'OpenAI-compatible gateway (incl. OpenRouter). Templates / zip export do not charge Tokens.',
+                  'Gateway OpenAI-compatible. Mở mẫu / xuất zip không trừ Token. OpenRouter cấu hình ở Settings → AI.',
+                  'OpenAI-compatible gateway. Templates / zip export do not charge Tokens. Configure OpenRouter in Settings → AI.',
                 )}
               </p>
-              <div className="teacher-chip-row">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  onClick={() => {
-                    setHubBaseUrl(OPENROUTER_HUB_BASE_URL)
-                    if (!hubModel.trim()) setHubModel('openrouter/auto')
-                  }}
-                >
-                  OpenRouter
-                </button>
-              </div>
               <div className="teacher-form">
                 <label className="teacher-form-wide">
                   <span>Base URL</span>
                   <input
                     value={hubBaseUrl}
                     onChange={(e) => setHubBaseUrl(e.target.value)}
-                    placeholder="https://openrouter.ai/api/v1"
+                    placeholder="https://your-hub.example/v1"
                   />
                 </label>
                 <label className="teacher-form-wide">

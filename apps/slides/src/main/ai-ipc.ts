@@ -28,6 +28,7 @@ import {
   setAiUserAgent,
   setRescueFetch,
   streamForProvider,
+  withUniAiOpenRouterAuth,
   type AiSettings,
   type AiStreamChunk,
   type AiStreamRequest,
@@ -40,7 +41,6 @@ import {
   webSearchTool,
   imageSearchTool,
   ensureGenofficeLogin,
-  gskApiKey,
   generateImageTool,
   analyzeMediaTool,
   gskLoginInfo,
@@ -143,11 +143,7 @@ export function registerAiIpc(): void {
     const tools = request.tools ?? []
     const maxTokens = request.maxTokens ?? maxOutputTokensOf(settings)
     const provider = settings.provider
-    let config = settings.providers?.[provider]
-    // The genspark key never enters the settings file; it is fetched from the gsk login state per request
-    if (provider === 'genspark' && config && !config.apiKey) {
-      config = { ...config, apiKey: gskApiKey() }
-    }
+    const config = withUniAiOpenRouterAuth(settings, provider, settings.providers?.[provider])
     const send = (chunk: AiStreamChunk) => {
       if (!event.sender.isDestroyed()) event.sender.send('ai:stream-chunk', chunk)
     }
@@ -155,7 +151,7 @@ export function registerAiIpc(): void {
       send({
         requestId,
         type: 'error',
-        error: provider === 'genspark' ? tm('errGskNotLoggedIn') : tm('errNoApiKey', { provider }),
+        error: tm('errNoApiKey', { provider }),
       })
       return
     }

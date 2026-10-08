@@ -32,6 +32,8 @@ export {
   defaultAiSettings,
   maxOutputTokensOf,
   resolveAiSettings,
+  uniAiOpenRouterKey,
+  withUniAiOpenRouterAuth,
 } from './providers'
 export {
   AI_MEDIA_PROVIDERS,
@@ -82,7 +84,9 @@ export { parseOutputCapRejection } from './output-cap'
 export { AiCreditsError, sseLines, streamForProvider } from './stream'
 export {
   OPENROUTER_API_BASE,
+  OPENROUTER_CHAT_MODELS,
   OPENROUTER_CREDITS_URL,
+  OPENROUTER_DEFAULT_MODEL,
   OPENROUTER_KEYS_URL,
   formatOpenRouterKeySummary,
   openRouterAttributionHeaders,

@@ -3563,10 +3563,13 @@ function registerHomeIpc(): void {
     }
   })
 
-  ipcMain.handle(HOME_CHANNELS.wbExportBackup, async (event) => {
+  ipcMain.handle(HOME_CHANNELS.wbExportBackup, async (event, media: unknown) => {
     try {
       const win = BrowserWindow.fromWebContents(event.sender)
-      return await exportWorkbenchBackup(win)
+      return await exportWorkbenchBackup(
+        win,
+        media && typeof media === 'object' ? (media as import('../shared/home-api').WorkbenchIdbMediaDump) : null,
+      )
     } catch (err) {
       console.error('[workbench-db] exportBackup failed', err)
       return { ok: false as const, error: err instanceof Error ? err.message : String(err) }

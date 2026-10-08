@@ -355,11 +355,16 @@ function AiModelPane({ t }: { t: TFunc }) {
       if (codex) {
         void refreshCodexModels(codex.cliPath ?? '', codex.model).catch(() => undefined)
       }
-      const orKey = s.providers.openrouter?.apiKey
-      if (s.provider === 'openrouter' && orKey && window.aiOffice.probeOpenRouterKey) {
+      const hubKey =
+        s.providers.genspark?.apiKey?.trim() || s.providers.openrouter?.apiKey?.trim() || ''
+      if (
+        (s.provider === 'openrouter' || s.provider === 'genspark') &&
+        hubKey &&
+        window.aiOffice.probeOpenRouterKey
+      ) {
         setHubChecking(true)
         void window.aiOffice
-          .probeOpenRouterKey(orKey)
+          .probeOpenRouterKey(hubKey)
           .then((r) => {
             if (!alive) return
             if (r.ok && r.summary) setHubStatus(r.summary)
@@ -388,6 +393,7 @@ function AiModelPane({ t }: { t: TFunc }) {
   const isGenspark = provider === 'genspark'
   const isCodex = provider === 'codex'
   const isOpenRouter = provider === 'openrouter'
+  const isTokenHub = isGenspark || isOpenRouter
 
   const touch = () => {
     setDirty(true)
@@ -396,10 +402,14 @@ function AiModelPane({ t }: { t: TFunc }) {
     setHubStatus(null)
   }
   const updateConfig = (patch: Partial<typeof config>) => {
-    setSettings({
-      ...settings,
-      providers: { ...settings.providers, [provider]: { ...config, ...patch } },
-    })
+    const nextSlot = { ...config, ...patch }
+    const providers = { ...settings.providers, [provider]: nextSlot }
+    // UniAI and OpenRouter share one Token Hub key — mirror apiKey only.
+    if (isTokenHub && patch.apiKey !== undefined) {
+      const other = provider === 'genspark' ? 'openrouter' : 'genspark'
+      providers[other] = { ...settings.providers[other], apiKey: nextSlot.apiKey }
+    }
+    setSettings({ ...settings, providers })
     touch()
   }
   /** Commit the output-cap input: clamp what was typed and drop a no-op edit */
@@ -441,7 +451,7 @@ function AiModelPane({ t }: { t: TFunc }) {
         if (r?.ok && isCodex) {
           void refreshCodexModels(config.cliPath ?? '', config.model).catch(() => undefined)
         }
-        if (r?.ok && isOpenRouter && config.apiKey) {
+        if (r?.ok && isTokenHub && config.apiKey) {
           void checkOpenRouterHub(config.apiKey)
         }
       })
@@ -542,7 +552,7 @@ function AiModelPane({ t }: { t: TFunc }) {
             }}
           />
         </div>
-      ) : !isGenspark ? (
+      ) : (
         <>
           <div className="set-field">
             <div className="set-field-text">
@@ -550,7 +560,9 @@ function AiModelPane({ t }: { t: TFunc }) {
                 <label className="set-field-label" htmlFor="set-ai-key">
                   {t('setAiApiKey')}
                 </label>
-                <div className="set-field-desc">{t('setAiKeyHint')}</div>
+                <div className="set-field-desc">
+                  {isTokenHub ? t('setAiOpenRouterHubHint') : t('setAiKeyHint')}
+                </div>
               </div>
             </div>
             <input
@@ -564,29 +576,31 @@ function AiModelPane({ t }: { t: TFunc }) {
               onChange={(e) => updateConfig({ apiKey: e.target.value.trim() })}
             />
           </div>
-          <div className="set-field">
-            <div className="set-field-text">
-              <div className="set-field-stack">
-                <label className="set-field-label" htmlFor="set-ai-base-url">
-                  {t('setAiBaseUrl')}
-                </label>
-                {!meta?.needsBaseUrl && (
-                  <div className="set-field-desc">{t('setAiBaseUrlHint')}</div>
-                )}
+          {!isGenspark && (
+            <div className="set-field">
+              <div className="set-field-text">
+                <div className="set-field-stack">
+                  <label className="set-field-label" htmlFor="set-ai-base-url">
+                    {t('setAiBaseUrl')}
+                  </label>
+                  {!meta?.needsBaseUrl && (
+                    <div className="set-field-desc">{t('setAiBaseUrlHint')}</div>
+                  )}
+                </div>
               </div>
+              <input
+                id="set-ai-base-url"
+                className="set-input"
+                type="text"
+                value={config.baseUrl ?? ''}
+                placeholder={meta?.needsBaseUrl ? 'https://…/v1' : meta?.defaultBaseUrl}
+                spellCheck={false}
+                onChange={(e) => updateConfig({ baseUrl: e.target.value.trim() })}
+              />
             </div>
-            <input
-              id="set-ai-base-url"
-              className="set-input"
-              type="text"
-              value={config.baseUrl ?? ''}
-              placeholder={meta?.needsBaseUrl ? 'https://…/v1' : meta?.defaultBaseUrl}
-              spellCheck={false}
-              onChange={(e) => updateConfig({ baseUrl: e.target.value.trim() })}
-            />
-          </div>
+          )}
         </>
-      ) : null}
+      )}
       <div className="set-field">
         <div className="set-field-text">
           <div className="set-field-stack">
@@ -628,7 +642,7 @@ function AiModelPane({ t }: { t: TFunc }) {
           }}
         />
       </div>
-      {isOpenRouter ? (
+      {isTokenHub ? (
         <div className="set-field">
           <div className="set-field-text">
             <div className="set-field-stack">

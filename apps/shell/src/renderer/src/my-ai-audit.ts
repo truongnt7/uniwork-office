@@ -1,7 +1,8 @@
 /**
- * Phase D — light local audit log for My AI tool runs (device-only).
+ * Phase D — light local audit log for My AI tool runs (Workbench SQLite via wbStore).
  */
 import type { PracticeId } from '@uniwork/practice-core'
+import { wbStoreGetRaw, wbStoreSetRaw } from './workbench-store-client'
 
 const KEY = 'uniwork.my-ai.audit.v1'
 const MAX = 80
@@ -20,7 +21,7 @@ export interface MyAiAuditEntry {
 
 function readAll(): MyAiAuditEntry[] {
   try {
-    const raw = localStorage.getItem(KEY)
+    const raw = wbStoreGetRaw(KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw) as unknown
     return Array.isArray(parsed) ? (parsed as MyAiAuditEntry[]) : []
@@ -30,11 +31,7 @@ function readAll(): MyAiAuditEntry[] {
 }
 
 function writeAll(entries: MyAiAuditEntry[]): void {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(entries.slice(0, MAX)))
-  } catch {
-    /* quota */
-  }
+  wbStoreSetRaw(KEY, JSON.stringify(entries.slice(0, MAX)))
 }
 
 export function appendMyAiAudit(

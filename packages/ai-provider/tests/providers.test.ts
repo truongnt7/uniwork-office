@@ -10,6 +10,8 @@ import {
   defaultAiSettings,
   maxOutputTokensOf,
   resolveAiSettings,
+  uniAiOpenRouterKey,
+  withUniAiOpenRouterAuth,
 } from '../src/providers'
 import type { AiProviderId } from '../src/types'
 
@@ -123,7 +125,7 @@ describe('resolveAiSettings', () => {
     expect(resolved.providers.deepseek).toEqual({ apiKey: 'sk-user', model: 'deepseek-v4-flash' })
   })
 
-  it('rewrites genspark model ids the proxy no longer serves', () => {
+  it('rewrites legacy UniAI proxy model ids onto OpenRouter slugs', () => {
     const resolved = resolveAiSettings(
       {
         providers: {
@@ -132,7 +134,7 @@ describe('resolveAiSettings', () => {
       },
       defaultAiSettings(),
     )
-    expect(resolved.providers.genspark.model).toBe('claude-opus-4-7')
+    expect(resolved.providers.genspark.model).toBe('openrouter/auto')
 
     const gpt = resolveAiSettings(
       {
@@ -142,7 +144,21 @@ describe('resolveAiSettings', () => {
       },
       defaultAiSettings(),
     )
-    expect(gpt.providers.genspark.model).toBe('gpt-5.6-terra')
+    expect(gpt.providers.genspark.model).toBe('openai/gpt-5.6-terra')
+  })
+
+  it('mirrors an OpenRouter Token Hub key into the empty UniAI slot', () => {
+    const resolved = resolveAiSettings(
+      {
+        providers: {
+          openrouter: { apiKey: 'sk-or-hub', model: 'openrouter/auto' },
+          genspark: { apiKey: '', model: 'openrouter/auto' },
+        } as never,
+      },
+      defaultAiSettings(),
+    )
+    expect(resolved.providers.genspark.apiKey).toBe('sk-or-hub')
+    expect(resolved.providers.openrouter.apiKey).toBe('sk-or-hub')
   })
 
   it('leaves a still-supported model id alone', () => {
@@ -297,10 +313,33 @@ describe('activeProvider', () => {
     expect(activeProvider(settings)).toBe('genspark')
   })
 
-  it('genspark never requires a key (injected from the gsk login at request time)', () => {
+  it('UniAI stays selectable without a key (Token Hub key is required at request time)', () => {
     const settings = defaultAiSettings()
     settings.provider = 'genspark'
     expect(activeProvider(settings)).toBe('genspark')
+  })
+})
+
+describe('uniAi OpenRouter Token Hub key', () => {
+  it('prefers the UniAI slot, then the openrouter slot', () => {
+    const settings = defaultAiSettings()
+    expect(uniAiOpenRouterKey(settings)).toBe('')
+    settings.providers.openrouter.apiKey = 'sk-or-from-hub'
+    expect(uniAiOpenRouterKey(settings)).toBe('sk-or-from-hub')
+    settings.providers.genspark.apiKey = 'sk-or-uniai'
+    expect(uniAiOpenRouterKey(settings)).toBe('sk-or-uniai')
+  })
+
+  it('injects the shared key only for UniAI configs', () => {
+    const settings = defaultAiSettings()
+    settings.providers.openrouter.apiKey = 'sk-or-shared'
+    const injected = withUniAiOpenRouterAuth(settings, 'genspark', settings.providers.genspark)
+    expect(injected?.apiKey).toBe('sk-or-shared')
+    const anthropic = withUniAiOpenRouterAuth(settings, 'anthropic', {
+      apiKey: '',
+      model: 'claude-sonnet-5',
+    })
+    expect(anthropic?.apiKey).toBe('')
   })
 })
 

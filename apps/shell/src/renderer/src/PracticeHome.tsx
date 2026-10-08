@@ -233,6 +233,57 @@ export function PracticeHome({
     onRefresh()
   }
 
+  const deletePack = async () => {
+    if (!selected) return
+    const ok = window.confirm(
+      label(
+        `Xóa gói “${meta?.title ?? selected.name}”?\nFile trong gói sẽ về dự án mặc định, không mất nội dung.`,
+        `Delete pack “${meta?.title ?? selected.name}”?\nFiles move to the default project; content is not lost.`,
+      ),
+    )
+    if (!ok) return
+    setBusy('delete-pack')
+    setError(null)
+    try {
+      await window.aiOfficeProject!.deleteProject(selected.id)
+      onSelectPack(null)
+      onRefresh()
+      setNotice(label('Đã xóa gói khỏi Tri thức.', 'Pack removed from Knowledge.'))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const deleteMaterialFile = async (filePath: string) => {
+    if (!selected) return
+    const base = filePath.split(/[/\\]/).pop() || filePath
+    const ok = window.confirm(label(`Xóa tệp “${base}”?`, `Delete file “${base}”?`))
+    if (!ok) return
+    setBusy(`del-file:${filePath}`)
+    setError(null)
+    try {
+      await window.aiOffice.deleteFiles([filePath])
+      const current = await window.aiOfficeProject!.getPracticeMeta(selected.id)
+      if (current?.materials) {
+        const materials = { ...current.materials }
+        delete materials[filePath]
+        await window.aiOfficeProject!.patchPracticeMeta({
+          projectId: selected.id,
+          patch: { materials },
+        })
+      }
+      const next = await window.aiOfficeProject!.listFiles(selected.id)
+      setPackFiles(next)
+      onRefresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const openDocs = async (
     projectId: string,
     title: string,
@@ -604,6 +655,14 @@ export function PracticeHome({
                     >
                       {label('Xem file', 'View files')}
                     </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      disabled={busy === 'delete-pack'}
+                      onClick={() => void deletePack()}
+                    >
+                      {label('Xóa gói', 'Delete pack')}
+                    </button>
                   </div>
                   <div className="teacher-form teacher-form-spaced">
                     <label className="teacher-form-wide">
@@ -648,13 +707,23 @@ export function PracticeHome({
                           <strong>{base}</strong>
                           <span>{meta.materials?.[fp] ?? meta.materials?.[`role:${base}`] ?? '—'}</span>
                         </div>
-                        <button
-                          type="button"
-                          className="btn btn-secondary"
-                          onClick={() => void window.aiOffice.openPath(fp)}
-                        >
-                          {label('Mở', 'Open')}
-                        </button>
+                        <div className="teacher-chip-row">
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            onClick={() => void window.aiOffice.openPath(fp)}
+                          >
+                            {label('Mở', 'Open')}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-secondary"
+                            disabled={busy === `del-file:${fp}`}
+                            onClick={() => void deleteMaterialFile(fp)}
+                          >
+                            {label('Xóa', 'Delete')}
+                          </button>
+                        </div>
                       </li>
                     )
                   })

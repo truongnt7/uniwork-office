@@ -127,38 +127,29 @@ describe('chatForProvider', () => {
     )
   })
 
-  it('genspark: routes by model prefix to the proxy endpoints', async () => {
+  it('genspark (UniAI): routes chat through OpenRouter', async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ content: [{ type: 'text', text: 'ok' }] }))
+      .mockResolvedValue(jsonResponse({ choices: [{ message: { content: 'ok' } }] }))
     vi.stubGlobal('fetch', fetchMock)
-    await chatForProvider('genspark', { apiKey: 'gsk-k', model: 'claude-opus-4-7' }, 'sys', 'hi')
+    await chatForProvider('genspark', { apiKey: 'sk-or-k', model: 'openrouter/auto' }, 'sys', 'hi')
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://www.genspark.ai/api/anthropic/v1/messages',
-      expect.anything(),
-    )
-    fetchMock.mockResolvedValue(jsonResponse({ choices: [{ message: { content: 'ok' } }] }))
-    await chatForProvider('genspark', { apiKey: 'gsk-k', model: 'gpt-5.2' }, 'sys', 'hi')
-    expect(fetchMock).toHaveBeenLastCalledWith(
-      'https://www.genspark.ai/api/llm_proxy/v1/chat/completions',
-      expect.anything(),
+      'https://openrouter.ai/api/v1/chat/completions',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer sk-or-k' }),
+      }),
     )
   })
 
-  it('genspark: stamps X-Agent-Type; direct vendors do not get it', async () => {
+  it('genspark (UniAI): stamps OpenRouter attribution headers', async () => {
     const fetchMock = vi
       .fn()
-      .mockImplementation(async () => jsonResponse({ content: [{ type: 'text', text: 'ok' }] }))
+      .mockImplementation(async () => jsonResponse({ choices: [{ message: { content: 'ok' } }] }))
     vi.stubGlobal('fetch', fetchMock)
-    await chatForProvider('genspark', { apiKey: 'gsk-k', model: 'claude-opus-4-7' }, 'sys', 'hi')
-    expect((fetchMock.mock.calls[0]![1].headers as Record<string, string>)['X-Agent-Type']).toBe(
-      'genoffice',
-    )
-    fetchMock.mockClear()
-    await chatForProvider('anthropic', { apiKey: 'k', model: 'claude-opus-4-7' }, 'sys', 'hi')
-    expect(
-      (fetchMock.mock.calls[0]![1].headers as Record<string, string>)['X-Agent-Type'],
-    ).toBeUndefined()
+    await chatForProvider('genspark', { apiKey: 'sk-or-k', model: 'openrouter/auto' }, 'sys', 'hi')
+    const headers = fetchMock.mock.calls[0]![1].headers as Record<string, string>
+    expect(headers['HTTP-Referer']).toBeTruthy()
+    expect(headers['X-Agent-Type']).toBeUndefined()
   })
 
   it('opencode: a one-shot call gets its own x-opencode-session', async () => {

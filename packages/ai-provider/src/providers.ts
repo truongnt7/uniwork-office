@@ -1,11 +1,17 @@
 import { defaultAiMediaSettings, resolveAiMediaSettings } from './media'
+import { OPENROUTER_CHAT_MODELS, OPENROUTER_DEFAULT_MODEL } from './openrouter'
 import { defaultAiSearchSettings, resolveAiSearchSettings } from './search-settings'
-import type { AiProviderId, AiProviderMeta, AiSettings, LegacyAiSettings } from './types'
+import type {
+  AiProviderConfig,
+  AiProviderId,
+  AiProviderMeta,
+  AiSettings,
+  LegacyAiSettings,
+} from './types'
 
 /**
- * Genspark server-side LLM proxy endpoints. All three protocols share the
- * api_key from the gsk login; model ids follow the proxy's own naming scheme,
- * which differs from the official vendor ids.
+ * Legacy Genspark LLM proxy endpoints — kept for media/search tooling that
+ * still rides the gsk login. UniAI chat itself now routes through OpenRouter.
  */
 export const GENSPARK_LLM_BASE_URLS = {
   anthropic: 'https://www.genspark.ai/api/anthropic',
@@ -15,7 +21,7 @@ export const GENSPARK_LLM_BASE_URLS = {
 /**
  * Splits GenOffice usage out of the proxy's default "Claw" billing bucket
  * (the backend attributes gsk-key traffic by X-Agent-Type). Only sent to the
- * Genspark proxy — never to direct vendor APIs.
+ * Genspark proxy — never to direct vendor APIs or OpenRouter.
  */
 export const GENSPARK_AGENT_TYPE = 'genoffice'
 
@@ -24,8 +30,6 @@ export function gensparkAttributionHeaders(baseUrl?: string): Record<string, str
     ? { 'X-Agent-Type': GENSPARK_AGENT_TYPE }
     : {}
 }
-
-export { openRouterAttributionHeaders } from './openrouter'
 
 /**
  * OpenCode Zen / Go route and cache per conversation and answer 400
@@ -45,17 +49,11 @@ export const AI_PROVIDERS: AiProviderMeta[] = [
   {
     id: 'genspark',
     label: 'uniAI',
-    // must stay within the proxy's served set (GET /api/llm_proxy/v1/models);
-    // bare gpt-5.6 and the gemini family dropped off it (verified 2026-08-31)
-    models: [
-      'claude-opus-4-7',
-      'claude-opus-4-8',
-      'claude-sonnet-4-6',
-      'gpt-5.6-terra',
-      'gpt-5.6-luna',
-    ],
-    defaultModel: 'claude-opus-4-7',
-    keyPlaceholder: 'Not required - sign in to UniWork',
+    // UniAI chat is OpenRouter behind the brand; model ids match the shared
+    // Token Hub catalog (same as the explicit OpenRouter provider).
+    models: [...OPENROUTER_CHAT_MODELS],
+    defaultModel: OPENROUTER_DEFAULT_MODEL,
+    keyPlaceholder: 'sk-or-...',
   },
   {
     id: 'codex',
@@ -178,15 +176,9 @@ export const AI_PROVIDERS: AiProviderMeta[] = [
   {
     id: 'openrouter',
     label: 'OpenRouter',
-    // vendor-prefixed slugs exactly as openrouter.ai/api/v1/models lists them —
-    // there is no `openai/gpt-5.6` alias there, only the per-tier ids
-    models: [
-      'openrouter/auto',
-      'anthropic/claude-sonnet-5',
-      'openai/gpt-5.6-sol',
-      'moonshotai/kimi-k3',
-    ],
-    defaultModel: 'openrouter/auto',
+    // Shared with UniAI — vendor-prefixed slugs as openrouter.ai lists them.
+    models: [...OPENROUTER_CHAT_MODELS],
+    defaultModel: OPENROUTER_DEFAULT_MODEL,
     keyPlaceholder: 'sk-or-...',
   },
   {
@@ -305,7 +297,7 @@ export function cloudToolsEnabled(settings: Pick<AiSettings, 'gskToolsEnabled'>)
  * Codex can auto-discover its executable. Anything else — including unknown
  * ids from a hand-edited
  * settings file — falls back to genspark, so a half-filled setup degrades
- * to the signed-in default instead of silently disabling AI.
+ * to the UniAI default instead of silently disabling AI.
  */
 export function activeProvider(settings: AiSettings): AiProviderId {
   const provider = settings.provider
@@ -326,6 +318,51 @@ export function activeProvider(settings: AiSettings): AiProviderId {
 }
 
 /**
+ * Shared OpenRouter Token Hub key for UniAI (`genspark`) and the explicit
+ * OpenRouter provider. Prefer the UniAI slot, then the openrouter slot.
+ */
+export function uniAiOpenRouterKey(settings: AiSettings): string {
+  const own = settings.providers?.genspark?.apiKey?.trim() ?? ''
+  if (own) return own
+  return settings.providers?.openrouter?.apiKey?.trim() ?? ''
+}
+
+/**
+ * Inject the shared Token Hub key into a UniAI request config when the
+ * genspark slot itself is empty (e.g. key was saved only under openrouter).
+ */
+export function withUniAiOpenRouterAuth(
+  settings: AiSettings,
+  provider: AiProviderId,
+  config: AiProviderConfig | undefined,
+): AiProviderConfig | undefined {
+  if (!config || provider !== 'genspark') return config
+  const key = uniAiOpenRouterKey(settings)
+  return key ? { ...config, apiKey: key } : config
+}
+
+/** Fill an empty UniAI / OpenRouter key slot from the other so Token Hub stays shared. */
+function syncUniAiOpenRouterKeys(
+  providers: AiSettings['providers'],
+): AiSettings['providers'] {
+  const g = providers.genspark?.apiKey?.trim() ?? ''
+  const o = providers.openrouter?.apiKey?.trim() ?? ''
+  if (g && !o) {
+    return {
+      ...providers,
+      openrouter: { ...providers.openrouter, apiKey: g },
+    }
+  }
+  if (o && !g) {
+    return {
+      ...providers,
+      genspark: { ...providers.genspark, apiKey: o },
+    }
+  }
+  return providers
+}
+
+/**
  * Model ids a vendor has stopped serving, mapped to their replacement. A
  * stored selection outlives the provider list, so without this remap an old
  * settings file keeps sending an id the API now rejects.
@@ -337,14 +374,18 @@ const RETIRED_MODELS: Partial<Record<AiProviderId, Record<string, string>>> = {
     'deepseek-chat': 'deepseek-v4-flash',
     'deepseek-reasoner': 'deepseek-v4-flash',
   },
-  // proxy stopped serving bare gpt-5.6 (400) and removed the gemini route
-  // entirely (405), verified 2026-08-31; gemini selections fall back to the
-  // provider default since no gemini id is served at all
+  // UniAI moved off the Genspark LLM proxy onto OpenRouter; remap stored
+  // proxy-era ids onto OpenRouter vendor-prefixed slugs / auto.
   genspark: {
-    'gpt-5.6': 'gpt-5.6-terra',
-    'gemini-3.1-pro-preview': 'claude-opus-4-7',
-    'gemini-3-flash-preview': 'claude-opus-4-7',
-    'gemini-3.7-flash': 'claude-opus-4-7',
+    'gpt-5.6': 'openai/gpt-5.6-terra',
+    'gpt-5.6-terra': 'openai/gpt-5.6-terra',
+    'gpt-5.6-luna': 'openai/gpt-5.6-terra',
+    'claude-opus-4-7': 'anthropic/claude-sonnet-5',
+    'claude-opus-4-8': 'anthropic/claude-sonnet-5',
+    'claude-sonnet-4-6': 'anthropic/claude-sonnet-5',
+    'gemini-3.1-pro-preview': OPENROUTER_DEFAULT_MODEL,
+    'gemini-3-flash-preview': OPENROUTER_DEFAULT_MODEL,
+    'gemini-3.7-flash': OPENROUTER_DEFAULT_MODEL,
   },
 }
 
@@ -425,7 +466,10 @@ export function resolveAiSettings(
     provider: stored.provider ?? defaults.provider,
     // Trim before migrating: a pasted " deepseek-reasoner " must still hit
     // the retired-id remap instead of being sent to the API verbatim.
-    providers: migrateRetiredModels(trimConfigs({ ...defaults.providers, ...stored.providers })),
+    // Then mirror UniAI ↔ OpenRouter Token Hub keys when only one slot is set.
+    providers: syncUniAiOpenRouterKeys(
+      migrateRetiredModels(trimConfigs({ ...defaults.providers, ...stored.providers })),
+    ),
     gskToolsEnabled: stored.gskToolsEnabled ?? defaults.gskToolsEnabled ?? true,
     media: resolveAiMediaSettings(stored.media ?? defaults.media),
     search: resolveAiSearchSettings(stored.search ?? defaults.search),

@@ -2,6 +2,12 @@
  * Renderer-side cache for Workbench SQLite (main process).
  * After hydrate(), read/write go through memory + IPC; falls back to localStorage.
  */
+import type { WorkbenchIdbMediaDump } from '../../shared/home-api'
+import {
+  collectWorkbenchIdbMedia,
+  isWbIdbMediaDump,
+  restoreWorkbenchIdbMedia,
+} from './workbench-media-backup'
 
 export type WbKvMap = Record<string, string>
 
@@ -28,11 +34,14 @@ type WbApi = {
   setKey: (key: string, value: string) => Promise<void>
   removeKey: (key: string) => Promise<void>
   importKeys: (keys: WbKvMap) => Promise<{ imported: number }>
-  exportBackup: () => Promise<{ ok: boolean; path?: string; error?: string; canceled?: boolean }>
+  exportBackup: (
+    media?: WorkbenchIdbMediaDump | null,
+  ) => Promise<{ ok: boolean; path?: string; error?: string; canceled?: boolean }>
   importBackup: () => Promise<{
     ok: boolean
     keyCount?: number
     keys?: WbKvMap
+    media?: WorkbenchIdbMediaDump
     error?: string
     canceled?: boolean
   }>
@@ -89,12 +98,18 @@ export async function hydrateWorkbenchStore(): Promise<void> {
       return
     }
     cache = new Map(Object.entries(snap.keys ?? {}))
-    if (cache.size === 0) {
-      const fromLs = collectLocalStorageKeys()
-      if (Object.keys(fromLs).length > 0) {
-        await api.importKeys(fromLs)
-        cache = new Map(Object.entries(fromLs))
+    // Merge any allowlisted localStorage keys still missing from SQLite
+    // (e.g. desk layout / My AI that previously bypassed wbStore).
+    const fromLs = collectLocalStorageKeys()
+    const missing: WbKvMap = {}
+    for (const [k, v] of Object.entries(fromLs)) {
+      if (!cache.has(k)) {
+        missing[k] = v
+        cache.set(k, v)
       }
+    }
+    if (Object.keys(missing).length > 0) {
+      await api.importKeys(missing)
     }
     usingSqlite = true
   } catch {
@@ -180,7 +195,13 @@ export async function exportWorkbenchBackupUi(): Promise<
 > {
   const api = wbApi()
   if (!api) return { ok: false, error: 'unavailable' }
-  const r = await api.exportBackup()
+  let media: WorkbenchIdbMediaDump | null = null
+  try {
+    media = await collectWorkbenchIdbMedia()
+  } catch {
+    media = null
+  }
+  const r = await api.exportBackup(media)
   if (r.ok && r.path) return { ok: true, path: r.path }
   return { ok: false, error: r.error ?? 'export-failed', canceled: r.canceled }
 }
@@ -193,5 +214,12 @@ export async function importWorkbenchBackupUi(): Promise<
   const r = await api.importBackup()
   if (!r.ok) return { ok: false, error: r.error ?? 'import-failed', canceled: r.canceled }
   if (r.keys) replaceWorkbenchCache(r.keys)
+  if (isWbIdbMediaDump(r.media)) {
+    try {
+      await restoreWorkbenchIdbMedia(r.media)
+    } catch {
+      /* KV restore succeeded; media best-effort */
+    }
+  }
   return { ok: true, keyCount: r.keyCount ?? 0 }
 }

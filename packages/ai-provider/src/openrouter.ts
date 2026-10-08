@@ -7,6 +7,17 @@ export const OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1'
 export const OPENROUTER_CREDITS_URL = 'https://openrouter.ai/settings/credits'
 export const OPENROUTER_KEYS_URL = 'https://openrouter.ai/settings/keys'
 
+/** Shared catalog for UniAI (genspark id) and the explicit OpenRouter provider. */
+export const OPENROUTER_CHAT_MODELS = [
+  'openrouter/auto',
+  'anthropic/claude-sonnet-5',
+  'openai/gpt-5.6-sol',
+  'openai/gpt-5.6-terra',
+  'moonshotai/kimi-k3',
+] as const
+
+export const OPENROUTER_DEFAULT_MODEL = 'openrouter/auto'
+
 export interface OpenRouterKeyStatus {
   ok: boolean
   error?: string

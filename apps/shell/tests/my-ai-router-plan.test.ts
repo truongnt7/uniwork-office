@@ -3,6 +3,7 @@ import {
   extractCompanionClauses,
   routeMyAiText,
   splitMyAiClauses,
+  synthesizePlanGoal,
 } from '../src/renderer/src/my-ai-router'
 
 describe('my-ai multi-tool plans (B4)', () => {
@@ -18,7 +19,7 @@ describe('my-ai multi-tool plans (B4)', () => {
     ])
   })
 
-  it('builds create + task + open Clients plan', () => {
+  it('builds create + task + open Clients plan with one goal (P3)', () => {
     const r = routeMyAiText(
       'Soạn báo giá Word và thêm công việc follow-up khách, mở tab Clients',
     )
@@ -36,6 +37,31 @@ describe('my-ai multi-tool plans (B4)', () => {
       expect(r.steps[2].intent.action).toBe('open')
       expect(r.steps[2].intent.target).toEqual({ kind: 'module', id: 'clients' })
     }
+    expect(r.goalVi).toMatch(/Soạn Word/i)
+    expect(r.goalVi).not.toMatch(/bước|→/)
+    expect(r.summaryVi).toBe(r.goalVi)
+  })
+
+  it('synthesizes summarize + notes as one goal', () => {
+    const g = synthesizePlanGoal([
+      { kind: 'summarize_recents', limit: 8 },
+      {
+        kind: 'workbench',
+        intent: {
+          intentId: 't',
+          action: 'add_item',
+          target: { kind: 'module', id: 'notes' },
+          summary: 'n',
+          text: 'x',
+          scope: 'local',
+          source: 'desktop',
+          requireConsent: false,
+          createdAt: new Date().toISOString(),
+        },
+      },
+    ])
+    expect(g.goalVi).toBe('Tóm tắt ngữ cảnh và lưu vào Ghi chú')
+    expect(g.goalEn).toMatch(/Notes/i)
   })
 
   it('keeps single create as a single step', () => {

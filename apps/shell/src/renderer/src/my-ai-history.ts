@@ -1,8 +1,9 @@
 /**
- * Persist My AI chat threads per practice (device-only localStorage).
+ * Persist My AI chat threads per practice (Workbench SQLite via wbStore).
  */
 import type { PracticeId } from '@uniwork/practice-core'
 import type { AttachmentMeta } from '../../shared/home-api'
+import { wbStoreGetRaw, wbStoreRemove, wbStoreSetRaw } from './workbench-store-client'
 
 const KEY_PREFIX = 'uniwork.my-ai.chat.v1:'
 const MAX_MESSAGES = 80
@@ -53,7 +54,7 @@ function sanitizeAtts(atts: unknown): StoredAttachment[] | undefined {
 
 export function loadMyAiHistory(practiceId: PracticeId): StoredChatMessage[] {
   try {
-    const raw = localStorage.getItem(storageKey(practiceId))
+    const raw = wbStoreGetRaw(storageKey(practiceId))
     if (!raw) return []
     const parsed = JSON.parse(raw) as unknown
     if (!Array.isArray(parsed)) return []
@@ -98,19 +99,15 @@ export function saveMyAiHistory(
       ...(sanitizeAtts(m.attachments) ? { attachments: sanitizeAtts(m.attachments) } : {}),
     }))
     if (payload.length === 0) {
-      localStorage.removeItem(storageKey(practiceId))
+      wbStoreRemove(storageKey(practiceId))
       return
     }
-    localStorage.setItem(storageKey(practiceId), JSON.stringify(payload))
+    wbStoreSetRaw(storageKey(practiceId), JSON.stringify(payload))
   } catch {
     /* quota */
   }
 }
 
 export function clearMyAiHistory(practiceId: PracticeId): void {
-  try {
-    localStorage.removeItem(storageKey(practiceId))
-  } catch {
-    /* ignore */
-  }
+  wbStoreRemove(storageKey(practiceId))
 }

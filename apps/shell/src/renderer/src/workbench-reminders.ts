@@ -3,6 +3,7 @@
  */
 import type { PracticeId } from '@uniwork/practice-core'
 import { readCalendar, readTasks } from './workbench-pins'
+import { wbStoreGetRaw, wbStoreSetRaw } from './workbench-store-client'
 
 const PREF_KEY = 'uniwork.wb.reminders.enabled'
 const FIRED_KEY = 'uniwork.wb.reminders.fired.v1'
@@ -13,24 +14,16 @@ function todayIso(): string {
 }
 
 export function remindersEnabled(): boolean {
-  try {
-    return localStorage.getItem(PREF_KEY) === '1'
-  } catch {
-    return false
-  }
+  return wbStoreGetRaw(PREF_KEY) === '1'
 }
 
 export function setRemindersEnabled(on: boolean): void {
-  try {
-    localStorage.setItem(PREF_KEY, on ? '1' : '0')
-  } catch {
-    /* ignore */
-  }
+  wbStoreSetRaw(PREF_KEY, on ? '1' : '0')
 }
 
 function firedSet(): Set<string> {
   try {
-    const raw = localStorage.getItem(FIRED_KEY)
+    const raw = wbStoreGetRaw(FIRED_KEY)
     if (!raw) return new Set()
     const arr = JSON.parse(raw) as unknown
     return Array.isArray(arr) ? new Set(arr.filter((x) => typeof x === 'string')) : new Set()
@@ -42,11 +35,7 @@ function firedSet(): Set<string> {
 function markFired(key: string): void {
   const set = firedSet()
   set.add(key)
-  try {
-    localStorage.setItem(FIRED_KEY, JSON.stringify([...set].slice(-200)))
-  } catch {
-    /* ignore */
-  }
+  wbStoreSetRaw(FIRED_KEY, JSON.stringify([...set].slice(-200)))
 }
 
 export async function requestReminderPermission(): Promise<boolean> {

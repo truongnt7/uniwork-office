@@ -488,8 +488,8 @@ const homeApi: HomeApi = {
           : 0
       return { imported }
     },
-    async exportBackup() {
-      return (await ipcRenderer.invoke(HOME_CHANNELS.wbExportBackup)) as {
+    async exportBackup(media) {
+      return (await ipcRenderer.invoke(HOME_CHANNELS.wbExportBackup, media ?? null)) as {
         ok: boolean
         path?: string
         error?: string
@@ -501,6 +501,7 @@ const homeApi: HomeApi = {
         ok: boolean
         keyCount?: number
         keys?: Record<string, string>
+        media?: import('../../shared/home-api').WorkbenchIdbMediaDump
         error?: string
         canceled?: boolean
       }

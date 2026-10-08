@@ -74,8 +74,8 @@ export const WORKBENCH_MODULES: readonly WorkbenchModuleDef[] = [
     id: 'email',
     labelVi: 'Email',
     labelEn: 'Email',
-    hintVi: 'Soạn thư nháp + AI hỗ trợ — kết nối hộp thư ở bản sau',
-    hintEn: 'Draft mail + AI assist — mailbox sync comes next',
+    hintVi: 'Gmail / Outlook / IMAP — nhận gửi + AI hỗ trợ soạn',
+    hintEn: 'Gmail / Outlook / IMAP — send, receive, AI polish',
     available: true,
   },
   {

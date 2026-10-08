@@ -1,8 +1,15 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { ReactElement } from 'react'
 import type { PracticeId } from '@uniwork/practice-core'
+import type {
+  MailAccountPublic,
+  MailApi,
+  MailConnectInput,
+  MailProviderKind,
+} from '../../shared/mail-api'
 import {
   createEmailDraft,
+  mergeSyncedEmails,
   normalizeEmailMessage,
   normalizeTaskItem,
   readEmails,
@@ -32,6 +39,10 @@ const AI_ACTIONS: { id: AiAssistId; labelVi: string; labelEn: string }[] = [
   { id: 'vi', labelVi: 'Tiếng Việt', labelEn: 'Vietnamese' },
   { id: 'en', labelVi: 'English', labelEn: 'English' },
 ]
+
+function mailApi(): MailApi | undefined {
+  return (window as Window & { uniMail?: MailApi }).uniMail
+}
 
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
@@ -66,19 +77,95 @@ export function EmailPane({ practiceId, vi }: { practiceId: PracticeId; vi: bool
   const [aiError, setAiError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
+  const [account, setAccount] = useState<MailAccountPublic | null>(null)
+  const [showConnect, setShowConnect] = useState(false)
+  const [connectBusy, setConnectBusy] = useState(false)
+  const [syncBusy, setSyncBusy] = useState(false)
+  const [sendBusy, setSendBusy] = useState(false)
+  const [connectError, setConnectError] = useState<string | null>(null)
+  const [kind, setKind] = useState<MailProviderKind>('gmail')
+  const [email, setEmail] = useState(profile.email || '')
+  const [password, setPassword] = useState('')
+  const [displayName, setDisplayName] = useState(profile.fullName || '')
+  const [imapHost, setImapHost] = useState('')
+  const [imapPort, setImapPort] = useState('993')
+  const [smtpHost, setSmtpHost] = useState('')
+  const [smtpPort, setSmtpPort] = useState('587')
+  const [presets, setPresets] = useState<Awaited<ReturnType<MailApi['listPresets']>>>([])
+
+  const persist = useCallback(
+    (next: WbEmailMessage[]) => {
+      const normalized = next.map((m) => normalizeEmailMessage(m))
+      setItems(normalized)
+      writeEmails(practiceId, normalized)
+    },
+    [practiceId],
+  )
+
+  const refreshAccount = useCallback(async () => {
+    const api = mailApi()
+    if (!api) return
+    const acc = await api.getAccount()
+    setAccount(acc)
+  }, [])
+
+  const runSync = useCallback(async () => {
+    const api = mailApi()
+    if (!api) {
+      setNotice(
+        vi
+          ? 'Mail API chưa sẵn sàng — hãy khởi động lại app.'
+          : 'Mail API unavailable — relaunch the app.',
+      )
+      return
+    }
+    setSyncBusy(true)
+    setNotice(null)
+    try {
+      const res = await api.sync({ limit: 40 })
+      if (!res.ok || !res.messages || !res.account) {
+        setNotice(res.error || (vi ? 'Đồng bộ thất bại.' : 'Sync failed.'))
+        return
+      }
+      const local = readEmails(practiceId)
+      persist(mergeSyncedEmails(local, res.messages, res.account.id))
+      setAccount(res.account)
+      setFolder('inbox')
+      setNotice(
+        vi
+          ? `Đã đồng bộ ${res.messages.length} thư từ ${res.account.email}.`
+          : `Synced ${res.messages.length} messages from ${res.account.email}.`,
+      )
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSyncBusy(false)
+    }
+  }, [vi, persist, practiceId])
+
   useEffect(() => {
     setItems(readEmails(practiceId))
     setSelectedId(null)
     setComposing(false)
     setAiError(null)
     setNotice(null)
-  }, [practiceId])
+    void refreshAccount()
+    void mailApi()
+      ?.listPresets()
+      .then((p) => setPresets(p))
+      .catch(() => {})
+  }, [practiceId, refreshAccount])
 
-  const persist = (next: WbEmailMessage[]) => {
-    const normalized = next.map((m) => normalizeEmailMessage(m))
-    setItems(normalized)
-    writeEmails(practiceId, normalized)
-  }
+  useEffect(() => {
+    const preset = presets.find((p) => p.kind === kind)
+    if (!preset) return
+    if (kind !== 'imap') {
+      setImapHost(preset.endpoints.imapHost)
+      setImapPort(String(preset.endpoints.imapPort))
+      setSmtpHost(preset.endpoints.smtpHost)
+      setSmtpPort(String(preset.endpoints.smtpPort))
+    }
+  }, [kind, presets])
 
   const visible = useMemo(
     () =>
@@ -99,7 +186,7 @@ export function EmailPane({ practiceId, vi }: { practiceId: PracticeId; vi: bool
 
   const startCompose = (seed?: Partial<WbEmailMessage>) => {
     const draft = createEmailDraft(practiceId, {
-      from: profile.email || 'me@local',
+      from: account?.email || profile.email || 'me@local',
       to: seed?.to,
       subject: seed?.subject,
       body: seed?.body,
@@ -147,33 +234,110 @@ export function EmailPane({ practiceId, vi }: { practiceId: PracticeId; vi: bool
     if (selectedId === id) setSelectedId(null)
   }
 
-  const sendLocal = () => {
+  const connectMailbox = async () => {
+    const api = mailApi()
+    if (!api) {
+      setConnectError(label('Mail API chưa sẵn sàng.', 'Mail API unavailable.'))
+      return
+    }
+    setConnectBusy(true)
+    setConnectError(null)
+    try {
+      const input: MailConnectInput = {
+        kind,
+        email: email.trim(),
+        password,
+        ...(displayName.trim() ? { displayName: displayName.trim() } : {}),
+        imapHost: imapHost.trim(),
+        imapPort: Number(imapPort) || 993,
+        imapTls: true,
+        smtpHost: smtpHost.trim(),
+        smtpPort: Number(smtpPort) || 587,
+        smtpSecure: Number(smtpPort) === 465,
+      }
+      const res = await api.connect(input)
+      if (!res.ok || !res.account) {
+        setConnectError(res.error || label('Kết nối thất bại.', 'Connection failed.'))
+        return
+      }
+      setAccount(res.account)
+      setPassword('')
+      setShowConnect(false)
+      setNotice(
+        label(
+          `Đã kết nối ${res.account.email}. Đang đồng bộ…`,
+          `Connected ${res.account.email}. Syncing…`,
+        ),
+      )
+      await runSync()
+    } catch (err) {
+      setConnectError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setConnectBusy(false)
+    }
+  }
+
+  const disconnectMailbox = async () => {
+    const api = mailApi()
+    if (!api) return
+    await api.disconnect()
+    setAccount(null)
+    setNotice(label('Đã ngắt kết nối hộp thư.', 'Mailbox disconnected.'))
+  }
+
+  const sendMail = async () => {
     if (!selected) return
     if (!selected.to.trim() || !selected.subject.trim()) {
       setNotice(label('Cần người nhận và tiêu đề trước khi gửi.', 'Add recipient and subject before sending.'))
       return
     }
-    persist(
-      items.map((m) =>
-        m.id === selected.id
-          ? normalizeEmailMessage({
-              ...m,
-              folder: 'sent',
-              unread: false,
-              demo: false,
-              updatedAt: new Date().toISOString(),
-            })
-          : m,
-      ),
-    )
-    setFolder('sent')
-    setComposing(false)
-    setNotice(
-      label(
-        'Đã lưu vào Đã gửi (cục bộ) — chưa gửi qua máy chủ email thật.',
-        'Saved to Sent (local) — not delivered through a real mail server yet.',
-      ),
-    )
+    if (!account) {
+      setNotice(
+        label(
+          'Chưa kết nối hộp thư — kết nối Gmail/Outlook/IMAP để gửi thật, hoặc thư chỉ lưu cục bộ.',
+          'No mailbox connected — connect Gmail/Outlook/IMAP to send for real.',
+        ),
+      )
+      return
+    }
+    const api = mailApi()
+    if (!api) return
+    setSendBusy(true)
+    setNotice(null)
+    try {
+      const res = await api.send({
+        to: selected.to,
+        cc: selected.cc,
+        subject: selected.subject,
+        body: selected.body,
+      })
+      if (!res.ok) {
+        setNotice(res.error || label('Gửi thất bại.', 'Send failed.'))
+        return
+      }
+      persist(
+        items.map((m) =>
+          m.id === selected.id
+            ? normalizeEmailMessage({
+                ...m,
+                folder: 'sent',
+                from: account.email,
+                unread: false,
+                demo: false,
+                accountId: account.id,
+                updatedAt: new Date().toISOString(),
+              })
+            : m,
+        ),
+      )
+      setFolder('sent')
+      setComposing(false)
+      setNotice(label('Đã gửi qua máy chủ email.', 'Sent through your mail server.'))
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSendBusy(false)
+    }
   }
 
   const createTaskFromMail = () => {
@@ -218,7 +382,8 @@ export function EmailPane({ practiceId, vi }: { practiceId: PracticeId; vi: bool
         selected.subject ? `Subject: ${selected.subject}` : '',
         selected.to ? `To: ${selected.to}` : '',
         '',
-        selected.body || label('(nội dung trống — hãy soạn giúp tôi một email ngắn)', '(empty body — draft a short email for me)'),
+        selected.body ||
+          label('(nội dung trống — hãy soạn giúp tôi một email ngắn)', '(empty body — draft a short email for me)'),
       ]
         .filter(Boolean)
         .join('\n')
@@ -255,45 +420,140 @@ export function EmailPane({ practiceId, vi }: { practiceId: PracticeId; vi: bool
     }
   }
 
+  const activePresetHint = presets.find((p) => p.kind === kind)?.hint
+
   return (
     <div className="wb-email">
       <header className="wb-email-hero">
         <div>
-          <strong>{label('Email (MVP)', 'Email (MVP)')}</strong>
+          <strong>{label('Email', 'Email')}</strong>
           <p>
-            {label(
-              'Soạn nháp, dùng AI chỉnh thư, quản lý cục bộ trên máy. Kết nối Gmail/Outlook sẽ có ở bước tiếp.',
-              'Draft, AI-polish, and manage mail locally. Gmail/Outlook sync comes next.',
-            )}
+            {account
+              ? label(
+                  `Đã kết nối ${account.email}${account.lastSyncAt ? ` · đồng bộ ${account.lastSyncAt.slice(0, 16).replace('T', ' ')}` : ''}.`,
+                  `Connected ${account.email}${account.lastSyncAt ? ` · synced ${account.lastSyncAt.slice(0, 16).replace('T', ' ')}` : ''}.`,
+                )
+              : label(
+                  'Kết nối Gmail, Outlook.com hoặc IMAP webmail để nhận/gửi trong UniOffice — không cần cài Outlook.',
+                  'Connect Gmail, Outlook.com, or IMAP webmail to send/receive in UniOffice — no Outlook install needed.',
+                )}
           </p>
         </div>
-        <button type="button" className="btn btn-primary" onClick={() => startCompose()}>
-          {label('Soạn thư', 'Compose')}
-        </button>
+        <div className="wb-email-hero-actions">
+          {account ? (
+            <>
+              <button type="button" className="btn" disabled={syncBusy} onClick={() => void runSync()}>
+                {syncBusy ? label('Đang đồng bộ…', 'Syncing…') : label('Đồng bộ', 'Sync')}
+              </button>
+              <button type="button" className="btn" onClick={() => void disconnectMailbox()}>
+                {label('Ngắt kết nối', 'Disconnect')}
+              </button>
+            </>
+          ) : (
+            <button type="button" className="btn" onClick={() => setShowConnect((v) => !v)}>
+              {showConnect ? label('Đóng', 'Close') : label('Kết nối hộp thư', 'Connect mailbox')}
+            </button>
+          )}
+          <button type="button" className="btn btn-primary" onClick={() => startCompose()}>
+            {label('Soạn thư', 'Compose')}
+          </button>
+        </div>
       </header>
 
-      <aside className="wb-email-connect" aria-label={label('Kết nối email', 'Connect email')}>
-        <div>
-          <strong>{label('Kết nối hộp thư', 'Connect mailbox')}</strong>
-          <span>
-            {label(
-              'Gmail / Outlook OAuth — sắp có. Hiện tại dùng nháp + AI trên máy.',
-              'Gmail / Outlook OAuth — coming soon. Drafts + on-device AI for now.',
-            )}
-          </span>
-        </div>
-        <button
-          type="button"
-          className="btn"
-          disabled
-          title={label(
-            'OAuth Gmail/Outlook chưa có — hiện chỉ hộp thư local trên máy',
-            'Gmail/Outlook OAuth not available — local mailbox only',
-          )}
-        >
-          {label('Kết nối hộp thư (chưa hỗ trợ)', 'Connect mailbox (unsupported)')}
-        </button>
-      </aside>
+      {!account && showConnect ? (
+        <aside className="wb-email-connect-form" aria-label={label('Kết nối email', 'Connect email')}>
+          <div className="wb-email-connect-providers" role="tablist">
+            {(
+              [
+                ['gmail', 'Gmail'],
+                ['outlook', 'Outlook'],
+                ['yahoo', 'Yahoo'],
+                ['imap', label('IMAP khác', 'Other IMAP')],
+              ] as const
+            ).map(([id, text]) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={kind === id}
+                className={`wb-email-provider${kind === id ? ' is-active' : ''}`}
+                onClick={() => setKind(id)}
+              >
+                {text}
+              </button>
+            ))}
+          </div>
+          {activePresetHint ? <p className="wb-email-connect-hint">{activePresetHint}</p> : null}
+          <div className="wb-email-connect-grid">
+            <label>
+              <span>{label('Email', 'Email')}</span>
+              <input value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
+            </label>
+            <label>
+              <span>{label('Mật khẩu ứng dụng', 'App password')}</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                placeholder={label('App password (không phải mật khẩu đăng nhập web nếu 2FA)', 'App password (not your web login if 2FA)')}
+              />
+            </label>
+            <label>
+              <span>{label('Tên hiển thị', 'Display name')}</span>
+              <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+            </label>
+            {kind === 'imap' || kind === 'outlook' || kind === 'gmail' || kind === 'yahoo' ? (
+              <>
+                <label>
+                  <span>IMAP host</span>
+                  <input value={imapHost} onChange={(e) => setImapHost(e.target.value)} disabled={kind !== 'imap'} />
+                </label>
+                <label>
+                  <span>IMAP port</span>
+                  <input value={imapPort} onChange={(e) => setImapPort(e.target.value)} disabled={kind !== 'imap'} />
+                </label>
+                <label>
+                  <span>SMTP host</span>
+                  <input value={smtpHost} onChange={(e) => setSmtpHost(e.target.value)} disabled={kind !== 'imap'} />
+                </label>
+                <label>
+                  <span>SMTP port</span>
+                  <input value={smtpPort} onChange={(e) => setSmtpPort(e.target.value)} disabled={kind !== 'imap'} />
+                </label>
+              </>
+            ) : null}
+          </div>
+          <div className="wb-email-connect-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={connectBusy || !email.trim() || !password}
+              onClick={() => void connectMailbox()}
+            >
+              {connectBusy ? label('Đang kiểm tra…', 'Verifying…') : label('Kết nối & đồng bộ', 'Connect & sync')}
+            </button>
+          </div>
+          {connectError ? <p className="wb-email-ai-error">{connectError}</p> : null}
+        </aside>
+      ) : null}
+
+      {!account && !showConnect ? (
+        <aside className="wb-email-connect" aria-label={label('Kết nối email', 'Connect email')}>
+          <div>
+            <strong>{label('Kết nối hộp thư', 'Connect mailbox')}</strong>
+            <span>
+              {label(
+                'Gmail, Outlook.com / Microsoft 365, Yahoo hoặc IMAP webmail công ty — dùng mật khẩu ứng dụng.',
+                'Gmail, Outlook.com / Microsoft 365, Yahoo, or company IMAP — use an app password.',
+              )}
+            </span>
+          </div>
+          <button type="button" className="btn btn-primary" onClick={() => setShowConnect(true)}>
+            {label('Kết nối hộp thư', 'Connect mailbox')}
+          </button>
+        </aside>
+      ) : null}
 
       <div className="wb-email-shell">
         <nav className="wb-email-folders" aria-label={label('Thư mục', 'Folders')}>
@@ -317,9 +577,7 @@ export function EmailPane({ practiceId, vi }: { practiceId: PracticeId; vi: bool
         <div className="wb-email-list" role="list">
           {visible.length === 0 ? (
             <div className="wb-email-empty">
-              <p>
-                {label('Thư mục trống.', 'This folder is empty.')}
-              </p>
+              <p>{label('Thư mục trống.', 'This folder is empty.')}</p>
               {folder === 'drafts' || folder === 'inbox' ? (
                 <button type="button" className="btn btn-primary" onClick={() => startCompose()}>
                   {label('Soạn thư mới', 'New draft')}
@@ -376,10 +634,7 @@ export function EmailPane({ practiceId, vi }: { practiceId: PracticeId; vi: bool
                   <label>
                     <span>From</span>
                     {editable ? (
-                      <input
-                        value={selected.from}
-                        onChange={(e) => updateSelected({ from: e.target.value })}
-                      />
+                      <input value={selected.from} onChange={(e) => updateSelected({ from: e.target.value })} />
                     ) : (
                       <strong>{selected.from || '—'}</strong>
                     )}
@@ -399,10 +654,7 @@ export function EmailPane({ practiceId, vi }: { practiceId: PracticeId; vi: bool
                   <label>
                     <span>Cc</span>
                     {editable ? (
-                      <input
-                        value={selected.cc ?? ''}
-                        onChange={(e) => updateSelected({ cc: e.target.value })}
-                      />
+                      <input value={selected.cc ?? ''} onChange={(e) => updateSelected({ cc: e.target.value })} />
                     ) : (
                       <strong>{selected.cc || '—'}</strong>
                     )}
@@ -445,16 +697,23 @@ export function EmailPane({ practiceId, vi }: { practiceId: PracticeId; vi: bool
                     </button>
                   ))}
                 </div>
-                {aiBusy ? (
-                  <p className="wb-email-ai-status">{label('Đang gọi AI…', 'Calling AI…')}</p>
-                ) : null}
+                {aiBusy ? <p className="wb-email-ai-status">{label('Đang gọi AI…', 'Calling AI…')}</p> : null}
                 {aiError ? <p className="wb-email-ai-error">{aiError}</p> : null}
               </div>
 
               <div className="wb-email-actions">
                 {selected.folder === 'drafts' ? (
-                  <button type="button" className="btn btn-primary" onClick={sendLocal}>
-                    {label('Gửi (cục bộ)', 'Send (local)')}
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={sendBusy}
+                    onClick={() => void sendMail()}
+                  >
+                    {sendBusy
+                      ? label('Đang gửi…', 'Sending…')
+                      : account
+                        ? label('Gửi', 'Send')
+                        : label('Gửi (cần kết nối hộp thư)', 'Send (connect mailbox)')}
                   </button>
                 ) : (
                   <button
@@ -476,11 +735,7 @@ export function EmailPane({ practiceId, vi }: { practiceId: PracticeId; vi: bool
                 <button type="button" className="btn" onClick={createTaskFromMail}>
                   {label('Tạo việc', 'Create task')}
                 </button>
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => updateSelected({ starred: !selected.starred })}
-                >
+                <button type="button" className="btn" onClick={() => updateSelected({ starred: !selected.starred })}>
                   {selected.starred ? label('Bỏ sao', 'Unstar') : label('Gắn sao', 'Star')}
                 </button>
                 {selected.folder !== 'archive' ? (

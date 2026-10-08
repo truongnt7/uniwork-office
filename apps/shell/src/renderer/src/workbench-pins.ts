@@ -518,8 +518,12 @@ export interface WbEmailMessage {
   body: string
   starred?: boolean
   unread?: boolean
-  /** Sample rows until real mailbox sync ships */
+  /** Sample rows until a real mailbox is connected */
   demo?: boolean
+  /** Connected mailbox account id (when synced from IMAP) */
+  accountId?: string
+  /** Provider UID within the remote folder */
+  remoteUid?: string
   createdAt: string
   updatedAt: string
 }
@@ -547,9 +551,55 @@ export function normalizeEmailMessage(
     ...(raw.starred ? { starred: true } : {}),
     ...(raw.unread ? { unread: true } : {}),
     ...(raw.demo ? { demo: true } : {}),
+    ...(typeof raw.accountId === 'string' && raw.accountId ? { accountId: raw.accountId } : {}),
+    ...(typeof raw.remoteUid === 'string' && raw.remoteUid ? { remoteUid: raw.remoteUid } : {}),
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : now,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : now,
   }
+}
+
+/** Merge IMAP sync into local store: keep drafts/archive/local-sent, replace inbox + account sent. */
+export function mergeSyncedEmails(
+  local: WbEmailMessage[],
+  remote: Array<{
+    id: string
+    accountId: string
+    remoteUid: string
+    folder: 'inbox' | 'sent'
+    from: string
+    to: string
+    cc?: string
+    subject: string
+    body: string
+    unread: boolean
+    createdAt: string
+    updatedAt: string
+  }>,
+  accountId: string,
+): WbEmailMessage[] {
+  const keep = local.filter(
+    (m) =>
+      !m.demo &&
+      m.folder !== 'inbox' &&
+      !(m.folder === 'sent' && m.accountId === accountId),
+  )
+  const mapped = remote.map((r) =>
+    normalizeEmailMessage({
+      id: r.id,
+      folder: r.folder,
+      from: r.from,
+      to: r.to,
+      cc: r.cc,
+      subject: r.subject,
+      body: r.body,
+      unread: r.unread,
+      accountId: r.accountId,
+      remoteUid: r.remoteUid,
+      createdAt: r.createdAt,
+      updatedAt: r.updatedAt,
+    }),
+  )
+  return [...mapped, ...keep]
 }
 
 function seedDemoEmails(practiceId: PracticeId): WbEmailMessage[] {

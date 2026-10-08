@@ -40,6 +40,7 @@ declare global {
     aiOffice: HomeApi
     aiOfficeProject?: ProjectHomeApi
     aiOfficeIntegrations?: IntegrationsApi
+    uniMail?: import('../../shared/mail-api').MailApi
   }
 }
 

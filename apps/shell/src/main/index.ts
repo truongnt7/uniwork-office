@@ -64,6 +64,7 @@ import { readAppSettings, writeAppSetting, writeAppSettings } from './app-settin
 import { OPEN_DOCUMENTS_FILE, clearOpenDocuments, publishOpenDocuments } from './open-documents'
 import { installCliLinkBestEffort } from './cli-link'
 import { registerIntegrationsIpc } from './integrations-ipc'
+import { registerMailIpc } from './mail/mail-ipc'
 import { exportLessonPackZip, probeAiHub } from './edu-commercial'
 import {
   ANALYTICS_ENABLED_KEY,
@@ -5092,6 +5093,7 @@ registerIntegrationsIpc({
     ? join(process.resourcesPath, 'cli', 'package.json')
     : join(APPS_ROOT, '..', 'packages', 'cli', 'package.json'),
 })
+registerMailIpc()
 registerTabsIpc()
 registerDroppedFilesIpc()
 

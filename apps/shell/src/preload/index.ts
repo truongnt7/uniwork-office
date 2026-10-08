@@ -28,6 +28,7 @@ import type {
 } from '../shared/home-api'
 import { HOME_CHANNELS, PROJECT_CHANNELS } from '../shared/home-api'
 import { INTEGRATIONS_CHANNELS } from '../shared/integrations-api'
+import { MAIL_CHANNELS, type MailApi, type MailConnectInput, type MailSendInput } from '../shared/mail-api'
 import type {
   IntegrationsApi,
   IntegrationsStatus,
@@ -619,6 +620,35 @@ const integrationsApi: IntegrationsApi = {
   },
 }
 contextBridge.exposeInMainWorld('aiOfficeIntegrations', integrationsApi)
+
+const mailApi: MailApi = {
+  async getAccount() {
+    const r: unknown = await ipcRenderer.invoke(MAIL_CHANNELS.getAccount)
+    return r && typeof r === 'object' ? (r as NonNullable<Awaited<ReturnType<MailApi['getAccount']>>>) : null
+  },
+  async listPresets() {
+    const r: unknown = await ipcRenderer.invoke(MAIL_CHANNELS.listPresets)
+    return Array.isArray(r) ? (r as Awaited<ReturnType<MailApi['listPresets']>>) : []
+  },
+  async connect(input: MailConnectInput) {
+    return (await ipcRenderer.invoke(MAIL_CHANNELS.connect, input)) as Awaited<
+      ReturnType<MailApi['connect']>
+    >
+  },
+  async disconnect() {
+    return (await ipcRenderer.invoke(MAIL_CHANNELS.disconnect)) as { ok: boolean }
+  },
+  async testConnection() {
+    return (await ipcRenderer.invoke(MAIL_CHANNELS.test)) as Awaited<ReturnType<MailApi['testConnection']>>
+  },
+  async sync(opts) {
+    return (await ipcRenderer.invoke(MAIL_CHANNELS.sync, opts ?? {})) as Awaited<ReturnType<MailApi['sync']>>
+  },
+  async send(input: MailSendInput) {
+    return (await ipcRenderer.invoke(MAIL_CHANNELS.send, input)) as Awaited<ReturnType<MailApi['send']>>
+  },
+}
+contextBridge.exposeInMainWorld('uniMail', mailApi)
 
 const tabsApi: TabsApi = {
   async list() {

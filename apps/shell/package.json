@@ -26,6 +26,7 @@
     "@genoffice/docs": "*",
     "@genoffice/docx-engine": "*",
     "@genoffice/electron-utils": "*",
+    "@genoffice/file-parse": "*",
     "@genoffice/i18n": "*",
     "@genoffice/pipelines": "*",
     "@genoffice/pptx-engine": "*",
@@ -34,6 +35,8 @@
     "@genoffice/slides": "*",
     "@genoffice/ui": "*",
     "@genoffice/xlsx-gateway": "*",
+    "@types/mailparser": "^3.9.0",
+    "@types/nodemailer": "^8.0.2",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -41,7 +44,6 @@
     "@uniwork/office-bridge": "*",
     "@uniwork/office-bridge-contracts": "*",
     "@uniwork/practice-core": "*",
-    "@genoffice/file-parse": "*",
     "@vitejs/plugin-react": "^5.0.4",
     "electron": "^43.3.0",
     "electron-builder": "^26.0.12",
@@ -57,6 +59,9 @@
   },
   "author": "UniWork Office",
   "dependencies": {
+    "imapflow": "^2.2.11",
+    "mailparser": "^3.9.37",
+    "nodemailer": "^10.0.16",
     "qrcode": "^1.5.4"
   }
 }

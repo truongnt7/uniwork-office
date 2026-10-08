@@ -587,7 +587,7 @@ const TOOLS: AgentToolDef[] = [
         builtin_template: {
           type: 'string',
           description:
-            'Optional: built-in gallery template id (pitch-deck | quarterly-report | product-launch | training | meeting-brief | lesson). When set with topic, the system applies that template\'s style + fixed page structure (skips ask_clarification / free-form planning).',
+            'Optional: built-in gallery template id (pitch-deck | quarterly-report | product-launch | training | meeting-brief | lesson | sales-proposal | project-kickoff | marketing-plan | company-intro | weekly-status | workshop). When set with topic, the system applies that template\'s style + fixed page structure (skips ask_clarification / free-form planning).',
         },
         dataSource: {
           type: 'string',
@@ -1780,7 +1780,7 @@ async function executeTool(
         if (!filled) {
           return fail(
             t('aiFailGenDeck'),
-            `Unknown builtin_template "${builtinTemplateId}". Use one of: pitch-deck, quarterly-report, product-launch, training, meeting-brief, lesson.`,
+            `Unknown builtin_template "${builtinTemplateId}". Use a built-in gallery id (pitch-deck, quarterly-report, product-launch, training, meeting-brief, lesson, sales-proposal, project-kickoff, marketing-plan, company-intro, weekly-status, workshop).`,
           )
         }
         topic = filled.topic

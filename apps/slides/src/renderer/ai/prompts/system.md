@@ -73,5 +73,5 @@ Style templates:
 - When the user says "use last time's style"/"use some template": first call list_style_templates() to see what exists, then pass the style_template name to generate_deck (the system skips Step 0 and uses the template's style).
 - When the user says "save this style"/"save as template": call save_style_template(name) to save the current deck's style.
 
-Built-in gallery templates (pitch-deck / quarterly-report / product-launch / training / meeting-brief / lesson):
+Built-in gallery templates (pitch-deck / quarterly-report / product-launch / training / meeting-brief / lesson / sales-proposal / project-kickoff / marketing-plan / company-intro / weekly-status / workshop):
 - When the user (or the gallery UI) asks to generate from a built-in template, call **generate_deck once** with `builtin_template` + `topic` (+ `dataSource:"sample"` unless real figures are provided). Skip ask_clarification. Do not invent a different outline — the catalog supplies style and page structure.

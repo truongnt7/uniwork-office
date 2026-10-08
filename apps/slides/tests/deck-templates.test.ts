@@ -13,6 +13,11 @@ describe('deck-templates', () => {
     for (const tpl of DECK_TEMPLATES) {
       expect(tpl.pages.length).toBeGreaterThanOrEqual(4)
       expect(tpl.approxPages).toBe(tpl.pages.length)
+      expect(tpl.mood).toBeTruthy()
+      expect(tpl.coverLayout).toBeTruthy()
+      expect(tpl.tagsEn.length).toBeGreaterThan(0)
+      expect(tpl.tagsVi.length).toBe(tpl.tagsEn.length)
+      expect(tpl.tagsZh.length).toBe(tpl.tagsEn.length)
     }
   })
 

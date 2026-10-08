@@ -27,12 +27,6 @@ import {
   type ResolveFailure,
 } from './edit-queue'
 import { createFilesSkill } from './files-skill'
-import {
-  DECK_TEMPLATES,
-  buildGalleryGenerateMessages,
-  deckTemplateDesc,
-  deckTemplateLabel,
-} from './deck-templates'
 import { createElectronTransport } from './transport'
 import { renderSlidesToPngBase64 } from '../export-render'
 import {
@@ -277,6 +271,8 @@ interface AiPanelProps {
   selectedIds: string[]
   /** no slide carries real content yet — the empty-state copy offers generation instead of polish */
   deckEmpty?: boolean
+  /** Open the full-screen template gallery (kept outside the chat pane). */
+  onBrowseTemplates?: () => void
   /** Decoded image cache from App (SlideThumb needs it) — powers AI-vision slide screenshots */
   images: Map<string, HTMLImageElement>
   applySlide: (slideIndex: number, updated: RenderSlide) => void
@@ -385,6 +381,7 @@ export function AiPanel({
   current,
   selectedIds,
   deckEmpty,
+  onBrowseTemplates,
   images,
   applySlide,
   applyDeck,
@@ -409,8 +406,6 @@ export function AiPanel({
   // Panel chrome follows the UI language; message text follows its own content (dir=auto below)
   const isRtl = lang === 'ar' || lang === 'he'
   const [input, setInput] = useState('')
-  /** Built-in gallery template selected on an empty deck (cleared after a successful send). */
-  const [galleryTemplateId, setGalleryTemplateId] = useState<string | null>(null)
   // Shared AI panel pref (Settings → General): the bespoke slides composer
   // must honor it like the shared AiComposer does.
   const { spellcheck } = useAiPanelPrefs()
@@ -1541,19 +1536,7 @@ export function AiPanel({
     // `open` dep: re-measure after expand restores a draft
   }, [input, open])
 
-  const run = () => {
-    const topic = input.trim()
-    if (!topic) return
-    if (deckEmpty && galleryTemplateId) {
-      const msgs = buildGalleryGenerateMessages(galleryTemplateId, topic, lang)
-      if (msgs) {
-        setGalleryTemplateId(null)
-        runWith(msgs.instruction, msgs.displayText)
-        return
-      }
-    }
-    runWith(topic)
-  }
+  const run = () => runWith(input.trim())
 
   /** Image attachments read as base64, sent multimodally with this user message (≤5MB per image, max 20; isomorphic to docs) */
   const MAX_IMAGES_PER_MESSAGE = 20
@@ -2128,39 +2111,12 @@ export function AiPanel({
               <br />
               {t(deckEmpty ? 'aiEmptyGenBody2' : 'aiEmptyBody2')}
             </div>
-            {deckEmpty ? (
-              <div className="ai-tpl-gallery" role="list" aria-label={t('aiTplGalleryTitle')}>
-                <div className="ai-tpl-gallery-head">{t('aiTplGalleryTitle')}</div>
-                <div className="ai-tpl-gallery-hint">{t('aiTplGalleryHint')}</div>
-                <div className="ai-tpl-gallery-grid">
-                  {DECK_TEMPLATES.map((tpl) => {
-                    const selected = galleryTemplateId === tpl.id
-                    return (
-                      <button
-                        key={tpl.id}
-                        type="button"
-                        role="listitem"
-                        className={`ai-tpl-card${selected ? ' is-selected' : ''}`}
-                        data-tpl={tpl.id}
-                        aria-pressed={selected}
-                        onClick={() => {
-                          setGalleryTemplateId(selected ? null : tpl.id)
-                          inputRef.current?.focus()
-                        }}
-                      >
-                        <span className="ai-tpl-card-accent" aria-hidden="true" />
-                        <span className="ai-tpl-card-name">{deckTemplateLabel(tpl, lang)}</span>
-                        <span className="ai-tpl-card-desc">{deckTemplateDesc(tpl, lang)}</span>
-                        <span className="ai-tpl-card-meta">
-                          {t('aiTplPages', { n: tpl.approxPages })}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-                {galleryTemplateId ? (
-                  <div className="ai-tpl-gallery-cta">{t('aiTplTopicHint')}</div>
-                ) : null}
+            {deckEmpty && onBrowseTemplates ? (
+              <div className="ai-tpl-entry">
+                <button type="button" className="ai-tpl-entry-btn" onClick={onBrowseTemplates}>
+                  {t('aiTplBrowseBtn')}
+                </button>
+                <div className="ai-tpl-entry-hint">{t('aiTplBrowseHint')}</div>
               </div>
             ) : null}
             <div className="ai-starter-list">
@@ -2169,7 +2125,6 @@ export function AiPanel({
                   key={p}
                   className="ai-starter"
                   onClick={() => {
-                    setGalleryTemplateId(null)
                     setInput(p)
                     inputRef.current?.focus()
                   }}
@@ -2429,13 +2384,7 @@ export function AiPanel({
               spellCheck={spellcheck}
               data-slides-ai-input="true"
               data-deck-undo-ready={!busy && !inputEditedSinceRunRef.current ? 'true' : 'false'}
-              placeholder={t(
-                deckEmpty && galleryTemplateId
-                  ? 'aiTplTopicPlaceholder'
-                  : deckEmpty
-                    ? 'aiInputPlaceholderGen'
-                    : 'aiInputPlaceholder',
-              )}
+              placeholder={t(deckEmpty ? 'aiInputPlaceholderGen' : 'aiInputPlaceholder')}
               onChange={(e) => {
                 inputEditedSinceRunRef.current = true
                 setInput(e.target.value)

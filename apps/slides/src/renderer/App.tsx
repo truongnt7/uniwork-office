@@ -92,6 +92,7 @@ import { ToastHost } from './components/toast'
 import { showToast } from './components/toast-bus'
 import { t, useI18n } from './i18n/locale'
 import { AiPanel } from './ai/AiPanel'
+import { DeckTemplateGalleryModal } from './ai/DeckTemplateGalleryModal'
 import { ChartDataDialog } from './components/ChartDataDialog'
 import type { BrushFormat } from './format-brush'
 import { isTextUndoTarget, shouldRouteUndoToDeck } from './undo-routing'
@@ -424,6 +425,7 @@ export function App() {
     window.slidesApi.setAutoSavePref?.(autoSave)
   }, [autoSave])
   const [showAi, setShowAi] = useState(() => localStorage.getItem('ai-slides-show-ai') !== '0')
+  const [templateGalleryOpen, setTemplateGalleryOpen] = useState(false)
   const [showFormat, setShowFormat] = useState(false)
   const [showBgFormat, setShowBgFormat] = useState(false)
   const [aiSettings, setAiSettings] = useState<AiSettings | null>(null)
@@ -3249,6 +3251,7 @@ export function App() {
                 current={current}
                 selectedIds={selectedIds}
                 deckEmpty={deckEmpty}
+                onBrowseTemplates={() => setTemplateGalleryOpen(true)}
                 images={images}
                 applySlide={applySlide}
                 applyDeck={applyDeck}
@@ -3626,6 +3629,18 @@ export function App() {
                               <GensparkMark size={14} />
                               <span>AI</span>
                             </button>
+                            {deckEmpty && (
+                              <>
+                                <span className="stage-ai-divider" aria-hidden="true" />
+                                <button
+                                  className="stage-ai-btn"
+                                  data-tip={t('aiTplBrowseBtn')}
+                                  onClick={() => setTemplateGalleryOpen(true)}
+                                >
+                                  <span>{t('aiTplBrowseShort')}</span>
+                                </button>
+                              </>
+                            )}
                             {/* Same one-click presets as the Home tab; hidden instead of
                         disabled while the deck has no real content */}
                             {!deckEmpty && (
@@ -4299,6 +4314,30 @@ export function App() {
           onClose={() => setShapeGalleryAt(null)}
         />
       )}
+
+      <DeckTemplateGalleryModal
+        open={templateGalleryOpen}
+        lang={lang}
+        labels={{
+          title: t('aiTplModalTitle'),
+          subtitle: t('aiTplModalSubtitle'),
+          browseHeading: t('aiTplBrowseHeading'),
+          detailsTitle: t('aiTplDetailsTitle'),
+          badge: t('aiTplBadge'),
+          back: t('aiTplBack'),
+          pages: (n) => t('aiTplPages', { n }),
+          outline: t('aiTplOutline'),
+          topicLabel: t('aiTplTopicLabel'),
+          topicPlaceholder: t('aiTplTopicPlaceholder'),
+          generate: t('aiTplGenerate'),
+          cancel: t('aiTplCancel'),
+        }}
+        onClose={() => setTemplateGalleryOpen(false)}
+        onGenerate={(instruction, displayText) => {
+          setTemplateGalleryOpen(false)
+          pushAiPreset(instruction, true, displayText)
+        }}
+      />
     </div>
   )
 }

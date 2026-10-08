@@ -6,6 +6,7 @@ import { applyAgentIntent, undoAgentAddItem } from './agent-intent-apply'
 import { emitAgentIntentNavigate } from './agent-intent-bus'
 import { buildMyAiContextPack, type MyAiContextPack } from './context-manager'
 import { useI18n } from './locale'
+import { recordAiTurnUsage } from './ai-usage-ledger'
 import { appendMyAiAudit } from './my-ai-audit'
 import {
   collectAttachmentTextBlock,
@@ -27,6 +28,12 @@ import {
   buildLocalAnswerSnapshot,
 } from './my-ai-local-answer'
 import { practiceMyAiChips } from './my-ai-playbooks'
+import {
+  buildTemplateBrief,
+  resolveTemplateSlots,
+  slotPromptPrefix,
+} from './my-ai-templates'
+import { readClients } from './workbench-pins'
 import {
   isAmbiguousRecentMatch,
   isSubstantiveCreateBrief,
@@ -392,9 +399,22 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     if (!api.getAiSettings) return { ok: false, error: 'AI unavailable' }
     const settings = await api.getAiSettings()
 
+    const provider = settings.provider
+    const model = settings.providers?.[provider]?.model
+
     if (!api.aiStream) {
       if (!api.aiChat) return { ok: false, error: 'AI unavailable' }
       const res = await api.aiChat({ settings, system: opts.system, user: opts.user })
+      recordAiTurnUsage({
+        source: 'my-ai',
+        summary: opts.user.slice(0, 120) || 'My AI',
+        system: opts.system,
+        user: opts.user,
+        completion: res.content,
+        provider,
+        model,
+        ok: Boolean(res.ok),
+      })
       if (!showBubble) return res
       const msgId =
         opts.messageId ??
@@ -431,6 +451,17 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
         },
       })
       streamCancelRef.current = null
+      recordAiTurnUsage({
+        source: 'my-ai',
+        summary: opts.user.slice(0, 120) || 'My AI',
+        system: opts.system,
+        user: opts.user,
+        completion: result.content,
+        provider,
+        model,
+        ok: Boolean(result.ok),
+        cancelled: result.cancelled,
+      })
       const text = result.content?.trim() || result.error || ''
       if (msgId) {
         patchMessage(msgId, {
@@ -443,6 +474,15 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     } catch (err) {
       streamCancelRef.current = null
       const error = err instanceof Error ? err.message : String(err)
+      recordAiTurnUsage({
+        source: 'my-ai',
+        summary: opts.user.slice(0, 120) || 'My AI',
+        system: opts.system,
+        user: opts.user,
+        provider,
+        model,
+        ok: false,
+      })
       if (msgId) patchMessage(msgId, { text: error, streaming: false, role: 'system' })
       return { ok: false, error, messageId: msgId }
     }
@@ -605,6 +645,65 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     pack: MyAiContextPack,
     opts?: { showAiBubble?: boolean },
   ): Promise<StepOutcome> => {
+    if (step.kind === 'fill_template') {
+      const resolved = resolveTemplateSlots(
+        practiceId,
+        step.templateId,
+        step.hint || userText,
+      )
+      if (!resolved) {
+        return {
+          text: label('Không tìm thấy mẫu tài liệu.', 'Document template not found.'),
+          pausePlan: true,
+        }
+      }
+      if (resolved.missing.length > 0) {
+        const miss = resolved.missing
+          .map((s) => (vi ? s.labelVi : s.labelEn))
+          .join(vi ? ', ' : ', ')
+        const clients = readClients(practiceId).slice(0, 5)
+        const choices: ChatChoice[] = []
+        const needsClient = resolved.missing.some((s) =>
+          s.id === 'client' || s.id === 'party' || s.id === 'investor',
+        )
+        if (needsClient) {
+          for (const c of clients) {
+            choices.push({
+              id: `tpl-client-${c.id}`,
+              label: c.name,
+              kind: 'prompt',
+              value: label(
+                `Soạn ${resolved.template.labelVi} cho khách ${c.name}`,
+                `Draft ${resolved.template.labelEn} for client ${c.name}`,
+              ),
+            })
+          }
+        }
+        for (const slot of resolved.missing.slice(0, 2)) {
+          choices.push({
+            id: `tpl-slot-${slot.id}`,
+            label: label(`Nhập ${slot.labelVi}…`, `Enter ${slot.labelEn}…`),
+            kind: 'prompt',
+            value: slotPromptPrefix(slot, resolved.template, vi),
+          })
+        }
+        return {
+          text: label(
+            `Để soạn mẫu “${resolved.template.labelVi}” đúng khung, mình còn thiếu: ${miss}. Bổ sung giúp nhé.`,
+            `To draft the “${resolved.template.labelEn}” template correctly, I still need: ${miss}.`,
+          ),
+          choices: choices.length > 0 ? choices : undefined,
+          pausePlan: true,
+        }
+      }
+      const brief = buildTemplateBrief(resolved, vi)
+      const mode = await createOfficeFile(resolved.template.app, brief)
+      return {
+        text: describeCreate(resolved.template.app, mode, brief, true),
+        contextUsed: true,
+      }
+    }
+
     if (step.kind === 'ask_create' || (step.kind === 'create_file' && !step.blank && !isSubstantiveCreateBrief(step.brief ?? ''))) {
       const app = step.app
       const name = officeAppLabel(app, vi)

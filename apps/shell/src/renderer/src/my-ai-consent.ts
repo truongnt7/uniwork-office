@@ -4,6 +4,7 @@
  */
 import { getWorkbenchModule, type WorkbenchModuleId } from '@uniwork/practice-core'
 import type { MyAiRoute, MyAiStep } from './my-ai-router'
+import { getTemplateById } from './my-ai-templates'
 
 export type ConsentReason = 'deep_read' | 'ai_token'
 
@@ -49,6 +50,16 @@ export function stepNeedsConsent(step: MyAiStep): ConsentNeed | null {
       labelEn: `Create ${officeAppFriendly(step.app, false)} with AI help (may use Tokens)`,
     }
   }
+  if (step.kind === 'fill_template') {
+    const tpl = getTemplateById(step.templateId)
+    const name = tpl ? (/* label filled below */ tpl.labelVi) : step.templateId
+    const nameEn = tpl?.labelEn ?? step.templateId
+    return {
+      reason: 'ai_token',
+      labelVi: `Soạn mẫu “${name}” với trợ giúp AI (có thể trừ Token)`,
+      labelEn: `Draft “${nameEn}” template with AI help (may use Tokens)`,
+    }
+  }
   if (step.kind === 'continue_active') {
     return {
       reason: 'ai_token',
@@ -88,6 +99,11 @@ function outcomeForStep(step: MyAiStep, vi: boolean): string {
   if (step.kind === 'ask_create') {
     const app = officeAppFriendly(step.app, vi)
     return vi ? `hỏi chủ đề rồi soạn ${app}` : `ask for a topic, then draft ${app}`
+  }
+  if (step.kind === 'fill_template') {
+    const tpl = getTemplateById(step.templateId)
+    const name = tpl ? (vi ? tpl.labelVi : tpl.labelEn) : step.templateId
+    return vi ? `soạn mẫu “${name}”` : `draft “${name}” template`
   }
   if (step.kind === 'open_file')
     return vi ? `mở file “${step.query}”` : `open “${step.query}”`
@@ -147,6 +163,11 @@ function doneForStep(step: MyAiStep, vi: boolean): string {
   if (step.kind === 'ask_create') {
     const app = officeAppFriendly(step.app, vi)
     return vi ? `đang hỏi chủ đề ${app}` : `asked for a ${app} topic`
+  }
+  if (step.kind === 'fill_template') {
+    const tpl = getTemplateById(step.templateId)
+    const name = tpl ? (vi ? tpl.labelVi : tpl.labelEn) : step.templateId
+    return vi ? `đã soạn mẫu “${name}”` : `drafted “${name}” template`
   }
   if (step.kind === 'open_file')
     return vi ? `đã mở file “${step.query}”` : `opened “${step.query}”`

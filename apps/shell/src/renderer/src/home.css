@@ -227,6 +227,164 @@ body.vib .home {
   gap: 2px;
 }
 
+.credit-wallet-wrap {
+  margin-bottom: 4px;
+}
+
+.credit-wallet-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.credit-wallet {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex: 1;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+}
+
+.credit-wallet:hover {
+  background: var(--hover);
+}
+
+.credit-wallet.is-empty {
+  border-style: dashed;
+}
+
+.credit-wallet.is-warn {
+  border-color: var(--border-subtle);
+}
+
+.credit-wallet-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.credit-wallet-toggle:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.credit-wallet-toggle.is-open svg {
+  transform: rotate(180deg);
+}
+
+.credit-wallet-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--avatar-bg);
+  color: var(--text-muted);
+}
+
+.credit-wallet-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.credit-wallet-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.credit-wallet-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.credit-wallet-log {
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.credit-wallet-log-note,
+.credit-wallet-log-empty {
+  margin: 0;
+  font-size: 10.5px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+.credit-wallet-log-empty {
+  margin-top: 6px;
+}
+
+.credit-wallet-log-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.credit-wallet-log-list li {
+  display: grid;
+  grid-template-columns: 40px 1fr auto;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.credit-wallet-log-list li.is-fail {
+  opacity: 0.65;
+}
+
+.credit-wallet-log-time {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.credit-wallet-log-sum {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.credit-wallet-log-cred {
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .account-entry {
   position: relative;
 }

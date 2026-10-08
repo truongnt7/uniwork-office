@@ -90,6 +90,7 @@ describe('workbench-db allowlist', () => {
   it('allows workbench / my-ai key prefixes', () => {
     expect(isAllowedWbKey('uniwork.wb.calendar.teacher')).toBe(true)
     expect(isAllowedWbKey('uniwork.my-ai.history.teacher')).toBe(true)
+    expect(isAllowedWbKey('uniwork.ai.usage.v1')).toBe(true)
     expect(isAllowedWbKey('uniwork.activePracticeId')).toBe(true)
     expect(isAllowedWbKey('evil.other')).toBe(false)
   })

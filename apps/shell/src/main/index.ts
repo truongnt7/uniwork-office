@@ -517,7 +517,7 @@ const GENTEAM_URL = 'https://github.com/truongnt7/uniwork-office'
 
 // Genspark credit-usage page opened from the account menu's credits row.
 // Kept main-side so the renderer never supplies the URL.
-const CREDIT_USAGE_URL = 'https://www.genspark.ai/credit-usage'
+const CREDIT_USAGE_URL = 'https://openrouter.ai/settings/credits'
 
 // ---- "star us on GitHub" prompt (see star-prompt.ts for the rules) ----
 

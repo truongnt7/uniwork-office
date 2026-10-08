@@ -12,6 +12,7 @@ import {
 } from '@uniwork/practice-core'
 import type { RecentEntry } from '../../shared/home-api'
 import { matchPracticePlaybook } from './my-ai-playbooks'
+import { getTemplateById } from './my-ai-templates'
 
 export type OfficeApp = 'docs' | 'sheets' | 'slides' | 'pdf'
 
@@ -27,6 +28,13 @@ export type MyAiStep =
       /** Ask topic in chat before opening an Office app */
       kind: 'ask_create'
       app: OfficeApp
+    }
+  | {
+      /** Practice template: resolve slots from Workbench, ask missing, then draft */
+      kind: 'fill_template'
+      templateId: string
+      /** Original user utterance for slot extraction */
+      hint?: string
     }
   | {
       kind: 'open_file'
@@ -393,6 +401,7 @@ export function extractCompanionClauses(text: string): { head: string; companion
 function stepKey(step: MyAiStep): string {
   if (step.kind === 'create_file') return `create:${step.app}:${step.brief ?? ''}:${step.blank}`
   if (step.kind === 'ask_create') return `ask_create:${step.app}`
+  if (step.kind === 'fill_template') return `fill_template:${step.templateId}:${step.hint ?? ''}`
   if (step.kind === 'open_file') return `open:${step.query}`
   if (step.kind === 'search_files') return `search:${step.query}`
   if (step.kind === 'summarize_recents') return `sum:${step.query ?? ''}:${step.limit}`
@@ -435,8 +444,8 @@ export function synthesizePlanGoal(
   }
 
   const creates = steps.filter(
-    (s): s is Extract<MyAiStep, { kind: 'create_file' | 'ask_create' }> =>
-      s.kind === 'create_file' || s.kind === 'ask_create',
+    (s): s is Extract<MyAiStep, { kind: 'create_file' | 'ask_create' | 'fill_template' }> =>
+      s.kind === 'create_file' || s.kind === 'ask_create' || s.kind === 'fill_template',
   )
   const adds = steps.filter(
     (s): s is Extract<MyAiStep, { kind: 'workbench' }> =>
@@ -494,8 +503,13 @@ export function synthesizePlanGoal(
   }
 
   if (creates.length > 0 && (adds.length > 0 || opens.length > 0)) {
-    const app = officeAppLabel(creates[0]!.app, true)
-    const appEn = officeAppLabel(creates[0]!.app, false)
+    const c0 = creates[0]!
+    const appId =
+      c0.kind === 'fill_template'
+        ? (getTemplateById(c0.templateId)?.app ?? 'docs')
+        : c0.app
+    const app = officeAppLabel(appId, true)
+    const appEn = officeAppLabel(appId, false)
     const tailVi = [...addNamesVi, ...openNamesVi.filter((n) => !addNamesVi.includes(n))]
     const tailEn = [...addNamesEn, ...openNamesEn.filter((n) => !addNamesEn.includes(n))]
     if (tailVi.length > 0) {
@@ -540,8 +554,16 @@ export function synthesizePlanGoal(
 
   // Fallback: short goal from first + last step kinds — still one phrase, not a pipeline dump
   if (creates.length > 0) {
-    const app = officeAppLabel(creates[0]!.app, true)
-    const appEn = officeAppLabel(creates[0]!.app, false)
+    const c0 = creates[0]!
+    if (c0.kind === 'fill_template') {
+      const tpl = getTemplateById(c0.templateId)
+      return {
+        goalVi: tpl ? `Soạn mẫu ${tpl.labelVi}` : 'Soạn mẫu tài liệu',
+        goalEn: tpl ? `Draft ${tpl.labelEn} template` : 'Draft document template',
+      }
+    }
+    const app = officeAppLabel(c0.app, true)
+    const appEn = officeAppLabel(c0.app, false)
     return { goalVi: `Soạn ${app}`, goalEn: `Draft ${appEn}` }
   }
   if (addNamesVi.length === 1) {

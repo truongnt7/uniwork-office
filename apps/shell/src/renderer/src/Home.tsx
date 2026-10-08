@@ -21,6 +21,7 @@ import { useDismissablePopover } from '@genoffice/ui'
 import { fileCountKey, visiblePageCount } from './counts'
 import { useI18n } from './locale'
 import type { I18n, StringKey } from './locale'
+import { CreditWallet } from './CreditWallet'
 import { SettingsModal, type SettingsSectionId } from './SettingsModal'
 import { skillUpdateDue } from './IntegrationsPane'
 import { getPractice, isPracticeId, listPractices, type PracticeId } from '@uniwork/practice-core'
@@ -493,6 +494,7 @@ function SidebarFooter({
 
   return (
     <div className="sidebar-footer">
+      <CreditWallet onOpenAiSettings={() => openSettings('aiModel')} />
       <button
         type="button"
         className="settings-btn"

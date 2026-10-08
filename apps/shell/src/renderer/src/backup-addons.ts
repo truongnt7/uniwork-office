@@ -203,6 +203,8 @@ export function collectBackupKeys(): string[] {
       k.startsWith('uniwork.skill.') ||
       k.startsWith('uniwork.teacher') ||
       k.startsWith('uniwork.activePractice') ||
+      k.startsWith('uniwork.my-ai.') ||
+      k.startsWith('uniwork.ai.') ||
       k === 'uniwork.teacherUiLang' ||
       k === ENTITLEMENT_KEY
     ) {
@@ -251,6 +253,8 @@ export function importLocalBackup(snapshot: LocalBackupSnapshot): { ok: true; co
         k.startsWith('uniwork.skill.') ||
         k.startsWith('uniwork.teacher') ||
         k.startsWith('uniwork.activePractice') ||
+        k.startsWith('uniwork.my-ai.') ||
+        k.startsWith('uniwork.ai.') ||
         k === 'uniwork.teacherUiLang' ||
         k === ENTITLEMENT_KEY
       )

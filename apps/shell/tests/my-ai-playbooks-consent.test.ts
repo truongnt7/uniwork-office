@@ -15,7 +15,7 @@ describe('Phase C / P1 practice playbooks', () => {
     )
     expect(hit?.playbook.id).toBe('sales-quote')
     expect(hit?.steps).toHaveLength(3)
-    expect(hit?.steps[0]).toMatchObject({ kind: 'create_file', app: 'docs' })
+    expect(hit?.steps[0]).toMatchObject({ kind: 'fill_template', templateId: 'sales-quote' })
     expect(hit?.steps[1]?.kind).toBe('workbench')
     expect(hit?.steps[2]?.kind).toBe('workbench')
   })
@@ -26,6 +26,7 @@ describe('Phase C / P1 practice playbooks', () => {
     if (r.kind === 'plan') {
       expect(r.playbookId).toBe('sales-quote')
       expect(r.steps.length).toBeGreaterThanOrEqual(2)
+      expect(r.steps[0]).toMatchObject({ kind: 'fill_template', templateId: 'sales-quote' })
     }
   })
 
@@ -47,7 +48,7 @@ describe('Phase C / P1 practice playbooks', () => {
       'Soạn brief chiến dịch ra mắt sản phẩm mới',
     )
     expect(hit?.playbook.id).toBe('marketing-campaign')
-    expect(hit?.steps[0]).toMatchObject({ kind: 'create_file', app: 'docs' })
+    expect(hit?.steps[0]).toMatchObject({ kind: 'fill_template', templateId: 'marketing-campaign' })
     expect(hit?.steps[1]).toMatchObject({ kind: 'create_file', app: 'slides' })
     expect(hit?.steps.length).toBe(4)
   })

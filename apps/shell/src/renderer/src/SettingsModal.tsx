@@ -29,6 +29,12 @@ import type { AccountStatus, AiCatalogEntry, UiTheme } from '../../shared/home-a
 import { ProviderLogo } from './provider-logos'
 import { BackupStoragePane } from './BackupStoragePane'
 import { BillingPaymentPane } from './BillingPaymentPane'
+import {
+  CREDIT_RATE_NOTE_EN,
+  CREDIT_RATE_NOTE_VI,
+  creditWalletFromOpenRouter,
+  formatCreditCount,
+} from './credit-wallet'
 import { LicenseDevicesPane } from './LicenseDevicesPane'
 import { UniAiPwaPane } from './UniAiPwaPane'
 import { IntegrationsPane, skillUpdateDue } from './IntegrationsPane'
@@ -310,6 +316,7 @@ function Field({
 
 /** AI model pane: provider / model / key / base URL, saved to userData/ai-settings.json */
 function AiModelPane({ t }: { t: TFunc }) {
+  const { lang } = useI18n()
   const [catalog, setCatalog] = useState<AiCatalogEntry[]>(
     () => window.aiOffice.getAiProviders?.() ?? [],
   )
@@ -436,6 +443,8 @@ function AiModelPane({ t }: { t: TFunc }) {
       .then(() => {
         setDirty(false)
         setSaved(true)
+        window.dispatchEvent(new Event('uniwork:credit-refresh'))
+        if (isTokenHub && config.apiKey) void checkOpenRouterHub(config.apiKey)
       })
       .catch((error) => {
         window.alert(error instanceof Error ? error.message : String(error))
@@ -467,8 +476,27 @@ function AiModelPane({ t }: { t: TFunc }) {
     void window.aiOffice
       .probeOpenRouterKey(apiKey)
       .then((r) => {
-        if (r.ok && r.summary) setHubStatus(r.summary)
-        else setHubStatus(r.error || t('setAiOpenRouterHubFail'))
+        if (r.ok) {
+          const wallet = creditWalletFromOpenRouter(r, true)
+          const rate = lang === 'vi' ? CREDIT_RATE_NOTE_VI : CREDIT_RATE_NOTE_EN
+          const used = formatCreditCount(wallet.used, lang === 'vi' ? 'vi-VN' : 'en-US')
+          const remain =
+            wallet.remaining != null
+              ? formatCreditCount(wallet.remaining, lang === 'vi' ? 'vi-VN' : 'en-US')
+              : null
+          const creditLine =
+            remain != null
+              ? lang === 'vi'
+                ? `Credit: còn ${remain} · đã dùng ${used}`
+                : `Credits: ${remain} left · used ${used}`
+              : lang === 'vi'
+                ? `Credit đã dùng ${used} (không giới hạn khóa)`
+                : `Credits used ${used} (no key limit)`
+          setHubStatus([r.summary, creditLine, rate].filter(Boolean).join(' · '))
+          window.dispatchEvent(new Event('uniwork:credit-refresh'))
+        } else {
+          setHubStatus(r.error || t('setAiOpenRouterHubFail'))
+        }
       })
       .catch((error) =>
         setHubStatus(error instanceof Error ? error.message : t('setAiOpenRouterHubFail')),

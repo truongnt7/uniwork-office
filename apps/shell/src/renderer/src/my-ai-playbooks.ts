@@ -56,6 +56,10 @@ function createDocs(brief: string): MyAiStep {
   return { kind: 'create_file', app: 'docs', blank: false, brief }
 }
 
+function fillTemplate(templateId: string, raw: string): MyAiStep {
+  return { kind: 'fill_template', templateId, hint: raw }
+}
+
 function createSlides(brief: string): MyAiStep {
   return { kind: 'create_file', app: 'slides', blank: false, brief }
 }
@@ -89,16 +93,16 @@ const PLAYBOOKS: readonly MyAiPlaybook[] = [
       /(?:báo giá|bao gia|quote|pricing|đề xuất giá|de xuat gia)/i.test(lower) ||
       /(?:bao gia|quote)/i.test(norm),
     buildSteps: (raw) => {
-      const brief =
+      const topic =
         residualBrief(raw, [
           AND_TAIL,
           /(?:soạn|soan|tạo|tao|viết|viet|draft|create)/gi,
           /(?:báo giá|bao gia|quote)/gi,
           /(?:word|văn bản|van ban)/gi,
-        ]) || 'Báo giá dịch vụ / sản phẩm — phạm vi, giá, điều khoản, hiệu lực'
+        ]) || 'báo giá'
       return [
-        createDocs(brief),
-        wb('add_item', 'tasks', `Follow-up báo giá: ${brief.slice(0, 80)}`, 'Thêm việc follow-up'),
+        fillTemplate('sales-quote', raw),
+        wb('add_item', 'tasks', `Follow-up báo giá: ${topic.slice(0, 80)}`, 'Thêm việc follow-up'),
         wb('open', 'clients', 'Mở tab Clients', 'Mở Clients'),
       ]
     },
@@ -127,7 +131,7 @@ const PLAYBOOKS: readonly MyAiPlaybook[] = [
           /(?:brief|chiến dịch|chien dich|campaign|word|slide|pitch)/gi,
         ]) || 'Chiến dịch — mục tiêu, audience, message, KPI, ngân sách'
       return [
-        createDocs(`Brief chiến dịch: ${topic}`),
+        fillTemplate('marketing-campaign', raw),
         createSlides(`Pitch chiến dịch: ${topic}`),
         wb('add_item', 'tasks', `Kickoff chiến dịch: ${topic.slice(0, 80)}`, 'Thêm việc kickoff'),
         wb('open', 'calendar', 'Mở lịch', 'Open calendar'),
@@ -228,7 +232,7 @@ const PLAYBOOKS: readonly MyAiPlaybook[] = [
           /(?:nhật ký|nhat ky|biên bản|bien ban|word|excel|checklist)/gi,
         ]) || 'Hạng mục / đợt GS — thời tiết, nhân lực, khối lượng, tồn đọng'
       return [
-        createDocs(`Nhật ký / biên bản hiện trường: ${topic}`),
+        fillTemplate('construction-site', raw),
         createSheets(`Checklist giám sát: ${topic}. Cột: hạng mục, tiêu chí, đạt/không, ghi chú, ảnh.`),
         wb('add_item', 'tasks', `Tồn đọng hiện trường: ${topic.slice(0, 80)}`, 'Thêm việc tồn đọng'),
       ]
@@ -428,7 +432,7 @@ const PLAYBOOKS: readonly MyAiPlaybook[] = [
         residualBrief(raw, [AND_TAIL]) ||
         'Trả lời khách: thừa nhận vấn đề, hướng xử lý, thời hạn'
       return [
-        createDocs(brief),
+        fillTemplate('cs-reply', raw),
         wb('add_item', 'tasks', `CS follow-up: ${brief.slice(0, 80)}`, 'Thêm việc CS'),
         wb('open', 'clients', 'Mở Clients', 'Open Clients'),
       ]
@@ -454,7 +458,7 @@ const PLAYBOOKS: readonly MyAiPlaybook[] = [
         residualBrief(raw, [AND_TAIL]) ||
         'Hợp đồng: bên A/B, đối tượng, thời hạn, thanh toán, điều khoản'
       return [
-        createDocs(brief),
+        fillTemplate('legal-contract', raw),
         wb('add_item', 'tasks', `Rà soát hợp đồng: ${brief.slice(0, 80)}`, 'Thêm việc rà soát'),
         wb('open', 'contracts', 'Mở Contracts', 'Open Contracts'),
       ]
@@ -483,7 +487,7 @@ const PLAYBOOKS: readonly MyAiPlaybook[] = [
           /(?:giáo án|giao an|bài giảng|bai giang|lesson plan|word|slide)/gi,
         ]) || 'Chủ đề tiết học'
       return [
-        createDocs(`Giáo án: ${topic}`),
+        fillTemplate('teacher-lesson', raw),
         createSlides(`Bài giảng / slide: ${topic}`),
         wb('add_item', 'tasks', `Chuẩn bị tiết dạy: ${topic.slice(0, 80)}`, 'Thêm việc chuẩn bị'),
       ]

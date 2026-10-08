@@ -19,7 +19,8 @@ function allowedKey(key: string): boolean {
     key.startsWith('uniwork.activePractice') ||
     key === 'uniwork.teacherUiLang' ||
     key === 'uniwork.addons.entitlements' ||
-    key.startsWith('uniwork.my-ai.')
+    key.startsWith('uniwork.my-ai.') ||
+    key.startsWith('uniwork.ai.')
   )
 }
 

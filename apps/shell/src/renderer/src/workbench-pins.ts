@@ -595,6 +595,13 @@ export interface WbFormItem {
   note?: string
   /** Practice / education pack this form draft is linked into (Tài liệu). */
   linkedProjectId?: string
+  /** Absolute path to an uploaded template file (docx/pdf/xlsx/…). */
+  filePath?: string
+  fileName?: string
+  /** lowercased extension without the dot */
+  fileExt?: string
+  /** Optional link to a built-in My AI practice template id (slot schema). */
+  templateId?: string
 }
 
 export interface WbPersonalProfile {

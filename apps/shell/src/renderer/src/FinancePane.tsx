@@ -14,6 +14,7 @@ import {
   type WbFinanceInvest,
   type WbFinanceItem,
 } from './workbench-pins'
+import { WbDeleteBtn, WbEditBtn, WbRowActions } from './WbRowActions'
 
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
@@ -229,27 +230,22 @@ function GoalsSub({ vi }: { vi: boolean }): ReactElement {
                   </div>
                   <span className="teacher-hint">{pct}%</span>
                 </div>
-                <div className="teacher-chip-row">
-                  <button type="button" className="btn btn-secondary" onClick={() => startEdit(g)}>
-                    {label('Sửa', 'Edit')}
-                  </button>
-                  <button type="button" className="btn btn-secondary" onClick={() => bump(g.id, 500_000)}>
+                <WbRowActions>
+                  <WbEditBtn label={label('Sửa', 'Edit')} onClick={() => startEdit(g)} />
+                  <button type="button" className="wb-row-chip" onClick={() => bump(g.id, 500_000)}>
                     +500k
                   </button>
-                  <button type="button" className="btn btn-secondary" onClick={() => bump(g.id, 1_000_000)}>
+                  <button type="button" className="wb-row-chip" onClick={() => bump(g.id, 1_000_000)}>
                     +1tr
                   </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
+                  <WbDeleteBtn
+                    label={label('Xóa', 'Delete')}
                     onClick={() => {
                       if (editingId === g.id) clearForm()
                       persist(items.filter((x) => x.id !== g.id))
                     }}
-                  >
-                    {label('Xóa', 'Delete')}
-                  </button>
-                </div>
+                  />
+                </WbRowActions>
               </li>
             )
           })
@@ -421,7 +417,7 @@ function SpendingSub({ vi }: { vi: boolean }): ReactElement {
         ) : (
           items.map((it) => (
             <li key={it.id} className="wb-module-row">
-              <div>
+              <div className="wb-module-meta">
                 <strong>
                   {it.date} · {it.kind === 'income' ? label('Thu', 'In') : label('Chi', 'Out')} ·{' '}
                   {money(it.amount, vi)}
@@ -431,21 +427,16 @@ function SpendingSub({ vi }: { vi: boolean }): ReactElement {
                   {it.kind === 'expense' && it.category ? ` · ${catLabel(it.category)}` : ''}
                 </span>
               </div>
-              <div className="teacher-chip-row">
-                <button type="button" className="btn btn-secondary" onClick={() => startEdit(it)}>
-                  {label('Sửa', 'Edit')}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
+              <WbRowActions>
+                <WbEditBtn label={label('Sửa', 'Edit')} onClick={() => startEdit(it)} />
+                <WbDeleteBtn
+                  label={label('Xóa', 'Delete')}
                   onClick={() => {
                     if (editingId === it.id) clearForm()
                     persist(items.filter((x) => x.id !== it.id))
                   }}
-                >
-                  {label('Xóa', 'Delete')}
-                </button>
-              </div>
+                />
+              </WbRowActions>
             </li>
           ))
         )}
@@ -628,7 +619,7 @@ function InvestSub({ vi }: { vi: boolean }): ReactElement {
         ) : (
           items.map((it) => (
             <li key={it.id} className="wb-module-row">
-              <div>
+              <div className="wb-module-meta">
                 <strong>
                   {it.name} · {money(it.amount, vi)}
                 </strong>
@@ -637,21 +628,16 @@ function InvestSub({ vi }: { vi: boolean }): ReactElement {
                 </span>
                 {it.note ? <span>{it.note}</span> : null}
               </div>
-              <div className="teacher-chip-row">
-                <button type="button" className="btn btn-secondary" onClick={() => startEdit(it)}>
-                  {label('Sửa', 'Edit')}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
+              <WbRowActions>
+                <WbEditBtn label={label('Sửa', 'Edit')} onClick={() => startEdit(it)} />
+                <WbDeleteBtn
+                  label={label('Xóa', 'Delete')}
                   onClick={() => {
                     if (editingId === it.id) clearForm()
                     persist(items.filter((x) => x.id !== it.id))
                   }}
-                >
-                  {label('Xóa', 'Delete')}
-                </button>
-              </div>
+                />
+              </WbRowActions>
             </li>
           ))
         )}

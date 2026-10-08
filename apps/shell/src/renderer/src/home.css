@@ -3079,7 +3079,125 @@ body.vib .home {
   align-items: center;
   gap: 12px;
   border: 1px solid var(--border);
-  padding: 12px 14px;
+  padding: 10px 12px 10px 14px;
+  min-height: 48px;
+}
+
+.wb-module-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.wb-module-meta strong {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.3;
+}
+
+.wb-module-meta span,
+.wb-module-meta .teacher-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+/* Compact icon cluster — never wraps into 2–3 text-button rows */
+.wb-row-actions {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  margin-left: auto;
+  opacity: 0.7;
+  transition: opacity 140ms ease;
+}
+
+.wb-module-row:hover .wb-row-actions,
+.wb-module-row:focus-within .wb-row-actions,
+.teacher-material-row:hover .wb-row-actions,
+.teacher-material-row:focus-within .wb-row-actions,
+.teacher-skill-row:hover .wb-row-actions,
+.teacher-skill-row:focus-within .wb-row-actions {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .wb-row-actions {
+    opacity: 1;
+  }
+}
+
+.wb-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    transform 140ms ease;
+}
+
+.wb-icon-btn:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.wb-icon-btn:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.wb-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.wb-icon-btn.is-danger:hover:not(:disabled) {
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.wb-icon-btn.is-accent:hover:not(:disabled) {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.wb-row-actions .wb-row-chip {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease;
+}
+
+.wb-row-actions .wb-row-chip:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
 }
 
 .wb-travel-row {
@@ -5182,18 +5300,25 @@ body.vib .home {
   color: var(--text);
 }
 
-.wb-module-row div {
+/* Prefer .wb-module-meta; keep legacy first-child content column for unmigrated rows */
+.wb-module-row > div:not(.wb-row-actions):not(.teacher-chip-row) {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
-.wb-module-row strong {
-  font-size: 12px;
-  color: var(--text-secondary);
+.wb-module-row > .teacher-chip-row {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  flex: 0 0 auto;
+  gap: 4px;
+  margin-left: auto;
 }
 
-.wb-module-row.is-done span {
+.wb-module-row.is-done .wb-module-meta span,
+.wb-module-row.is-done > div:not(.wb-row-actions):not(.teacher-chip-row) span {
   text-decoration: line-through;
   color: var(--text-secondary);
 }
@@ -6678,7 +6803,13 @@ body.vib .home {
   align-items: center;
   gap: 12px;
   border: 1px solid var(--border);
-  padding: 12px 14px;
+  padding: 10px 12px 10px 14px;
+  min-height: 48px;
+}
+
+.teacher-material-row > .wb-row-actions,
+.teacher-skill-row > .wb-row-actions {
+  margin-left: auto;
 }
 
 .teacher-material-row div,

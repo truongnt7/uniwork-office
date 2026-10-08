@@ -25,6 +25,7 @@ import {
   type WbFamilyShopItem,
   type WbFamilyTreeNode,
 } from './workbench-pins'
+import { WbDeleteBtn, WbEditBtn, WbRowActions } from './WbRowActions'
 
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
@@ -212,7 +213,7 @@ function MembersSub({ vi }: { vi: boolean }): ReactElement {
         ) : (
           items.map((it) => (
             <li key={it.id} className="wb-module-row">
-              <div>
+              <div className="wb-module-meta">
                 <strong>
                   {it.name} · {it.relation}
                 </strong>
@@ -226,14 +227,10 @@ function MembersSub({ vi }: { vi: boolean }): ReactElement {
                 </span>
                 {it.note ? <span>{it.note}</span> : null}
               </div>
-              <div className="teacher-chip-row">
-                <button type="button" className="btn btn-secondary" onClick={() => startEdit(it)}>
-                  {label('Sửa', 'Edit')}
-                </button>
-                <button type="button" className="btn btn-secondary" onClick={() => remove(it.id)}>
-                  {label('Xóa', 'Delete')}
-                </button>
-              </div>
+              <WbRowActions>
+                <WbEditBtn label={label('Sửa', 'Edit')} onClick={() => startEdit(it)} />
+                <WbDeleteBtn label={label('Xóa', 'Delete')} onClick={() => remove(it.id)} />
+              </WbRowActions>
             </li>
           ))
         )}
@@ -366,13 +363,12 @@ function ParentingSub({ vi }: { vi: boolean }): ReactElement {
                   {it.note ? <span>{it.note}</span> : null}
                 </div>
               </label>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => persist(items.filter((x) => x.id !== it.id))}
-              >
-                {label('Xóa', 'Delete')}
-              </button>
+              <WbRowActions>
+                <WbDeleteBtn
+                  label={label('Xóa', 'Delete')}
+                  onClick={() => persist(items.filter((x) => x.id !== it.id))}
+                />
+              </WbRowActions>
             </li>
           ))
         )}
@@ -494,24 +490,21 @@ function MedsSub({ vi }: { vi: boolean }): ReactElement {
                 </span>
                 {it.note ? <span>{it.note}</span> : null}
               </div>
-              <div className="teacher-chip-row">
+              <WbRowActions>
                 <button
                   type="button"
-                  className="btn btn-secondary"
+                  className="wb-row-chip"
                   onClick={() =>
                     persist(items.map((x) => (x.id === it.id ? { ...x, active: !x.active } : x)))
                   }
                 >
                   {it.active ? label('Tạm dừng', 'Pause') : label('Bật lại', 'Resume')}
                 </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
+                <WbDeleteBtn
+                  label={label('Xóa', 'Delete')}
                   onClick={() => persist(items.filter((x) => x.id !== it.id))}
-                >
-                  {label('Xóa', 'Delete')}
-                </button>
-              </div>
+                />
+              </WbRowActions>
             </li>
           ))
         )}
@@ -860,18 +853,13 @@ function TreeSub({ vi }: { vi: boolean }): ReactElement {
                 .join(' · ')}
             </span>
           </div>
-          <div className="teacher-chip-row">
-            <button
-              type="button"
-              className="btn btn-secondary"
+          <WbRowActions>
+            <WbEditBtn
+              label={label('Sửa', 'Edit')}
               onClick={() => loadSelectedIntoForm(selected)}
-            >
-              {label('Sửa', 'Edit')}
-            </button>
-            <button type="button" className="btn btn-secondary" onClick={removeSelected}>
-              {label('Xóa', 'Delete')}
-            </button>
-          </div>
+            />
+            <WbDeleteBtn label={label('Xóa', 'Delete')} onClick={removeSelected} />
+          </WbRowActions>
         </div>
       ) : null}
 
@@ -1151,9 +1139,9 @@ function ItemList({
               {it.meta ? <span>{it.meta}</span> : null}
               {it.note ? <span>{it.note}</span> : null}
             </div>
-            <button type="button" className="btn btn-secondary" onClick={() => onDelete(it.id)}>
-              {label('Xóa', 'Delete')}
-            </button>
+            <WbRowActions>
+              <WbDeleteBtn label={label('Xóa', 'Delete')} onClick={() => onDelete(it.id)} />
+            </WbRowActions>
           </li>
         ))
       )}

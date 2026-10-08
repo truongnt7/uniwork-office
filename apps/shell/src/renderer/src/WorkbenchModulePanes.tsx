@@ -12,6 +12,15 @@ import { NotesPane } from './NotesPane'
 import { PetsPane } from './PetsPane'
 import { TasksPane } from './TasksPane'
 import {
+  WbDeleteBtn,
+  WbDraftBtn,
+  WbEditBtn,
+  WbExpandBtn,
+  WbFileBtn,
+  WbMailBtn,
+  WbRowActions,
+} from './WbRowActions'
+import {
   createEmailDraft,
   pinModule,
   readClients,
@@ -184,10 +193,19 @@ function FormsPane({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [note, setNote] = useState('')
+  const [draftFile, setDraftFile] = useState<{
+    filePath: string
+    fileName: string
+    fileExt: string
+  } | null>(null)
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null)
 
   useEffect(() => {
     setItems(readForms(practiceId))
     setEditingId(null)
+    setTitle('')
+    setNote('')
+    setDraftFile(null)
   }, [practiceId])
 
   const persist = (next: WbFormItem[]) => {
@@ -199,16 +217,49 @@ function FormsPane({
     setEditingId(null)
     setTitle('')
     setNote('')
+    setDraftFile(null)
   }
 
   const startEdit = (it: WbFormItem) => {
     setEditingId(it.id)
     setTitle(it.title)
     setNote(it.note ?? '')
+    setDraftFile(
+      it.filePath
+        ? {
+            filePath: it.filePath,
+            fileName: it.fileName || it.filePath.split(/[\\/]/).pop() || it.title,
+            fileExt: it.fileExt || '',
+          }
+        : null,
+    )
+  }
+
+  const pickTemplateFile = async () => {
+    const result = (await window.aiOffice.pickAttachments?.()) ?? null
+    if (!result) return
+    const accepted = result.accepted[0]
+    if (!accepted) {
+      setUploadNotice(
+        result.rejected[0] ||
+          label('Không chọn được file hỗ trợ.', 'No supported file selected.'),
+      )
+      window.setTimeout(() => setUploadNotice(null), 4000)
+      return
+    }
+    setDraftFile({
+      filePath: accepted.path,
+      fileName: accepted.name,
+      fileExt: accepted.ext,
+    })
+    if (!title.trim()) {
+      setTitle(accepted.name.replace(/\.[^.]+$/, ''))
+    }
+    setUploadNotice(null)
   }
 
   const save = () => {
-    const t = title.trim()
+    const t = title.trim() || draftFile?.fileName.replace(/\.[^.]+$/, '') || ''
     if (!t) return
     const existing = editingId ? items.find((x) => x.id === editingId) : undefined
     const row: WbFormItem = {
@@ -220,6 +271,14 @@ function FormsPane({
         : packId
           ? { linkedProjectId: packId }
           : {}),
+      ...(draftFile
+        ? {
+            filePath: draftFile.filePath,
+            fileName: draftFile.fileName,
+            ...(draftFile.fileExt ? { fileExt: draftFile.fileExt } : {}),
+          }
+        : {}),
+      ...(existing?.templateId ? { templateId: existing.templateId } : {}),
     }
     if (editingId) {
       persist(items.map((x) => (x.id === editingId ? row : x)))
@@ -240,9 +299,13 @@ function FormsPane({
     ]
       .filter(Boolean)
       .join('')
+    const fileHint = item.fileName
+      ? `<p><em>${vi ? 'Mẫu gốc' : 'Source template'}: ${escapeHtml(item.fileName)}</em></p>`
+      : ''
     const html = `
       <h1>${escapeHtml(item.title)}</h1>
       ${item.note ? `<p><em>${escapeHtml(item.note)}</em></p>` : ''}
+      ${fileHint}
       ${metaLines}
       <h2>${vi ? 'Nội dung' : 'Content'}</h2>
       <p></p>
@@ -257,12 +320,17 @@ function FormsPane({
     onPackLinked?.()
   }
 
+  const openTemplateFile = async (item: WbFormItem) => {
+    if (!item.filePath) return
+    await window.aiOffice.openPath?.(item.filePath)
+  }
+
   return (
     <>
       <p className="teacher-hint">
         {label(
-          'Lưu tên biểu mẫu hay dùng; mở sẽ seed Docs vào gói đang chọn (ghép hồ sơ Cá nhân nếu đã điền). Lưu file trong editor để thấy ở Tài liệu.',
-          'Save frequent form titles; open seeds Docs into the selected pack (fills Personal profile when set). Save in the editor to appear under Materials.',
+          'Tải file mẫu (Word/PDF/Excel…) vào thư viện — My AI có thể điền theo mẫu thật. “Soạn” seed Docs vào gói đang chọn; “Mở file” mở mẫu gốc.',
+          'Upload a template file (Word/PDF/Excel…) — My AI can fill from the real form. “Draft” seeds Docs into the selected pack; “Open file” opens the source template.',
         )}
       </p>
       {!packId ? (
@@ -287,6 +355,24 @@ function FormsPane({
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
         <div className="teacher-chip-row">
+          <button type="button" className="btn btn-secondary" onClick={() => void pickTemplateFile()}>
+            {draftFile
+              ? label('Đổi file mẫu…', 'Replace template file…')
+              : label('Tải file mẫu…', 'Upload template file…')}
+          </button>
+          {draftFile ? (
+            <button type="button" className="btn btn-secondary" onClick={() => setDraftFile(null)}>
+              {label('Bỏ file', 'Clear file')}
+            </button>
+          ) : null}
+        </div>
+        {draftFile ? (
+          <p className="teacher-hint">
+            {label('File mẫu:', 'Template file:')} {draftFile.fileName}
+          </p>
+        ) : null}
+        {uploadNotice ? <p className="teacher-hint">{uploadNotice}</p> : null}
+        <div className="teacher-chip-row">
           <button type="button" className="btn btn-primary" onClick={save}>
             {editingId ? label('Lưu biểu mẫu', 'Save form') : label('Thêm vào thư viện', 'Add to library')}
           </button>
@@ -305,43 +391,46 @@ function FormsPane({
             const canOpen = Boolean(packId ?? it.linkedProjectId)
             return (
               <li key={it.id} className="wb-module-row">
-                <div>
+                <div className="wb-module-meta">
                   <strong>{it.title}</strong>
                   {it.note ? <span>{it.note}</span> : null}
+                  {it.fileName ? (
+                    <span className="teacher-hint">
+                      {label('File:', 'File:')} {it.fileName}
+                    </span>
+                  ) : null}
                   {it.linkedProjectId ? (
                     <span className="teacher-hint">
                       {label('Đã gắn gói Tài liệu', 'Linked to Materials pack')}
                     </span>
                   ) : null}
                 </div>
-                <div className="teacher-chip-row">
-                  <button type="button" className="btn btn-secondary" onClick={() => startEdit(it)}>
-                    {label('Sửa', 'Edit')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
+                <WbRowActions>
+                  <WbEditBtn label={label('Sửa', 'Edit')} onClick={() => startEdit(it)} />
+                  {it.filePath ? (
+                    <WbFileBtn
+                      label={label('Mở file', 'Open file')}
+                      onClick={() => void openTemplateFile(it)}
+                    />
+                  ) : null}
+                  <WbDraftBtn
+                    label={label('Soạn', 'Draft')}
                     disabled={!canOpen}
                     title={
                       canOpen
-                        ? undefined
+                        ? label('Soạn', 'Draft')
                         : label('Chọn gói ở Tri thức trước', 'Select a Knowledge pack first')
                     }
                     onClick={() => void openForm(it)}
-                  >
-                    {label('Mở', 'Open')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
+                  />
+                  <WbDeleteBtn
+                    label={label('Xóa', 'Delete')}
                     onClick={() => {
                       if (editingId === it.id) clearForm()
                       persist(items.filter((x) => x.id !== it.id))
                     }}
-                  >
-                    {label('Xóa', 'Delete')}
-                  </button>
-                </div>
+                  />
+                </WbRowActions>
               </li>
             )
           })
@@ -515,7 +604,7 @@ function EventsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean })
         ) : (
           items.map((it) => (
             <li key={it.id} className="wb-module-row">
-              <div>
+              <div className="wb-module-meta">
                 <strong>
                   {it.date}
                   {it.time ? ` · ${it.time}` : ''}
@@ -523,14 +612,10 @@ function EventsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean })
                 <span>{it.title}</span>
                 {it.place ? <span>{it.place}</span> : null}
               </div>
-              <div className="teacher-chip-row">
-                <button type="button" className="btn btn-secondary" onClick={() => startEdit(it)}>
-                  {label('Sửa', 'Edit')}
-                </button>
-                <button type="button" className="btn btn-secondary" onClick={() => remove(it.id)}>
-                  {label('Xóa', 'Delete')}
-                </button>
-              </div>
+              <WbRowActions>
+                <WbEditBtn label={label('Sửa', 'Edit')} onClick={() => startEdit(it)} />
+                <WbDeleteBtn label={label('Xóa', 'Delete')} onClick={() => remove(it.id)} />
+              </WbRowActions>
             </li>
           ))
         )}
@@ -638,13 +723,12 @@ function GrowthPane({ vi }: { vi: boolean }): ReactElement {
                   />
                 </label>
               </div>
-              <button
-                type="button"
-                className="btn btn-secondary"
-                onClick={() => persist(items.filter((x) => x.id !== it.id))}
-              >
-                {label('Xóa', 'Delete')}
-              </button>
+              <WbRowActions>
+                <WbDeleteBtn
+                  label={label('Xóa', 'Delete')}
+                  onClick={() => persist(items.filter((x) => x.id !== it.id))}
+                />
+              </WbRowActions>
             </li>
           ))
         )}
@@ -851,7 +935,7 @@ function TravelPane({
             const open = expandedId === it.id
             return (
               <li key={it.id} className="wb-module-row wb-travel-row">
-                <div>
+                <div className="wb-module-meta">
                   <strong>
                     {it.title} · {statusLabel(it.status)}
                   </strong>
@@ -868,32 +952,24 @@ function TravelPane({
                   </span>
                   {it.note ? <span>{it.note}</span> : null}
                 </div>
-                <div className="teacher-chip-row">
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
+                <WbRowActions>
+                  <WbExpandBtn
+                    label={open ? label('Thu gọn', 'Collapse') : label('Chi tiết', 'Details')}
+                    open={open}
                     onClick={() => setExpandedId(open ? null : it.id)}
-                  >
-                    {open ? label('Thu gọn', 'Collapse') : label('Chi tiết', 'Details')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
+                  />
+                  <WbDraftBtn
+                    label={label('Soạn hành trình', 'Draft itinerary')}
                     onClick={() => void openItineraryDoc(it)}
-                  >
-                    {label('Soạn hành trình', 'Draft itinerary')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
+                  />
+                  <WbDeleteBtn
+                    label={label('Xóa', 'Delete')}
                     onClick={() => {
                       persist(items.filter((x) => x.id !== it.id))
                       if (expandedId === it.id) setExpandedId(null)
                     }}
-                  >
-                    {label('Xóa', 'Delete')}
-                  </button>
-                </div>
+                  />
+                </WbRowActions>
                 {open ? (
                   <div className="wb-travel-detail">
                     <label>
@@ -1092,28 +1168,24 @@ function ClientsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
         ) : (
           items.map((it) => (
             <li key={it.id} className="wb-module-row">
-              <div>
+              <div className="wb-module-meta">
                 <strong>{it.name}</strong>
                 <span>
                   {[it.contact, it.phone, it.email].filter(Boolean).join(' · ')}
                 </span>
                 {it.note ? <span>{it.note}</span> : null}
               </div>
-              <div className="teacher-chip-row">
-                <button type="button" className="btn btn-secondary" onClick={() => startEdit(it)}>
-                  {label('Sửa', 'Edit')}
-                </button>
-                <button type="button" className="btn btn-secondary" onClick={() => composeEmail(it)}>
-                  {label('Soạn email', 'Draft email')}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-secondary"
+              <WbRowActions>
+                <WbEditBtn label={label('Sửa', 'Edit')} onClick={() => startEdit(it)} />
+                <WbMailBtn
+                  label={label('Soạn email', 'Draft email')}
+                  onClick={() => composeEmail(it)}
+                />
+                <WbDeleteBtn
+                  label={label('Xóa', 'Delete')}
                   onClick={() => persist(items.filter((x) => x.id !== it.id))}
-                >
-                  {label('Xóa', 'Delete')}
-                </button>
-              </div>
+                />
+              </WbRowActions>
             </li>
           ))
         )}
@@ -1303,7 +1375,7 @@ function ContractsPane({
             const canOpen = Boolean(packId ?? it.linkedProjectId)
             return (
               <li key={it.id} className="wb-module-row">
-                <div>
+                <div className="wb-module-meta">
                   <strong>
                     {it.title} · {statusLabel(it.status)}
                   </strong>
@@ -1319,34 +1391,26 @@ function ContractsPane({
                     </span>
                   ) : null}
                 </div>
-                <div className="teacher-chip-row">
-                  <button type="button" className="btn btn-secondary" onClick={() => startEdit(it)}>
-                    {label('Sửa', 'Edit')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
+                <WbRowActions>
+                  <WbEditBtn label={label('Sửa', 'Edit')} onClick={() => startEdit(it)} />
+                  <WbDraftBtn
+                    label={label('Soạn', 'Draft')}
                     disabled={!canOpen}
                     title={
                       canOpen
-                        ? undefined
+                        ? label('Soạn', 'Draft')
                         : label('Chọn gói ở Tri thức trước', 'Select a Knowledge pack first')
                     }
                     onClick={() => void openDraft(it)}
-                  >
-                    {label('Soạn', 'Draft')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
+                  />
+                  <WbDeleteBtn
+                    label={label('Xóa', 'Delete')}
                     onClick={() => {
                       if (editingId === it.id) clearForm()
                       persist(items.filter((x) => x.id !== it.id))
                     }}
-                  >
-                    {label('Xóa', 'Delete')}
-                  </button>
-                </div>
+                  />
+                </WbRowActions>
               </li>
             )
           })
@@ -1549,7 +1613,7 @@ function MattersPane({
             const canOpen = Boolean(packId ?? it.linkedProjectId)
             return (
               <li key={it.id} className="wb-module-row">
-                <div>
+                <div className="wb-module-meta">
                   <strong>
                     {it.title} · {statusLabel(it.status)}
                   </strong>
@@ -1565,34 +1629,26 @@ function MattersPane({
                     </span>
                   ) : null}
                 </div>
-                <div className="teacher-chip-row">
-                  <button type="button" className="btn btn-secondary" onClick={() => startEdit(it)}>
-                    {label('Sửa', 'Edit')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
+                <WbRowActions>
+                  <WbEditBtn label={label('Sửa', 'Edit')} onClick={() => startEdit(it)} />
+                  <WbDraftBtn
+                    label={label('Tóm tắt', 'Brief')}
                     disabled={!canOpen}
                     title={
                       canOpen
-                        ? undefined
+                        ? label('Tóm tắt', 'Brief')
                         : label('Chọn gói ở Tri thức trước', 'Select a Knowledge pack first')
                     }
                     onClick={() => void openBrief(it)}
-                  >
-                    {label('Tóm tắt', 'Brief')}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
+                  />
+                  <WbDeleteBtn
+                    label={label('Xóa', 'Delete')}
                     onClick={() => {
                       if (editingId === it.id) clearForm()
                       persist(items.filter((x) => x.id !== it.id))
                     }}
-                  >
-                    {label('Xóa', 'Delete')}
-                  </button>
-                </div>
+                  />
+                </WbRowActions>
               </li>
             )
           })

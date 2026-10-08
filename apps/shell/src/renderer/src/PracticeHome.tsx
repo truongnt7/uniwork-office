@@ -22,6 +22,7 @@ import { SkillDomainTabs } from './SkillDomainTabs'
 import { readActiveSkillDomain, readPinnedSkillDomains } from './skill-domain-pins'
 import { WorkbenchModulePane } from './WorkbenchModulePanes'
 import { WorkbenchTabs } from './WorkbenchTabs'
+import { WbDeleteBtn, WbOpenBtn, WbRowActions } from './WbRowActions'
 
 const UI_LANG_KEY = 'uniwork.teacherUiLang'
 
@@ -707,23 +708,17 @@ export function PracticeHome({
                           <strong>{base}</strong>
                           <span>{meta.materials?.[fp] ?? meta.materials?.[`role:${base}`] ?? '—'}</span>
                         </div>
-                        <div className="teacher-chip-row">
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
+                        <WbRowActions>
+                          <WbOpenBtn
+                            label={label('Mở', 'Open')}
                             onClick={() => void window.aiOffice.openPath(fp)}
-                          >
-                            {label('Mở', 'Open')}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
+                          />
+                          <WbDeleteBtn
+                            label={label('Xóa', 'Delete')}
                             disabled={busy === `del-file:${fp}`}
                             onClick={() => void deleteMaterialFile(fp)}
-                          >
-                            {label('Xóa', 'Delete')}
-                          </button>
-                        </div>
+                          />
+                        </WbRowActions>
                       </li>
                     )
                   })

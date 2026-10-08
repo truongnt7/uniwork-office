@@ -21,6 +21,7 @@ import {
   type WbPetPhotoMeta,
   type WbPetSpecies,
 } from './workbench-pins'
+import { WbDeleteBtn, WbRowActions } from './WbRowActions'
 
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
@@ -852,7 +853,7 @@ function CareView({
                   it.status !== 'planned' ? ' is-done' : ''
                 }`}
               >
-                <div>
+                <div className="wb-module-meta">
                   <strong>
                     {kindMeta.emoji} {it.title?.trim() || (vi ? kindMeta.labelVi : kindMeta.labelEn)}
                     {' · '}
@@ -883,47 +884,41 @@ function CareView({
                         'Log result (e.g. finished meal, played 20 min…)',
                       )}
                     />
-                    <div className="teacher-chip-row">
+                    <WbRowActions>
                       <button
                         type="button"
-                        className="btn btn-primary"
+                        className="wb-row-chip"
                         onClick={() => setStatus(it.id, 'done', resultDrafts[it.id])}
                       >
-                        {label('Hoàn thành', 'Mark done')}
+                        {label('Hoàn thành', 'Done')}
                       </button>
                       <button
                         type="button"
-                        className="btn btn-secondary"
+                        className="wb-row-chip"
                         onClick={() => setStatus(it.id, 'skipped', resultDrafts[it.id])}
                       >
                         {label('Bỏ qua', 'Skip')}
                       </button>
-                      <button
-                        type="button"
-                        className="btn btn-secondary"
+                      <WbDeleteBtn
+                        label={label('Xoá', 'Delete')}
                         onClick={() => onChange(items.filter((x) => x.id !== it.id))}
-                      >
-                        {label('Xoá', 'Delete')}
-                      </button>
-                    </div>
+                      />
+                    </WbRowActions>
                   </div>
                 ) : (
-                  <div className="teacher-chip-row">
+                  <WbRowActions>
                     <button
                       type="button"
-                      className="btn btn-secondary"
+                      className="wb-row-chip"
                       onClick={() => setStatus(it.id, 'planned')}
                     >
                       {label('Mở lại', 'Reopen')}
                     </button>
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
+                    <WbDeleteBtn
+                      label={label('Xoá', 'Delete')}
                       onClick={() => onChange(items.filter((x) => x.id !== it.id))}
-                    >
-                      {label('Xoá', 'Delete')}
-                    </button>
-                  </div>
+                    />
+                  </WbRowActions>
                 )}
               </li>
             )

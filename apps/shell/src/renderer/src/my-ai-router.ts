@@ -11,6 +11,7 @@ import {
   type WorkbenchModuleId,
 } from '@uniwork/practice-core'
 import type { RecentEntry } from '../../shared/home-api'
+import { getFormById, routeFormFill } from './my-ai-forms'
 import { matchPracticePlaybook } from './my-ai-playbooks'
 import { getTemplateById } from './my-ai-templates'
 
@@ -34,6 +35,13 @@ export type MyAiStep =
       kind: 'fill_template'
       templateId: string
       /** Original user utterance for slot extraction */
+      hint?: string
+    }
+  | {
+      /** Workbench Forms library (uploaded template file) */
+      kind: 'fill_form'
+      /** When omitted, chat asks which library form to use */
+      formId?: string
       hint?: string
     }
   | {
@@ -402,6 +410,7 @@ function stepKey(step: MyAiStep): string {
   if (step.kind === 'create_file') return `create:${step.app}:${step.brief ?? ''}:${step.blank}`
   if (step.kind === 'ask_create') return `ask_create:${step.app}`
   if (step.kind === 'fill_template') return `fill_template:${step.templateId}:${step.hint ?? ''}`
+  if (step.kind === 'fill_form') return `fill_form:${step.formId ?? ''}:${step.hint ?? ''}`
   if (step.kind === 'open_file') return `open:${step.query}`
   if (step.kind === 'search_files') return `search:${step.query}`
   if (step.kind === 'summarize_recents') return `sum:${step.query ?? ''}:${step.limit}`
@@ -444,8 +453,16 @@ export function synthesizePlanGoal(
   }
 
   const creates = steps.filter(
-    (s): s is Extract<MyAiStep, { kind: 'create_file' | 'ask_create' | 'fill_template' }> =>
-      s.kind === 'create_file' || s.kind === 'ask_create' || s.kind === 'fill_template',
+    (
+      s,
+    ): s is Extract<
+      MyAiStep,
+      { kind: 'create_file' | 'ask_create' | 'fill_template' | 'fill_form' }
+    > =>
+      s.kind === 'create_file' ||
+      s.kind === 'ask_create' ||
+      s.kind === 'fill_template' ||
+      s.kind === 'fill_form',
   )
   const adds = steps.filter(
     (s): s is Extract<MyAiStep, { kind: 'workbench' }> =>
@@ -507,7 +524,9 @@ export function synthesizePlanGoal(
     const appId =
       c0.kind === 'fill_template'
         ? (getTemplateById(c0.templateId)?.app ?? 'docs')
-        : c0.app
+        : c0.kind === 'fill_form'
+          ? 'docs'
+          : c0.app
     const app = officeAppLabel(appId, true)
     const appEn = officeAppLabel(appId, false)
     const tailVi = [...addNamesVi, ...openNamesVi.filter((n) => !addNamesVi.includes(n))]
@@ -560,6 +579,12 @@ export function synthesizePlanGoal(
       return {
         goalVi: tpl ? `Soạn mẫu ${tpl.labelVi}` : 'Soạn mẫu tài liệu',
         goalEn: tpl ? `Draft ${tpl.labelEn} template` : 'Draft document template',
+      }
+    }
+    if (c0.kind === 'fill_form') {
+      return {
+        goalVi: 'Điền biểu mẫu thư viện',
+        goalEn: 'Fill a library form',
       }
     }
     const app = officeAppLabel(c0.app, true)
@@ -785,8 +810,24 @@ export function routeMyAiText(text: string, opts?: RouteMyAiOptions): MyAiRoute 
     }
   }
 
-  // Phase C — practice playbook before generic clause split
+  // Workbench Forms library (uploaded templates) before playbooks
   if (opts?.practiceId) {
+    const formHit = routeFormFill(opts.practiceId, raw)
+    if (formHit?.kind === 'form') {
+      const form = getFormById(opts.practiceId, formHit.formId)
+      return makePlan([{ kind: 'fill_form', formId: formHit.formId, hint: raw }], {
+        playbookLabelVi: form ? `Điền biểu mẫu ${form.title}` : 'Điền biểu mẫu thư viện',
+        playbookLabelEn: form ? `Fill form ${form.title}` : 'Fill library form',
+      })
+    }
+    if (formHit?.kind === 'pick') {
+      return {
+        kind: 'fill_form',
+        hint: raw,
+      }
+    }
+
+    // Phase C — practice playbook before generic clause split
     const hit = matchPracticePlaybook(opts.practiceId, raw)
     if (hit) {
       return makePlan(hit.steps, {

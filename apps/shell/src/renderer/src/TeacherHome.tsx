@@ -47,6 +47,7 @@ import { readActiveSkillDomain, readPinnedSkillDomains } from './skill-domain-pi
 import { onAgentIntentNavigate } from './agent-intent-bus'
 import { WorkbenchModulePane } from './WorkbenchModulePanes'
 import { WorkbenchTabs } from './WorkbenchTabs'
+import { WbDeleteBtn, WbOpenBtn, WbRowActions } from './WbRowActions'
 
 function toEduMeta(entry: ProjectSummaryEntry): EduMeta | null {
   const e = entry.edu
@@ -902,23 +903,17 @@ export function TeacherHome({
                         <span>{materialRoleLabel(row.role, vi)}</span>
                       </div>
                       {row.kind === 'file' ? (
-                        <div className="teacher-chip-row">
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
+                        <WbRowActions>
+                          <WbOpenBtn
+                            label={label('Mở', 'Open')}
                             onClick={() => void window.aiOffice.openPath(row.key)}
-                          >
-                            {label('Mở', 'Open')}
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
+                          />
+                          <WbDeleteBtn
+                            label={label('Xóa', 'Delete')}
                             disabled={busy === `del-file:${row.key}`}
                             onClick={() => void deleteMaterialFile(row.key)}
-                          >
-                            {label('Xóa', 'Delete')}
-                          </button>
-                        </div>
+                          />
+                        </WbRowActions>
                       ) : (
                         <em className="teacher-hint">{label('Đã seed', 'Seeded')}</em>
                       )}

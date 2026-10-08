@@ -60,6 +60,13 @@ export function stepNeedsConsent(step: MyAiStep): ConsentNeed | null {
       labelEn: `Draft “${nameEn}” template with AI help (may use Tokens)`,
     }
   }
+  if (step.kind === 'fill_form' && step.formId) {
+    return {
+      reason: 'ai_token',
+      labelVi: 'Điền biểu mẫu thư viện với trợ giúp AI (có thể trừ Token)',
+      labelEn: 'Fill a library form with AI help (may use Tokens)',
+    }
+  }
   if (step.kind === 'continue_active') {
     return {
       reason: 'ai_token',
@@ -104,6 +111,9 @@ function outcomeForStep(step: MyAiStep, vi: boolean): string {
     const tpl = getTemplateById(step.templateId)
     const name = tpl ? (vi ? tpl.labelVi : tpl.labelEn) : step.templateId
     return vi ? `soạn mẫu “${name}”` : `draft “${name}” template`
+  }
+  if (step.kind === 'fill_form') {
+    return vi ? 'điền biểu mẫu thư viện' : 'fill a library form'
   }
   if (step.kind === 'open_file')
     return vi ? `mở file “${step.query}”` : `open “${step.query}”`
@@ -168,6 +178,9 @@ function doneForStep(step: MyAiStep, vi: boolean): string {
     const tpl = getTemplateById(step.templateId)
     const name = tpl ? (vi ? tpl.labelVi : tpl.labelEn) : step.templateId
     return vi ? `đã soạn mẫu “${name}”` : `drafted “${name}” template`
+  }
+  if (step.kind === 'fill_form') {
+    return vi ? 'đã điền biểu mẫu thư viện' : 'filled a library form'
   }
   if (step.kind === 'open_file')
     return vi ? `đã mở file “${step.query}”` : `opened “${step.query}”`

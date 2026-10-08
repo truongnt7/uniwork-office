@@ -9,6 +9,7 @@ import {
   type CalendarViewMode,
   type WbCalendarItem,
 } from './workbench-pins'
+import { WbDeleteBtn, WbEditBtn, WbRowActions } from './WbRowActions'
 
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
@@ -169,14 +170,10 @@ export function CalendarPane({
   }
 
   const renderItemActions = (it: WbCalendarItem) => (
-    <div className="teacher-chip-row">
-      <button type="button" className="btn btn-secondary" onClick={() => startEdit(it)}>
-        {label('Sửa', 'Edit')}
-      </button>
-      <button type="button" className="btn btn-secondary" onClick={() => remove(it.id)}>
-        {label('Xóa', 'Delete')}
-      </button>
-    </div>
+    <WbRowActions>
+      <WbEditBtn label={label('Sửa', 'Edit')} onClick={() => startEdit(it)} />
+      <WbDeleteBtn label={label('Xóa', 'Delete')} onClick={() => remove(it.id)} />
+    </WbRowActions>
   )
 
   const openCount = items.filter((i) => !i.done).length

@@ -29,11 +29,19 @@ import {
 } from './my-ai-local-answer'
 import { practiceMyAiChips } from './my-ai-playbooks'
 import {
+  buildFormFillBrief,
+  findFormForTemplate,
+  getFormById,
+  listFormsWithFiles,
+  readFormFileExcerpt,
+  resolveFormFillContext,
+} from './my-ai-forms'
+import {
   buildTemplateBrief,
   resolveTemplateSlots,
   slotPromptPrefix,
 } from './my-ai-templates'
-import { readClients } from './workbench-pins'
+import { readClients, readForms } from './workbench-pins'
 import {
   isAmbiguousRecentMatch,
   isSubstantiveCreateBrief,
@@ -645,6 +653,51 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     pack: MyAiContextPack,
     opts?: { showAiBubble?: boolean },
   ): Promise<StepOutcome> => {
+    if (step.kind === 'fill_form') {
+      const hint = step.hint || userText
+      if (!step.formId) {
+        const pool = listFormsWithFiles(practiceId)
+        const fallback = pool.length > 0 ? pool : readForms(practiceId)
+        if (fallback.length === 0) {
+          return {
+            text: label(
+              'Chưa có biểu mẫu trong thư viện. Mở Workbench → Biểu mẫu để tải file mẫu lên.',
+              'No forms in the library yet. Open Workbench → Forms to upload a template file.',
+            ),
+            pausePlan: true,
+          }
+        }
+        return {
+          text: label(
+            'Bạn muốn điền biểu mẫu nào?',
+            'Which library form should I fill?',
+          ),
+          choices: fallback.slice(0, 8).map((f) => ({
+            id: `form-${f.id}`,
+            label: f.fileName ? `${f.title} (${f.fileName})` : f.title,
+            kind: 'prompt' as const,
+            value: label(`Điền biểu mẫu ${f.title}`, `Fill form ${f.title}`),
+          })),
+          pausePlan: true,
+        }
+      }
+      const form = getFormById(practiceId, step.formId)
+      if (!form) {
+        return {
+          text: label('Không tìm thấy biểu mẫu trong thư viện.', 'Library form not found.'),
+          pausePlan: true,
+        }
+      }
+      const { clientRow } = resolveFormFillContext(practiceId, form, hint)
+      const excerpt = form.filePath ? await readFormFileExcerpt(form.filePath) : ''
+      const brief = buildFormFillBrief({ form, vi, userHint: hint, excerpt, clientRow })
+      const mode = await createOfficeFile('docs', brief)
+      return {
+        text: describeCreate('docs', mode, brief, true),
+        contextUsed: true,
+      }
+    }
+
     if (step.kind === 'fill_template') {
       const resolved = resolveTemplateSlots(
         practiceId,
@@ -696,7 +749,18 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
           pausePlan: true,
         }
       }
-      const brief = buildTemplateBrief(resolved, vi)
+      let brief = buildTemplateBrief(resolved, vi)
+      const libForm = findFormForTemplate(practiceId, resolved.template)
+      if (libForm?.filePath) {
+        const excerpt = await readFormFileExcerpt(libForm.filePath)
+        if (excerpt) {
+          brief +=
+            (vi
+              ? `\n\nMẫu gốc từ thư viện Biểu mẫu (“${libForm.title}”${libForm.fileName ? ` — ${libForm.fileName}` : ''}). Bám sát khung sau:\n`
+              : `\n\nLibrary form template (“${libForm.title}”${libForm.fileName ? ` — ${libForm.fileName}` : ''}). Follow this structure:\n`) +
+            excerpt
+        }
+      }
       const mode = await createOfficeFile(resolved.template.app, brief)
       return {
         text: describeCreate(resolved.template.app, mode, brief, true),

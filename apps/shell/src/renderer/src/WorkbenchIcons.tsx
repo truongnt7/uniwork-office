@@ -363,6 +363,42 @@ const BADGE: Record<IconId, { bg: string; glyph: ReactElement }> = {
       </>
     ),
   },
+  students: {
+    bg: '#0D9488',
+    glyph: (
+      <>
+        <circle cx="12" cy="8" r="2.4" fill="currentColor" />
+        <path
+          d="M7 17.5c.8-2.6 2.4-3.8 5-3.8s4.2 1.2 5 3.8"
+          stroke="currentColor"
+          strokeWidth="1.45"
+          strokeLinecap="round"
+        />
+        <path
+          d="M5.5 10.5 12 7.5l6.5 3-6.5 3z"
+          stroke="currentColor"
+          strokeWidth="1.35"
+          fill="none"
+          strokeLinejoin="round"
+        />
+      </>
+    ),
+  },
+  parents: {
+    bg: '#DB2777',
+    glyph: (
+      <>
+        <circle cx="8.5" cy="8.2" r="2.1" fill="currentColor" />
+        <circle cx="15.2" cy="8.2" r="2.1" fill="currentColor" />
+        <path
+          d="M4.8 17c.6-2.2 1.9-3.2 3.7-3.2s3.1 1 3.7 3.2M12.2 17c.5-1.8 1.6-2.7 3-2.7s2.5.9 3 2.7"
+          stroke="currentColor"
+          strokeWidth="1.45"
+          strokeLinecap="round"
+        />
+      </>
+    ),
+  },
   add: {
     bg: '#64748B',
     glyph: (

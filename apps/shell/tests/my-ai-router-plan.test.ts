@@ -105,6 +105,21 @@ describe('my-ai multi-tool plans (B4)', () => {
     expect(routeMyAiText('Tóm tắt file đang mở').kind).toBe('summarize_active')
   })
 
+  it('summarizes chat attachments instead of Recents', () => {
+    expect(
+      routeMyAiText('Tóm tắt nội dung file', { hasAttachments: true }).kind,
+    ).toBe('summarize_attachments')
+    expect(
+      routeMyAiText('Summarize the attached document', { hasAttachments: true }).kind,
+    ).toBe('summarize_attachments')
+    // Without attachments, same wording still targets Recents
+    expect(routeMyAiText('Tóm tắt nội dung file').kind).toBe('summarize_recents')
+    // Explicit “gần đây” keeps Recents even with attachments
+    expect(
+      routeMyAiText('Tóm tắt file gần đây', { hasAttachments: true }).kind,
+    ).toBe('summarize_recents')
+  })
+
   it('creates Sheets/PDF with brief (B6)', () => {
     const sheet = routeMyAiText('Tạo bảng Excel theo dõi doanh số tháng này')
     expect(sheet).toMatchObject({ kind: 'create_file', app: 'sheets', blank: false })

@@ -117,6 +117,14 @@ const MODULE_KEYWORDS: readonly { id: WorkbenchModuleId; keys: readonly string[]
   { id: 'clients', keys: ['khách hàng', 'clients', 'client', 'đối tác'] },
   { id: 'contracts', keys: ['hợp đồng', 'contracts', 'contract'] },
   { id: 'matters', keys: ['vụ việc', 'matters', 'hồ sơ vụ'] },
+  {
+    id: 'students',
+    keys: ['học sinh', 'students', 'student', 'lớp', 'học trò'],
+  },
+  {
+    id: 'parents',
+    keys: ['phụ huynh', 'parents', 'parent', 'cha mẹ', 'ba mẹ'],
+  },
 ]
 
 const PILLAR_KEYWORDS: readonly { id: PracticePillarId; keys: readonly string[] }[] = [

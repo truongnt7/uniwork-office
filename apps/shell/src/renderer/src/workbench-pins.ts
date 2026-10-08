@@ -4,6 +4,7 @@ import {
   isCorePinnedModule,
   isPracticePillarId,
   isWorkbenchModuleId,
+  TEACHER_PINNED_MODULES,
   type PracticeId,
   type PracticePillarId,
   type WorkbenchModuleId,
@@ -59,13 +60,34 @@ export function unpinPillar(practiceId: PracticeId, id: PracticePillarId): Pract
   return next
 }
 
+const TEACHER_EDU_TABS_MIGRATION = 'uniwork.wb.migrated.teacher-students-parents.v1'
+
+/** One-time: pin Students/Parents for existing teacher installs that already had custom pins. */
+function migrateTeacherEduTabs(pins: WorkbenchModuleId[]): WorkbenchModuleId[] {
+  try {
+    if (wbStoreGetRaw(TEACHER_EDU_TABS_MIGRATION) === '1') return pins
+    const have = new Set(pins)
+    const missing = TEACHER_PINNED_MODULES.filter((id) => !have.has(id))
+    const next = missing.length === 0 ? pins : [...pins, ...missing]
+    wbStoreSetRaw(TEACHER_EDU_TABS_MIGRATION, '1')
+    if (missing.length > 0) {
+      wbStoreSetRaw(PINS_PREFIX + 'teacher', JSON.stringify(ensureCorePinnedModules(next)))
+    }
+    return next
+  } catch {
+    return pins
+  }
+}
+
 export function readPinnedModules(practiceId: PracticeId): WorkbenchModuleId[] {
   try {
     const raw = wbStoreGetRaw(PINS_PREFIX + practiceId)
     if (raw === null) return defaultPinnedModules(practiceId)
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return defaultPinnedModules(practiceId)
-    return ensureCorePinnedModules(parsed.filter(isWorkbenchModuleId))
+    let pins = ensureCorePinnedModules(parsed.filter(isWorkbenchModuleId))
+    if (practiceId === 'teacher') pins = migrateTeacherEduTabs(pins)
+    return pins
   } catch {
     return defaultPinnedModules(practiceId)
   }
@@ -1699,4 +1721,39 @@ export function readMatters(practiceId: PracticeId): WbMatterItem[] {
 
 export function writeMatters(practiceId: PracticeId, items: WbMatterItem[]): void {
   writeJson(`uniwork.wb.matters.${practiceId}`, items)
+}
+
+export interface WbStudentItem {
+  id: string
+  name: string
+  className?: string
+  parentName?: string
+  phone?: string
+  email?: string
+  note?: string
+}
+
+export interface WbParentItem {
+  id: string
+  name: string
+  studentName?: string
+  phone?: string
+  email?: string
+  note?: string
+}
+
+export function readStudents(practiceId: PracticeId): WbStudentItem[] {
+  return readJson(`uniwork.wb.students.${practiceId}`, [])
+}
+
+export function writeStudents(practiceId: PracticeId, items: WbStudentItem[]): void {
+  writeJson(`uniwork.wb.students.${practiceId}`, items)
+}
+
+export function readParents(practiceId: PracticeId): WbParentItem[] {
+  return readJson(`uniwork.wb.parents.${practiceId}`, [])
+}
+
+export function writeParents(practiceId: PracticeId, items: WbParentItem[]): void {
+  writeJson(`uniwork.wb.parents.${practiceId}`, items)
 }

@@ -59,6 +59,10 @@ export type MyAiStep =
       limit: number
     }
   | {
+      /** Summarize files attached in this My AI turn */
+      kind: 'summarize_attachments'
+    }
+  | {
       /** Continue / instruct the last Office tab (even if Home/My AI is focused) */
       kind: 'continue_active'
       brief?: string
@@ -94,6 +98,12 @@ export type MyAiRoute =
       hintVi: string
       hintEn: string
     }
+
+export interface RouteMyAiOptions {
+  practiceId?: PracticeId
+  /** True when this turn has chat file attachments */
+  hasAttachments?: boolean
+}
 
 const MAX_PLAN_STEPS = 4
 
@@ -318,11 +328,23 @@ function looksLikeSearch(lower: string): boolean {
   )
 }
 
+function looksLikeSummarizeIntent(lower: string): boolean {
+  return /(?:tóm tắt|tom tat|summarize|summary|tổng hợp|tong hop)/i.test(lower)
+}
+
 function looksLikeSummarizeRecents(lower: string): boolean {
-  const sum = /\b(tóm tắt|tom tat|summarize|summary|tổng hợp|tong hop)\b/i.test(lower)
-  if (!sum) return false
+  if (!looksLikeSummarizeIntent(lower)) return false
   if (looksLikeSummarizeActive(lower)) return false
   return /\b(file|recent|gần đây|gan day|tài liệu|tai lieu|recents?)\b/i.test(lower)
+}
+
+/** Prefer chat attachments over Recents when user did not say “recent”. */
+function looksLikeSummarizeAttachments(lower: string): boolean {
+  if (!looksLikeSummarizeIntent(lower)) return false
+  if (looksLikeSummarizeActive(lower)) return false
+  // “đây” keeps đ after diacritic strip → also match “gan đay”
+  if (/(?:gần đây|gan day|gan đay|recents?)/i.test(lower)) return false
+  return true
 }
 
 function looksLikeContinueActive(lower: string): boolean {
@@ -415,6 +437,7 @@ function stepKey(step: MyAiStep): string {
   if (step.kind === 'open_file') return `open:${step.query}`
   if (step.kind === 'search_files') return `search:${step.query}`
   if (step.kind === 'summarize_recents') return `sum:${step.query ?? ''}:${step.limit}`
+  if (step.kind === 'summarize_attachments') return 'summarize_attachments'
   if (step.kind === 'continue_active') return `continue:${step.brief ?? ''}`
   if (step.kind === 'summarize_active') return 'summarize_active'
   return `wb:${step.intent.action}:${step.intent.target.kind}:${'id' in step.intent.target ? step.intent.target.id : ''}:${step.intent.text ?? ''}`
@@ -474,7 +497,10 @@ export function synthesizePlanGoal(
       s.kind === 'workbench' && (s.intent.action === 'open' || s.intent.action === 'navigate'),
   )
   const hasSummarize = steps.some(
-    (s) => s.kind === 'summarize_recents' || s.kind === 'summarize_active',
+    (s) =>
+      s.kind === 'summarize_recents' ||
+      s.kind === 'summarize_active' ||
+      s.kind === 'summarize_attachments',
   )
   const hasContinue = steps.some((s) => s.kind === 'continue_active')
   const hasOpenFile = steps.some((s) => s.kind === 'open_file' || s.kind === 'search_files')
@@ -623,12 +649,15 @@ function makePlan(
   }
 }
 
-function tryBuildPlan(raw: string): Extract<MyAiRoute, { kind: 'plan' }> | null {
+function tryBuildPlan(
+  raw: string,
+  opts?: RouteMyAiOptions,
+): Extract<MyAiRoute, { kind: 'plan' }> | null {
   const fromClauses: MyAiStep[] = []
   const clauses = splitMyAiClauses(raw)
   if (clauses.length >= 2) {
     for (const clause of clauses.slice(0, MAX_PLAN_STEPS)) {
-      const r = routeMyAiTextSingle(clause)
+      const r = routeMyAiTextSingle(clause, opts)
       if (r.kind !== 'unknown') fromClauses.push(r)
     }
   }
@@ -638,11 +667,11 @@ function tryBuildPlan(raw: string): Extract<MyAiRoute, { kind: 'plan' }> | null 
   if (steps.length < 2) {
     const { head, companions } = extractCompanionClauses(raw)
     if (companions.length === 0) return null
-    const primary = routeMyAiTextSingle(head)
+    const primary = routeMyAiTextSingle(head, opts)
     if (primary.kind === 'unknown') return null
     const built: MyAiStep[] = [primary]
     for (const c of companions) {
-      const r = routeMyAiTextSingle(c)
+      const r = routeMyAiTextSingle(c, opts)
       if (r.kind !== 'unknown') built.push(r)
     }
     steps = dedupeSteps(built)
@@ -665,7 +694,10 @@ function tryBuildPlan(raw: string): Extract<MyAiRoute, { kind: 'plan' }> | null 
  * Route a single clause (no multi-tool planning).
  * Prefer specific file ops before generic Workbench NL.
  */
-export function routeMyAiTextSingle(text: string): MyAiStep | Extract<MyAiRoute, { kind: 'unknown' }> {
+export function routeMyAiTextSingle(
+  text: string,
+  opts?: RouteMyAiOptions,
+): MyAiStep | Extract<MyAiRoute, { kind: 'unknown' }> {
   const raw = text.trim()
   if (!raw) {
     return {
@@ -680,6 +712,13 @@ export function routeMyAiTextSingle(text: string): MyAiStep | Extract<MyAiRoute,
   // 0) Active Office tab (before generic summarize / open)
   if (looksLikeSummarizeActive(lower) || looksLikeSummarizeActive(lowerNorm)) {
     return { kind: 'summarize_active' }
+  }
+  // 0b) Chat attachments — before Recents so “tóm tắt nội dung file” uses the upload
+  if (
+    opts?.hasAttachments &&
+    (looksLikeSummarizeAttachments(lower) || looksLikeSummarizeAttachments(lowerNorm))
+  ) {
+    return { kind: 'summarize_attachments' }
   }
   if (looksLikeContinueActive(lower) || looksLikeContinueActive(lowerNorm)) {
     const brief =
@@ -820,10 +859,6 @@ export function routeMyAiTextSingle(text: string): MyAiStep | Extract<MyAiRoute,
   }
 }
 
-export interface RouteMyAiOptions {
-  practiceId?: PracticeId
-}
-
 /** Route a user utterance — may return a multi-tool / practice playbook plan. */
 export function routeMyAiText(text: string, opts?: RouteMyAiOptions): MyAiRoute {
   const raw = text.trim()
@@ -863,9 +898,9 @@ export function routeMyAiText(text: string, opts?: RouteMyAiOptions): MyAiRoute 
     }
   }
 
-  const plan = tryBuildPlan(raw)
+  const plan = tryBuildPlan(raw, opts)
   if (plan) return plan
-  return routeMyAiTextSingle(raw)
+  return routeMyAiTextSingle(raw, opts)
 }
 
 export function officeAppLabel(app: OfficeApp, vi: boolean): string {

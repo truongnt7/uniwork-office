@@ -26,6 +26,8 @@ export type WorkbenchModuleId =
   | 'clients'
   | 'contracts'
   | 'matters'
+  | 'students'
+  | 'parents'
 
 export interface WorkbenchModuleDef {
   id: WorkbenchModuleId
@@ -190,6 +192,22 @@ export const WORKBENCH_MODULES: readonly WorkbenchModuleDef[] = [
     hintEn: 'Legal matters for counsel / legal teams',
     available: true,
   },
+  {
+    id: 'students',
+    labelVi: 'Học sinh',
+    labelEn: 'Students',
+    hintVi: 'Danh sách học sinh — lớp, liên hệ, ghi chú',
+    hintEn: 'Student roster — class, contact, notes',
+    available: true,
+  },
+  {
+    id: 'parents',
+    labelVi: 'Phụ huynh',
+    labelEn: 'Parents',
+    hintVi: 'Liên hệ phụ huynh — học sinh liên quan, điện thoại, email',
+    hintEn: 'Parent contacts — linked student, phone, email',
+    available: true,
+  },
 ] as const
 
 /**
@@ -203,8 +221,14 @@ export const CORE_PINNED_MODULES: readonly WorkbenchModuleId[] = [
   'forms',
 ]
 
+/** Teacher-suggested pins (can still be unpinned via Tab ×). */
+export const TEACHER_PINNED_MODULES: readonly WorkbenchModuleId[] = ['students', 'parents']
+
 /** Suggested pins when a practice has never customized Tab +. */
-export function defaultPinnedModules(_practiceId: PracticeId): WorkbenchModuleId[] {
+export function defaultPinnedModules(practiceId: PracticeId): WorkbenchModuleId[] {
+  if (practiceId === 'teacher') {
+    return [...CORE_PINNED_MODULES, ...TEACHER_PINNED_MODULES]
+  }
   return [...CORE_PINNED_MODULES]
 }
 
@@ -276,7 +300,7 @@ export const WORKBENCH_SPACE_GROUPS: readonly WorkbenchSpaceGroup[] = [
     id: 'work',
     labelVi: 'Công việc',
     labelEn: 'Work',
-    moduleIds: ['clients', 'contracts', 'matters'],
+    moduleIds: ['clients', 'contracts', 'matters', 'students', 'parents'],
   },
 ] as const
 

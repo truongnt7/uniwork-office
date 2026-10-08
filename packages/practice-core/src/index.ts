@@ -34,6 +34,7 @@ export {
 } from './registry.js'
 export {
   CORE_PINNED_MODULES,
+  TEACHER_PINNED_MODULES,
   WORKBENCH_MODULES,
   WORKBENCH_SPACE_GROUPS,
   defaultPinnedModules,

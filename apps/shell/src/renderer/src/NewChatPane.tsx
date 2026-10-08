@@ -1089,6 +1089,90 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       }
     }
 
+    if (step.kind === 'summarize_attachments') {
+      const atts = turnAttachmentsRef.current
+      if (atts.length === 0) {
+        return {
+          text: label(
+            'Chưa có tệp đính kèm để tóm tắt. Hãy gắn file rồi gửi lại.',
+            'No attachments to summarize. Attach a file and try again.',
+          ),
+        }
+      }
+      const attachBlock = await collectAttachmentTextBlock(atts)
+      const images = await collectImageAttachments(atts)
+      const names = atts.map((a) => a.name).join(', ')
+      let summary = ''
+      let usedAi = false
+      let streamedMessageId: string | undefined
+      try {
+        if (attachBlock?.trim() || images.length > 0) {
+          const system = vi
+            ? `Bạn là trợ lý desktop UniWork. Tóm tắt nội dung thật từ tệp đính kèm (tiếng Việt, gạch đầu dòng: chủ đề, điểm chính, việc có thể làm tiếp). Chỉ dùng nội dung tệp — không bịa. Nếu không đọc được, nói rõ.\n\nNgữ cảnh máy:\n${pack.plainText.slice(0, 1_200)}`
+            : `You are a UniWork desktop assistant. Summarize real content from the attached files (bullets: topic, key points, next actions). Use only attachment text/images — do not invent. If unreadable, say so.\n\nOn-device context:\n${pack.plainText.slice(0, 1_200)}`
+          const user = [
+            `Attached files: ${names}`,
+            attachBlock ? `\n\nAttachment content:\n${attachBlock}` : '',
+            images.length > 0
+              ? `\n\n(${images.length} image(s) attached — use vision if available.)`
+              : '',
+            `\n\nUser request: ${userText}`,
+          ].join('')
+          const res = await runStreamedAi({
+            system,
+            user,
+            images,
+            showBubble: opts?.showAiBubble !== false,
+          })
+          if (res.ok && res.content?.trim()) {
+            summary = res.content.trim()
+            usedAi = true
+            streamedMessageId = res.messageId
+          }
+        }
+      } catch {
+        /* fall through to local digest */
+      }
+      if (!summary) {
+        if (attachBlock?.trim()) {
+          const digest = attachBlock
+            .split('\n')
+            .filter((line) => line.trim() && !line.startsWith('---'))
+            .slice(0, 12)
+            .map((line) => `• ${line.trim().slice(0, 160)}`)
+            .join('\n')
+          summary =
+            digest ||
+            label(
+              'Đã đọc tệp nhưng chưa trích được đoạn nổi bật.',
+              'Read the file but could not extract highlight lines.',
+            )
+        } else {
+          summary = label(
+            `Không đọc được nội dung văn bản từ: ${names}. Thử PDF/DOCX/TXT có chữ (không phải ảnh scan trống).`,
+            `Could not extract text from: ${names}. Try a text PDF/DOCX/TXT (not a blank scan).`,
+          )
+        }
+      }
+      const text =
+        label(
+          `Tóm tắt tệp đính kèm (${atts.length}):\n${summary}`,
+          `Attached files summary (${atts.length}):\n${summary}`,
+        ) + contextFootnote(vi, usedAi || Boolean(attachBlock?.trim()))
+      if (streamedMessageId) {
+        patchMessage(streamedMessageId, {
+          text,
+          contextUsed: true,
+          streaming: false,
+        })
+      }
+      return {
+        text,
+        contextUsed: true,
+        streamedMessageId,
+      }
+    }
+
     if (step.kind === 'summarize_recents') {
       const pool = step.query
         ? rankRecents(entries, step.query, step.limit)
@@ -1747,17 +1831,17 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       return
     }
     if (!text && sentAtts.length > 0) {
-      text = label(
-        'Hãy xem các tệp đính kèm và đề xuất việc nên làm tiếp.',
-        'Please review the attached files and suggest next steps.',
-      )
+      text = label('Tóm tắt nội dung tệp đính kèm.', 'Summarize the attached files.')
     }
     pendingConsentRef.current = null
     pendingResumeRef.current = null
     turnAttachmentsRef.current = sentAtts
     setAttachments([])
     setInput('')
-    const route = routeMyAiText(text, { practiceId })
+    const route = routeMyAiText(text, {
+      practiceId,
+      hasAttachments: sentAtts.length > 0,
+    })
     void runRoute(route, text, { attachments: sentAtts })
   }
 

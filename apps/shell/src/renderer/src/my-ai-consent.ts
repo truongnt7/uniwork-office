@@ -36,7 +36,11 @@ function officeAppFriendly(app: string, vi: boolean): string {
 }
 
 export function stepNeedsConsent(step: MyAiStep): ConsentNeed | null {
-  if (step.kind === 'summarize_recents' || step.kind === 'summarize_active') {
+  if (
+    step.kind === 'summarize_recents' ||
+    step.kind === 'summarize_active' ||
+    step.kind === 'summarize_attachments'
+  ) {
     return {
       reason: 'deep_read',
       labelVi: 'Đọc nội dung trên máy và có thể dùng AI (có thể trừ Token)',
@@ -121,6 +125,8 @@ function outcomeForStep(step: MyAiStep, vi: boolean): string {
     return vi ? `tìm file “${step.query}”` : `find “${step.query}”`
   if (step.kind === 'summarize_recents')
     return vi ? 'tóm tắt file gần đây' : 'summarize recent files'
+  if (step.kind === 'summarize_attachments')
+    return vi ? 'tóm tắt tệp đính kèm' : 'summarize attached files'
   if (step.kind === 'summarize_active')
     return vi ? 'tóm tắt tab đang mở' : 'summarize the open tab'
   if (step.kind === 'continue_active')
@@ -188,6 +194,8 @@ function doneForStep(step: MyAiStep, vi: boolean): string {
     return vi ? `đã tìm file “${step.query}”` : `searched for “${step.query}”`
   if (step.kind === 'summarize_recents')
     return vi ? 'đã tóm tắt file gần đây' : 'summarized recent files'
+  if (step.kind === 'summarize_attachments')
+    return vi ? 'đã tóm tắt tệp đính kèm' : 'summarized attached files'
   if (step.kind === 'summarize_active')
     return vi ? 'đã tóm tắt tab đang mở' : 'summarized the open tab'
   if (step.kind === 'continue_active')

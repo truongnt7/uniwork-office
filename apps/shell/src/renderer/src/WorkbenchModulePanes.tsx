@@ -31,7 +31,9 @@ import {
   readForms,
   readGrowth,
   readMatters,
+  readParents,
   readPersonal,
+  readStudents,
   readTravel,
   writeClients,
   writeContracts,
@@ -39,7 +41,9 @@ import {
   writeForms,
   writeGrowth,
   writeMatters,
+  writeParents,
   writePersonal,
+  writeStudents,
   writeTravel,
   type WbClientItem,
   type WbContractItem,
@@ -47,7 +51,9 @@ import {
   type WbFormItem,
   type WbGrowthItem,
   type WbMatterItem,
+  type WbParentItem,
   type WbPersonalProfile,
+  type WbStudentItem,
   type WbTravelTrip,
 } from './workbench-pins'
 
@@ -122,6 +128,8 @@ export function WorkbenchModulePane({
         <TravelPane vi={vi} packId={packId} onPackLinked={onPackLinked} />
       )}
       {moduleId === 'clients' && <ClientsPane practiceId={practiceId} vi={vi} />}
+      {moduleId === 'students' && <StudentsPane practiceId={practiceId} vi={vi} />}
+      {moduleId === 'parents' && <ParentsPane practiceId={practiceId} vi={vi} />}
       {moduleId === 'contracts' && (
         <ContractsPane practiceId={practiceId} vi={vi} packId={packId} onPackLinked={onPackLinked} />
       )}
@@ -1191,6 +1199,364 @@ function ClientsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
                 <strong>{it.name}</strong>
                 <span>
                   {[it.contact, it.phone, it.email].filter(Boolean).join(' · ')}
+                </span>
+                {it.note ? <span>{it.note}</span> : null}
+              </div>
+              <WbRowActions>
+                <WbEditBtn label={label('Sửa', 'Edit')} onClick={() => startEdit(it)} />
+                <WbMailBtn
+                  label={label('Soạn email', 'Draft email')}
+                  onClick={() => composeEmail(it)}
+                />
+                <WbDeleteBtn
+                  label={label('Xóa', 'Delete')}
+                  onClick={() => persist(items.filter((x) => x.id !== it.id))}
+                />
+              </WbRowActions>
+            </li>
+          ))
+        )}
+      </ul>
+    </>
+  )
+}
+
+function StudentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }): ReactElement {
+  const label = (a: string, b: string) => (vi ? a : b)
+  const [items, setItems] = useState<WbStudentItem[]>(() => readStudents(practiceId))
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [composing, setComposing] = useState(false)
+  const [name, setName] = useState('')
+  const [className, setClassName] = useState('')
+  const [parentName, setParentName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [note, setNote] = useState('')
+
+  useEffect(() => {
+    setItems(readStudents(practiceId))
+    setEditingId(null)
+    setComposing(false)
+  }, [practiceId])
+
+  const persist = (next: WbStudentItem[]) => {
+    setItems(next)
+    writeStudents(practiceId, next)
+  }
+
+  const clearForm = () => {
+    setEditingId(null)
+    setComposing(false)
+    setName('')
+    setClassName('')
+    setParentName('')
+    setPhone('')
+    setEmail('')
+    setNote('')
+  }
+
+  const startEdit = (it: WbStudentItem) => {
+    setEditingId(it.id)
+    setComposing(true)
+    setName(it.name)
+    setClassName(it.className ?? '')
+    setParentName(it.parentName ?? '')
+    setPhone(it.phone ?? '')
+    setEmail(it.email ?? '')
+    setNote(it.note ?? '')
+  }
+
+  const save = () => {
+    const n = name.trim()
+    if (!n) return
+    const row: WbStudentItem = {
+      id: editingId ?? newId(),
+      name: n,
+      ...(className.trim() ? { className: className.trim() } : {}),
+      ...(parentName.trim() ? { parentName: parentName.trim() } : {}),
+      ...(phone.trim() ? { phone: phone.trim() } : {}),
+      ...(email.trim() ? { email: email.trim() } : {}),
+      ...(note.trim() ? { note: note.trim() } : {}),
+    }
+    if (editingId) {
+      persist(items.map((x) => (x.id === editingId ? row : x)))
+    } else {
+      persist([row, ...items])
+    }
+    clearForm()
+  }
+
+  const composeEmail = (it: WbStudentItem) => {
+    pinModule(practiceId, 'email')
+    window.dispatchEvent(new Event('uniwork:wb-pins-changed'))
+    createEmailDraft(practiceId, {
+      to: it.email || undefined,
+      subject: label(`Về học sinh ${it.name}`, `About student ${it.name}`),
+      body: label(
+        `Xin chào${it.parentName ? ` ${it.parentName}` : ''},\n\n`,
+        `Hello${it.parentName ? ` ${it.parentName}` : ''},\n\n`,
+      ),
+    })
+    window.dispatchEvent(
+      new CustomEvent('uniwork:wb-open-module', { detail: { moduleId: 'email' } }),
+    )
+  }
+
+  const showForm = composing || Boolean(editingId)
+
+  return (
+    <>
+      <div className="wb-db-toolbar">
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => {
+            clearForm()
+            setComposing(true)
+          }}
+        >
+          {label('Thêm học sinh', 'New student')}
+        </button>
+      </div>
+      {showForm ? (
+        <div className="wb-module-form wb-composer-panel">
+          <label>
+            <span>{label('Họ tên học sinh', 'Student name')}</span>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={label('VD: Nguyễn Văn An', 'e.g. Alex Nguyen')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') save()
+              }}
+              autoFocus
+            />
+          </label>
+          <label>
+            <span>{label('Lớp', 'Class')}</span>
+            <input
+              value={className}
+              onChange={(e) => setClassName(e.target.value)}
+              placeholder={label('VD: 10A1', 'e.g. 10A')}
+            />
+          </label>
+          <label>
+            <span>{label('Phụ huynh', 'Parent')}</span>
+            <input value={parentName} onChange={(e) => setParentName(e.target.value)} />
+          </label>
+          <label>
+            <span>{label('Điện thoại', 'Phone')}</span>
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </label>
+          <label>
+            <span>Email</span>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} />
+          </label>
+          <label className="teacher-form-wide">
+            <span>{label('Ghi chú', 'Note')}</span>
+            <input value={note} onChange={(e) => setNote(e.target.value)} />
+          </label>
+          <div className="teacher-chip-row">
+            <button type="button" className="btn btn-primary" onClick={save}>
+              {editingId
+                ? label('Lưu học sinh', 'Save student')
+                : label('Thêm học sinh', 'Add student')}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={clearForm}>
+              {label('Huỷ', 'Cancel')}
+            </button>
+          </div>
+        </div>
+      ) : null}
+      <ul className="wb-module-list">
+        {items.length === 0 ? (
+          <li className="teacher-empty">{label('Chưa có học sinh.', 'No students yet.')}</li>
+        ) : (
+          items.map((it) => (
+            <li key={it.id} className="wb-module-row">
+              <div className="wb-module-meta">
+                <strong>{it.name}</strong>
+                <span>
+                  {[it.className, it.parentName, it.phone, it.email].filter(Boolean).join(' · ')}
+                </span>
+                {it.note ? <span>{it.note}</span> : null}
+              </div>
+              <WbRowActions>
+                <WbEditBtn label={label('Sửa', 'Edit')} onClick={() => startEdit(it)} />
+                <WbMailBtn
+                  label={label('Soạn email', 'Draft email')}
+                  onClick={() => composeEmail(it)}
+                />
+                <WbDeleteBtn
+                  label={label('Xóa', 'Delete')}
+                  onClick={() => persist(items.filter((x) => x.id !== it.id))}
+                />
+              </WbRowActions>
+            </li>
+          ))
+        )}
+      </ul>
+    </>
+  )
+}
+
+function ParentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }): ReactElement {
+  const label = (a: string, b: string) => (vi ? a : b)
+  const [items, setItems] = useState<WbParentItem[]>(() => readParents(practiceId))
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [composing, setComposing] = useState(false)
+  const [name, setName] = useState('')
+  const [studentName, setStudentName] = useState('')
+  const [phone, setPhone] = useState('')
+  const [email, setEmail] = useState('')
+  const [note, setNote] = useState('')
+
+  useEffect(() => {
+    setItems(readParents(practiceId))
+    setEditingId(null)
+    setComposing(false)
+  }, [practiceId])
+
+  const persist = (next: WbParentItem[]) => {
+    setItems(next)
+    writeParents(practiceId, next)
+  }
+
+  const clearForm = () => {
+    setEditingId(null)
+    setComposing(false)
+    setName('')
+    setStudentName('')
+    setPhone('')
+    setEmail('')
+    setNote('')
+  }
+
+  const startEdit = (it: WbParentItem) => {
+    setEditingId(it.id)
+    setComposing(true)
+    setName(it.name)
+    setStudentName(it.studentName ?? '')
+    setPhone(it.phone ?? '')
+    setEmail(it.email ?? '')
+    setNote(it.note ?? '')
+  }
+
+  const save = () => {
+    const n = name.trim()
+    if (!n) return
+    const row: WbParentItem = {
+      id: editingId ?? newId(),
+      name: n,
+      ...(studentName.trim() ? { studentName: studentName.trim() } : {}),
+      ...(phone.trim() ? { phone: phone.trim() } : {}),
+      ...(email.trim() ? { email: email.trim() } : {}),
+      ...(note.trim() ? { note: note.trim() } : {}),
+    }
+    if (editingId) {
+      persist(items.map((x) => (x.id === editingId ? row : x)))
+    } else {
+      persist([row, ...items])
+    }
+    clearForm()
+  }
+
+  const composeEmail = (it: WbParentItem) => {
+    pinModule(practiceId, 'email')
+    window.dispatchEvent(new Event('uniwork:wb-pins-changed'))
+    createEmailDraft(practiceId, {
+      to: it.email || undefined,
+      subject: label(
+        it.studentName ? `Về học sinh ${it.studentName}` : `Liên hệ ${it.name}`,
+        it.studentName ? `About ${it.studentName}` : `Contact ${it.name}`,
+      ),
+      body: label(`Xin chào ${it.name},\n\n`, `Hello ${it.name},\n\n`),
+    })
+    window.dispatchEvent(
+      new CustomEvent('uniwork:wb-open-module', { detail: { moduleId: 'email' } }),
+    )
+  }
+
+  const showForm = composing || Boolean(editingId)
+
+  return (
+    <>
+      <div className="wb-db-toolbar">
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => {
+            clearForm()
+            setComposing(true)
+          }}
+        >
+          {label('Thêm phụ huynh', 'New parent')}
+        </button>
+      </div>
+      {showForm ? (
+        <div className="wb-module-form wb-composer-panel">
+          <label>
+            <span>{label('Họ tên phụ huynh', 'Parent name')}</span>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={label('VD: Trần Thị Bình', 'e.g. Jane Doe')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') save()
+              }}
+              autoFocus
+            />
+          </label>
+          <label>
+            <span>{label('Học sinh', 'Student')}</span>
+            <input
+              value={studentName}
+              onChange={(e) => setStudentName(e.target.value)}
+              placeholder={label('VD: Nguyễn Văn An', 'e.g. Alex Nguyen')}
+            />
+          </label>
+          <label>
+            <span>{label('Điện thoại', 'Phone')}</span>
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} />
+          </label>
+          <label>
+            <span>Email</span>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} />
+          </label>
+          <label className="teacher-form-wide">
+            <span>{label('Ghi chú', 'Note')}</span>
+            <input value={note} onChange={(e) => setNote(e.target.value)} />
+          </label>
+          <div className="teacher-chip-row">
+            <button type="button" className="btn btn-primary" onClick={save}>
+              {editingId
+                ? label('Lưu phụ huynh', 'Save parent')
+                : label('Thêm phụ huynh', 'Add parent')}
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={clearForm}>
+              {label('Huỷ', 'Cancel')}
+            </button>
+          </div>
+        </div>
+      ) : null}
+      <ul className="wb-module-list">
+        {items.length === 0 ? (
+          <li className="teacher-empty">{label('Chưa có phụ huynh.', 'No parents yet.')}</li>
+        ) : (
+          items.map((it) => (
+            <li key={it.id} className="wb-module-row">
+              <div className="wb-module-meta">
+                <strong>{it.name}</strong>
+                <span>
+                  {[
+                    it.studentName
+                      ? label(`HS: ${it.studentName}`, `Student: ${it.studentName}`)
+                      : null,
+                    it.phone,
+                    it.email,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </span>
                 {it.note ? <span>{it.note}</span> : null}
               </div>

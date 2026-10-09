@@ -1141,6 +1141,20 @@ export interface SlidesApi {
   setShowFullScreen: (on: boolean) => Promise<void>
   openPptx: (fitWidthPx: number) => Promise<OpenResult | null>
   openPptxPath: (path: string, fitWidthPx: number) => Promise<OpenResult | null>
+  /** Import a .pptx into the gallery “Mine” library */
+  importUserDeckTemplate: () => Promise<{
+    ok: boolean
+    template?: { id: string; name: string; originalName: string; createdAt: string }
+    error?: string
+  }>
+  listUserDeckTemplates: () => Promise<
+    Array<{ id: string; name: string; originalName: string; createdAt: string }>
+  >
+  deleteUserDeckTemplate: (id: string) => Promise<{ ok: boolean; error?: string }>
+  /** Copy a library template to a temp path for opening (does not dirty the library file) */
+  prepareUserDeckTemplate: (
+    id: string,
+  ) => Promise<{ ok: boolean; path?: string; name?: string; error?: string }>
   /** Office-private faces referenced by layouts so far; the renderer registers them as FontFaces
    *  (files invisible to Chromium — DFonts/cloud fonts), so drawing uses the measuring font. */
   privateFontFaces: () => Promise<
@@ -1612,6 +1626,8 @@ export interface SlidesApi {
   loadStyleTemplate: (
     name: string,
   ) => Promise<{ ok: boolean; styleSkill?: string; topic?: string; error?: string }>
+  /** Delete a saved Style template */
+  deleteStyleTemplate: (name: string) => Promise<{ ok: boolean; error?: string }>
   /** New blank page (with a specific layout): inserted after slide sourceIndex, rels pointing at the chosen layout */
   addSlideWithLayout: (
     op: AddSlideWithLayoutOp,

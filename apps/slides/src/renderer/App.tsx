@@ -4322,8 +4322,21 @@ export function App() {
           title: t('aiTplModalTitle'),
           subtitle: t('aiTplModalSubtitle'),
           browseHeading: t('aiTplBrowseHeading'),
+          trendingHeading: t('aiTplTrendingHeading'),
+          creativeHeading: t('aiTplCreativeHeading'),
+          mineHeading: t('aiTplMineHeading'),
+          mineEmpty: t('aiTplMineEmpty'),
+          mineHint: t('aiTplMineHint'),
+          mineTopicFallback: t('aiTplMineTopicFallback'),
+          uploadBtn: t('aiTplUploadBtn'),
+          uploading: t('aiTplUploading'),
+          deckBadge: t('aiTplDeckBadge'),
+          searchPlaceholder: t('aiTplSearchPlaceholder'),
+          searchEmpty: t('aiTplSearchEmpty'),
+          deleteStyle: t('aiTplDeleteStyle'),
           detailsTitle: t('aiTplDetailsTitle'),
           badge: t('aiTplBadge'),
+          styleBadge: t('aiTplStyleBadge'),
           back: t('aiTplBack'),
           previewDisclaimer: t('aiTplPreviewDisclaimer'),
           pages: (n) => t('aiTplPages', { n }),
@@ -4333,9 +4346,18 @@ export function App() {
           generate: t('aiTplGenerate'),
           cancel: t('aiTplCancel'),
         }}
+        listStyleTemplates={() => window.slidesApi.listStyleTemplates()}
+        deleteStyleTemplate={(name) => window.slidesApi.deleteStyleTemplate(name)}
+        listUserDeckTemplates={() => window.slidesApi.listUserDeckTemplates()}
+        importUserDeckTemplate={() => window.slidesApi.importUserDeckTemplate()}
+        deleteUserDeckTemplate={(id) => window.slidesApi.deleteUserDeckTemplate(id)}
         onClose={() => setTemplateGalleryOpen(false)}
-        onGenerate={(instruction, displayText) => {
+        onGenerate={async (instruction, displayText, opts) => {
           setTemplateGalleryOpen(false)
+          if (opts?.openPath) {
+            const r = await window.slidesApi.openPptxPath(opts.openPath, FIT_WIDTH)
+            applyOpen(r)
+          }
           pushAiPreset(instruction, true, displayText)
         }}
       />

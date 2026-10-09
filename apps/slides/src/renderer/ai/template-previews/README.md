@@ -1,8 +1,8 @@
 # Template preview assets (Phase B)
 
-Static 16:9 illustrations for the AI deck gallery (not document content).
+Static 16:9 gallery art for featured + Trending AI deck templates (chrome only — not document content).
 
-- Featured templates only (top 6). Others keep Phase A CSS mocks.
-- Prefer SVG for size/sharpness; replace with WebP later if needed.
-- Naming: `cover.svg`, `p01.svg` … `p04.svg`
-- Keep text minimal / abstract shapes to avoid i18n mismatch with AI output.
+- Classic featured + SkyClaw-style trending: AI-generated **WebP** (`cover.webp`, `p01.webp`–`p04.webp`)
+- Others keep Phase A CSS mocks
+- Prefer minimal/no readable text so previews stay language-neutral
+- Replace files in place; keep names stable for `template-preview-assets.ts`

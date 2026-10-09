@@ -9,9 +9,9 @@ import {
 } from '../src/renderer/ai/template-preview-assets'
 
 describe('template-preview-assets (Phase B)', () => {
-  it('covers the planned top-6 featured ids that exist in the catalog', () => {
+  it('covers featured + trending preview ids that exist in the catalog', () => {
     const catalogIds = new Set(DECK_TEMPLATES.map((t) => t.id))
-    expect(FEATURED_TEMPLATE_PREVIEW_IDS).toHaveLength(6)
+    expect(FEATURED_TEMPLATE_PREVIEW_IDS).toHaveLength(26)
     for (const id of FEATURED_TEMPLATE_PREVIEW_IDS) {
       expect(catalogIds.has(id)).toBe(true)
       expect(isFeaturedTemplatePreview(id)).toBe(true)
@@ -28,13 +28,14 @@ describe('template-preview-assets (Phase B)', () => {
     expect(getTemplatePreviewAssets('nope')).toBeNull()
   })
 
-  it('ships cover + p01–p04 files on disk for each featured template', () => {
+  it('ships cover + p01–p04 WebP files on disk for each featured template', () => {
     const root = join(__dirname, '../src/renderer/ai/template-previews')
     for (const id of FEATURED_TEMPLATE_PREVIEW_IDS) {
-      expect(existsSync(join(root, id, 'cover.svg'))).toBe(true)
+      expect(existsSync(join(root, id, 'cover.webp'))).toBe(true)
       for (const n of [1, 2, 3, 4]) {
-        expect(existsSync(join(root, id, `p${String(n).padStart(2, '0')}.svg`))).toBe(true)
+        expect(existsSync(join(root, id, `p${String(n).padStart(2, '0')}.webp`))).toBe(true)
       }
     }
   })
 })
+

@@ -13,6 +13,7 @@ import {
   readFileSync,
   renameSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { join } from 'node:path'
@@ -499,6 +500,24 @@ export function registerSlidesOnlyAiIpc(): void {
         const raw = readJson<{ styleSkill?: string; topic?: string }>(filePath, {})
         if (!raw.styleSkill) return { ok: false, error: tm('errTplNoSkill', { name }) }
         return { ok: true, styleSkill: raw.styleSkill, topic: raw.topic ?? '' }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    },
+  )
+
+  // ── Style template delete
+  ipcMain.handle(
+    'ai:delete-style-template',
+    (_event, name: string): { ok: boolean; error?: string } => {
+      try {
+        const dir = STYLE_TEMPLATES_DIR()
+        const safeName = name.replace(/[/\\:*?"<>|]/g, '_').slice(0, 64)
+        if (!safeName) return { ok: false, error: tm('errTplNameInvalid') }
+        const filePath = join(dir, `${safeName}.json`)
+        if (!existsSync(filePath)) return { ok: false, error: tm('errTplMissing', { name }) }
+        unlinkSync(filePath)
+        return { ok: true }
       } catch (err) {
         return { ok: false, error: err instanceof Error ? err.message : String(err) }
       }

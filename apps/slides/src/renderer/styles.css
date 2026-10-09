@@ -1825,11 +1825,104 @@ body.vib .slide-list {
   border-top: 1px solid var(--color-border-default);
 }
 
-.ai-tpl-browse-heading {
+.ai-tpl-browse-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin: 8px 0 4px;
+}
+
+.ai-tpl-browse-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.ai-tpl-browse-heading {
+  margin: 0;
   font-size: 14px;
   font-weight: 650;
   color: var(--color-text-primary);
+  flex: 0 0 auto;
+}
+
+.ai-tpl-upload-btn {
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--color-bg-page));
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.ai-tpl-upload-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 22%, var(--color-bg-page));
+}
+
+.ai-tpl-upload-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.ai-tpl-upload-btn--empty {
+  margin-top: 12px;
+}
+
+.ai-tpl-search {
+  flex: 0 1 220px;
+  min-width: 140px;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-bg-page);
+  color: var(--color-text-primary);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.ai-tpl-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.ai-tpl-empty,
+.ai-tpl-empty-hint {
+  margin: 24px 0 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ai-tpl-empty-hint {
+  margin-top: 8px;
+  max-width: 42ch;
+}
+
+.ai-tpl-cover--style {
+  --ai-tpl-cover-bg: #1e1b4b;
+  --ai-tpl-cover-fg: #fdf4ff;
+  display: grid;
+  place-items: center;
+}
+
+.ai-tpl-cover--deck {
+  --ai-tpl-cover-bg: #0f172a;
+  --ai-tpl-cover-fg: #e2e8f0;
+  display: grid;
+  place-items: center;
+}
+
+.ai-tpl-style-mark {
+  position: relative;
+  z-index: 1;
+  font-size: 28px;
+  color: color-mix(in srgb, var(--accent) 80%, #fff);
 }
 
 .ai-tpl-browse-disclaimer,

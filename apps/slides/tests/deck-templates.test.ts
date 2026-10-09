@@ -1,9 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
+  CREATIVE_TEMPLATE_IDS,
   DECK_TEMPLATES,
+  TRENDING_TEMPLATE_IDS,
   buildGalleryGenerateMessages,
+  buildGalleryStyleTemplateMessages,
+  buildGalleryUserDeckMessages,
   fillBuiltinTemplate,
+  filterDeckTemplates,
   getDeckTemplate,
+  templateMatchesQuery,
 } from '../src/renderer/ai/deck-templates'
 
 describe('deck-templates', () => {
@@ -19,6 +25,37 @@ describe('deck-templates', () => {
       expect(tpl.tagsVi.length).toBe(tpl.tagsEn.length)
       expect(tpl.tagsZh.length).toBe(tpl.tagsEn.length)
     }
+  })
+
+  it('orders Trending filter by curated ids', () => {
+    const trending = filterDeckTemplates('trending')
+    expect(trending.map((t) => t.id)).toEqual([...TRENDING_TEMPLATE_IDS])
+    expect(trending.length).toBe(16)
+  })
+
+  it('orders Creative filter by curated ids', () => {
+    const creative = filterDeckTemplates('creative')
+    expect(creative.map((t) => t.id)).toEqual([...CREATIVE_TEMPLATE_IDS])
+  })
+
+  it('matches search queries on label/tags', () => {
+    const pitch = getDeckTemplate('pitch-deck')!
+    expect(templateMatchesQuery(pitch, 'pitch', 'en')).toBe(true)
+    expect(templateMatchesQuery(pitch, 'zzzz-nope', 'en')).toBe(false)
+  })
+
+  it('builds style-template gallery messages for Mine tab', () => {
+    const msgs = buildGalleryStyleTemplateMessages('My Brand', 'Q4 review', 'vi')
+    expect(msgs.displayText).toContain('My Brand')
+    expect(msgs.instruction).toContain('style_template: "My Brand"')
+    expect(msgs.instruction).toContain('Do NOT pass builtin_template')
+  })
+
+  it('builds user-uploaded PPTX gallery messages', () => {
+    const msgs = buildGalleryUserDeckMessages('Sales Kit', 'Acme Q1', 'en')
+    expect(msgs.displayText).toContain('Sales Kit')
+    expect(msgs.instruction).toContain('user-uploaded PowerPoint template')
+    expect(msgs.instruction).toContain('Acme Q1')
   })
 
   it('fills topic into titles and briefs', () => {

@@ -135,6 +135,11 @@ const api: SlidesApi = {
   },
   openPptx: (fitWidthPx) => ipcRenderer.invoke('slides:open', fitWidthPx),
   openPptxPath: (path, fitWidthPx) => ipcRenderer.invoke('slides:open-path', path, fitWidthPx),
+  importUserDeckTemplate: () => ipcRenderer.invoke('slides:import-user-deck-template'),
+  listUserDeckTemplates: () => ipcRenderer.invoke('slides:list-user-deck-templates'),
+  deleteUserDeckTemplate: (id: string) => ipcRenderer.invoke('slides:delete-user-deck-template', id),
+  prepareUserDeckTemplate: (id: string) =>
+    ipcRenderer.invoke('slides:prepare-user-deck-template', id),
   consumePendingOpen: (fitWidthPx) => ipcRenderer.invoke('slides:consume-pending-open', fitWidthPx),
   consumeAiPreset: () => ipcRenderer.invoke('slides:consume-ai-preset'),
   onAiPreset: (handler) => {
@@ -422,6 +427,7 @@ const api: SlidesApi = {
   ) => ipcRenderer.invoke('ai:save-style-template', name, data),
   listStyleTemplates: () => ipcRenderer.invoke('ai:list-style-templates'),
   loadStyleTemplate: (name: string) => ipcRenderer.invoke('ai:load-style-template', name),
+  deleteStyleTemplate: (name: string) => ipcRenderer.invoke('ai:delete-style-template', name),
   presenterStart: () => ipcRenderer.invoke('slides:presenter-start'),
   presenterSync: (state: ShowSyncState) => ipcRenderer.send('slides:presenter-sync', state),
   presenterInk: (ev: ShowInkEvent) => ipcRenderer.send('slides:presenter-ink', ev),

@@ -22,9 +22,17 @@ import type { WebContents } from 'electron'
 import { execFile } from 'node:child_process'
 import { readFile, writeFile, rm, stat, mkdir, open } from 'node:fs/promises'
 import { createHash, randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync } from 'node:fs'
-import { userInfo } from 'node:os'
-import { basename, dirname, join, resolve } from 'node:path'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { tmpdir, userInfo } from 'node:os'
+import { basename, dirname, extname, join, resolve } from 'node:path'
 import { cleanupExpiredGeneratedPages } from './generated-page-temp'
 import { exportSlidesPdf } from './pdf-export'
 import { gskApiKey, gskSlideGenerate, setGskProxyUrl } from '@genoffice/ai-search'
@@ -1187,6 +1195,115 @@ export function registerSlidesIpc(): void {
     if (await rejectLegacyPpt(path)) return null
     return openAndBuild(e.sender, path, fitWidthPx)
   })
+
+  // ── User-uploaded deck templates (gallery “Mine” tab) ─────────────────
+  const USER_DECK_TEMPLATES_DIR = () => join(app.getPath('userData'), 'user-deck-templates')
+
+  type UserDeckTemplateMeta = {
+    id: string
+    name: string
+    originalName: string
+    createdAt: string
+  }
+
+  const readUserDeckMeta = (dir: string): UserDeckTemplateMeta | null => {
+    try {
+      const metaPath = join(dir, 'meta.json')
+      const pptxPath = join(dir, 'template.pptx')
+      if (!existsSync(metaPath) || !existsSync(pptxPath)) return null
+      const raw = JSON.parse(readFileSync(metaPath, 'utf-8')) as Partial<UserDeckTemplateMeta>
+      if (!raw.id || !raw.name) return null
+      return {
+        id: String(raw.id),
+        name: String(raw.name),
+        originalName: String(raw.originalName ?? raw.name),
+        createdAt: String(raw.createdAt ?? ''),
+      }
+    } catch {
+      return null
+    }
+  }
+
+  ipcMain.handle(
+    'slides:import-user-deck-template',
+    async (): Promise<{ ok: boolean; template?: UserDeckTemplateMeta; error?: string }> => {
+      try {
+        const parent = dialogParent()
+        const r = await showOpenDialogWithMemory(dialog, parent, {
+          properties: ['openFile' as const],
+          filters: [{ name: 'PowerPoint', extensions: ['pptx'] }],
+        })
+        if (r.canceled || !r.filePaths[0]) return { ok: false }
+        const src = r.filePaths[0]!
+        if (await rejectLegacyPpt(src)) return { ok: false, error: 'unsupported' }
+        const id = randomUUID().replace(/-/g, '').slice(0, 12)
+        const dir = join(USER_DECK_TEMPLATES_DIR(), id)
+        mkdirSync(dir, { recursive: true })
+        copyFileSync(src, join(dir, 'template.pptx'))
+        const base = basename(src, extname(src)) || 'template'
+        const meta: UserDeckTemplateMeta = {
+          id,
+          name: base.slice(0, 80),
+          originalName: basename(src),
+          createdAt: new Date().toISOString(),
+        }
+        writeFileSync(join(dir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf-8')
+        return { ok: true, template: meta }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    },
+  )
+
+  ipcMain.handle('slides:list-user-deck-templates', (): UserDeckTemplateMeta[] => {
+    try {
+      const root = USER_DECK_TEMPLATES_DIR()
+      if (!existsSync(root)) return []
+      return readdirSync(root)
+        .map((id) => readUserDeckMeta(join(root, id)))
+        .filter((m): m is UserDeckTemplateMeta => m != null)
+        .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    } catch {
+      return []
+    }
+  })
+
+  ipcMain.handle(
+    'slides:delete-user-deck-template',
+    (_e, id: string): { ok: boolean; error?: string } => {
+      try {
+        const safe = String(id ?? '').replace(/[^a-zA-Z0-9_-]/g, '')
+        if (!safe) return { ok: false, error: 'invalid' }
+        const dir = join(USER_DECK_TEMPLATES_DIR(), safe)
+        if (!existsSync(dir)) return { ok: false, error: 'missing' }
+        rmSync(dir, { recursive: true, force: true })
+        return { ok: true }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    },
+  )
+
+  /** Copy template to a temp working file so Save does not overwrite the library copy. */
+  ipcMain.handle(
+    'slides:prepare-user-deck-template',
+    (_e, id: string): { ok: boolean; path?: string; name?: string; error?: string } => {
+      try {
+        const safe = String(id ?? '').replace(/[^a-zA-Z0-9_-]/g, '')
+        if (!safe) return { ok: false, error: 'invalid' }
+        const dir = join(USER_DECK_TEMPLATES_DIR(), safe)
+        const meta = readUserDeckMeta(dir)
+        const src = join(dir, 'template.pptx')
+        if (!meta || !existsSync(src)) return { ok: false, error: 'missing' }
+        const workName = `${meta.name.replace(/[/\\:*?"<>|]/g, '_').slice(0, 40)}-${Date.now()}.pptx`
+        const workPath = join(tmpdir(), workName)
+        copyFileSync(src, workPath)
+        return { ok: true, path: workPath, name: meta.name }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    },
+  )
 
   ipcMain.handle('slides:consume-ai-preset', (e): SlidesAiPresetPayload | null => {
     const preset = pendingAiPresets.get(e.sender.id) ?? null

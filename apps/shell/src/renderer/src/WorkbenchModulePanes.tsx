@@ -72,6 +72,16 @@ import {
   type WbTravelTrip,
 } from './workbench-pins'
 import { exportCsvAsXlsx, pickSpreadsheetRows } from './workbench-excel-io'
+import { WbExcelExportBtn } from './WbExcelExportBtn'
+import {
+  exportClientsCsv,
+  exportContractsCsv,
+  exportEventsCsv,
+  exportFormsCsv,
+  exportGrowthCsv,
+  exportMattersCsv,
+  exportTravelCsv,
+} from './workbench-list-excel'
 
 interface Props {
   moduleId: WorkbenchModuleId
@@ -431,6 +441,13 @@ function FormsPane({
               {label('Huỷ sửa', 'Cancel edit')}
             </button>
           ) : null}
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportFormsCsv(items)}
+            fileName="forms"
+            sheetName={label('Bieu mau', 'Forms')}
+          />
         </div>
       </div>
       <ul className="wb-module-list">
@@ -651,6 +668,13 @@ function EventsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean })
               {label('Huỷ sửa', 'Cancel edit')}
             </button>
           ) : null}
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportEventsCsv(items)}
+            fileName="events"
+            sheetName={label('Su kien', 'Events')}
+          />
         </div>
       </div>
       <ul className="wb-module-list">
@@ -731,9 +755,18 @@ function GrowthPane({ vi }: { vi: boolean }): ReactElement {
           <span>{label('Ghi chú (tuỳ chọn)', 'Note (optional)')}</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm mục tiêu', 'Add goal')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={add}>
+            {label('Thêm mục tiêu', 'Add goal')}
+          </button>
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportGrowthCsv(items)}
+            fileName="self-growth"
+            sheetName={label('Phat trien', 'Growth')}
+          />
+        </div>
       </div>
       <ul className="wb-module-list">
         {items.length === 0 ? (
@@ -977,9 +1010,18 @@ function TravelPane({
             placeholder={label('Bạn bè đi cùng / ngân sách…', 'Companions / budget…')}
           />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm chuyến đi', 'Add trip')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={add}>
+            {label('Thêm chuyến đi', 'Add trip')}
+          </button>
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportTravelCsv(items)}
+            fileName="travel"
+            sheetName={label('Du lich', 'Travel')}
+          />
+        </div>
       </div>
       <ul className="wb-module-list">
         {items.length === 0 ? (
@@ -1177,6 +1219,13 @@ function ClientsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
   return (
     <>
       <div className="wb-db-toolbar">
+        <WbExcelExportBtn
+          vi={vi}
+          disabled={items.length === 0}
+          csv={exportClientsCsv(items)}
+          fileName="clients"
+          sheetName={label('Khach hang', 'Clients')}
+        />
         <button
           type="button"
           className="btn btn-primary"
@@ -2203,6 +2252,13 @@ function ContractsPane({
               {label('Huỷ sửa', 'Cancel edit')}
             </button>
           ) : null}
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportContractsCsv(items)}
+            fileName="contracts"
+            sheetName={label('Hop dong', 'Contracts')}
+          />
         </div>
       </div>
       <ul className="wb-module-list">
@@ -2441,6 +2497,13 @@ function MattersPane({
               {label('Huỷ sửa', 'Cancel edit')}
             </button>
           ) : null}
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportMattersCsv(items)}
+            fileName="matters"
+            sheetName={label('Vu viec', 'Matters')}
+          />
         </div>
       </div>
       <ul className="wb-module-list">

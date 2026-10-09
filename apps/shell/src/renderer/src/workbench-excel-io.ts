@@ -31,7 +31,11 @@ export async function pickSpreadsheetRows(): Promise<SpreadsheetPickResult> {
   if (!api) {
     return { ok: false, error: 'Excel import is unavailable in this build.' }
   }
-  return api()
+  const res = await api()
+  if (res.ok && res.rows) {
+    return { ok: true, rows: res.rows, name: res.name ?? 'import' }
+  }
+  return { ok: false, canceled: res.canceled, error: res.error }
 }
 
 /**
@@ -53,14 +57,50 @@ export async function exportCsvAsXlsx(opts: {
   const safeName = opts.fileName.toLowerCase().endsWith('.xlsx')
     ? opts.fileName
     : `${opts.fileName.replace(/\.(csv|xlsx)$/i, '')}.xlsx`
-  return api({
+  const res = await api({
     csv: opts.csv,
     fileName: safeName,
     sheetName: opts.sheetName ?? 'Sheet1',
     open: opts.openInSheets !== false,
   })
+  if (res.ok && res.path) return { ok: true, path: res.path }
+  return { ok: false, canceled: res.canceled, error: res.error }
 }
 
 export function normalizeExportBase(name: string): string {
   return name.replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '') || 'export'
+}
+
+function csvEscape(v: string): string {
+  if (/[",\n\r]/.test(v)) return `"${v.replace(/"/g, '""')}"`
+  return v
+}
+
+/** Build a UTF-8 BOM CSV from headers + rows (shared by all Workbench list exports). */
+export function buildCsv(
+  headers: string[],
+  rows: ReadonlyArray<ReadonlyArray<string | number | boolean | null | undefined>>,
+): string {
+  const lines = [headers.map((h) => csvEscape(String(h))).join(',')]
+  for (const row of rows) {
+    lines.push(row.map((c) => csvEscape(c == null ? '' : String(c))).join(','))
+  }
+  return `\uFEFF${lines.join('\n')}`
+}
+
+/** Convenience: build CSV then write/open as .xlsx (or .csv fallback). */
+export async function exportTableAsXlsx(opts: {
+  fileName: string
+  sheetName?: string
+  headers: string[]
+  rows: ReadonlyArray<ReadonlyArray<string | number | boolean | null | undefined>>
+  openInSheets?: boolean
+}): Promise<XlsxSaveResult> {
+  if (opts.rows.length === 0) return { ok: false, error: 'empty' }
+  return exportCsvAsXlsx({
+    csv: buildCsv(opts.headers, opts.rows),
+    fileName: `${normalizeExportBase(opts.fileName)}.xlsx`,
+    sheetName: opts.sheetName ?? 'Sheet1',
+    openInSheets: opts.openInSheets,
+  })
 }

@@ -17,3 +17,7 @@ export {
 export { getProviderAdapter, modelLacksVision } from './registry'
 export { AI_MEDIA_PROVIDERS, imageGenerationAvailable, mediaAnalysisAvailable } from './media'
 export { AI_SEARCH_PROVIDERS } from './search-settings'
+export {
+  OPENROUTER_CHAT_MODELS,
+  OPENROUTER_DEFAULT_MODEL,
+} from './openrouter'

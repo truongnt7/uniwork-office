@@ -20,22 +20,25 @@ if (IS_MAC) document.body.classList.add('vib')
 document.body.classList.add(IS_MAC ? 'mac' : 'overlay-title-bar')
 
 // resolve the persisted language, first-run flag, and theme before first paint
-// so the UI never flashes (home showing briefly before the onboarding overlay)
-void Promise.all([
-  window.aiOffice.getLanguage(),
-  // if the flag is unreadable, skip onboarding rather than block the home screen
-  window.aiOffice.onboardingSeen().catch(() => true),
-  window.aiOffice.getTheme().catch(() => 'system' as const),
-]).then(([lang, onboardingSeen, theme]) => {
+// so the UI never flashes (home showing briefly before the onboarding overlay).
+// Always paint even if preload/IPC is briefly unavailable — otherwise #root stays blank.
+function mountApp(
+  lang: Awaited<ReturnType<typeof window.aiOffice.getLanguage>>,
+  onboardingSeen: boolean,
+  theme: Awaited<ReturnType<typeof window.aiOffice.getTheme>>,
+): void {
   document.documentElement.lang = htmlLang(lang)
-  // apply theme attribute before first paint to avoid flash
   if (theme !== 'system') {
     document.documentElement.setAttribute('data-theme', theme)
   }
-  window.aiOffice.onThemeChanged((next) => {
-    if (next === 'system') document.documentElement.removeAttribute('data-theme')
-    else document.documentElement.setAttribute('data-theme', next)
-  })
+  try {
+    window.aiOffice?.onThemeChanged?.((next) => {
+      if (next === 'system') document.documentElement.removeAttribute('data-theme')
+      else document.documentElement.setAttribute('data-theme', next)
+    })
+  } catch {
+    /* ignore */
+  }
   createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
       <LocaleProvider initial={lang}>
@@ -43,4 +46,21 @@ void Promise.all([
       </LocaleProvider>
     </React.StrictMode>,
   )
-})
+}
+
+const boot =
+  typeof window.aiOffice?.getLanguage === 'function'
+    ? Promise.all([
+        window.aiOffice.getLanguage().catch(() => 'en' as const),
+        window.aiOffice.onboardingSeen().catch(() => true),
+        window.aiOffice.getTheme().catch(() => 'system' as const),
+      ])
+    : Promise.resolve(['en' as const, true, 'system' as const] as const)
+
+void boot
+  .then(([lang, onboardingSeen, theme]) => {
+    mountApp(lang, onboardingSeen, theme)
+  })
+  .catch(() => {
+    mountApp('en', true, 'system')
+  })

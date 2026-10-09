@@ -15,6 +15,12 @@ import {
   type WbFriendEvent,
 } from './workbench-pins'
 import { WbDeleteBtn, WbEditBtn, WbRowActions } from './WbRowActions'
+import { WbExcelExportBtn } from './WbExcelExportBtn'
+import {
+  exportFriendAnniversariesCsv,
+  exportFriendEventsCsv,
+  exportFriendsCsv,
+} from './workbench-list-excel'
 
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
@@ -200,6 +206,13 @@ function PeopleSub({ vi }: { vi: boolean }): ReactElement {
               {label('Huỷ sửa', 'Cancel edit')}
             </button>
           ) : null}
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportFriendsCsv(items)}
+            fileName="friends"
+            sheetName={label('Ban be', 'Friends')}
+          />
         </div>
       </div>
       <ul className="wb-module-list">
@@ -333,9 +346,18 @@ function EventsSub({ vi }: { vi: boolean }): ReactElement {
           <span>{label('Ghi chú', 'Note')}</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm sự kiện', 'Add event')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={add}>
+            {label('Thêm sự kiện', 'Add event')}
+          </button>
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportFriendEventsCsv(items)}
+            fileName="friend-events"
+            sheetName={label('Su kien ban be', 'Friend events')}
+          />
+        </div>
       </div>
       <FriendNameDatalist />
       <ul className="wb-module-list">
@@ -481,9 +503,18 @@ function AnniversariesSub({ vi }: { vi: boolean }): ReactElement {
           <span>{label('Ghi chú', 'Note')}</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm kỷ niệm', 'Add anniversary')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={add}>
+            {label('Thêm kỷ niệm', 'Add anniversary')}
+          </button>
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportFriendAnniversariesCsv(items)}
+            fileName="friend-anniversaries"
+            sheetName={label('Ky niem', 'Anniversaries')}
+          />
+        </div>
       </div>
       <FriendNameDatalist />
       <ItemList

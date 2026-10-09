@@ -77,6 +77,7 @@ import {
 } from './my-ai-activation'
 import {
   NATURAL_CHAT_MODEL_OPTIONS,
+  naturalChatModelLabel,
   naturalChatSystemPrompt,
   naturalChatUserPayload,
   normalizeNaturalChatModel,
@@ -85,7 +86,7 @@ import {
   withNaturalChatModel,
   type MyAiNaturalChatPref,
 } from './my-ai-natural-chat'
-import type { AiSettings } from '@genoffice/ai-provider'
+import type { AiSettings } from '@genoffice/ai-provider/browser'
 import type { ActiveOfficeTab, RecentEntry } from '../../shared/home-api'
 import { FILE_EXCERPT_MAX_FILES, formatExcerptsForPrompt } from '../../shared/file-excerpt'
 
@@ -2512,8 +2513,8 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
                       : label('Mặc định (Cài đặt)', 'Default (Settings)')}
                   </option>
                   {NATURAL_CHAT_MODEL_OPTIONS.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
+                    <option key={m} value={m} title={m}>
+                      {naturalChatModelLabel(m)}
                     </option>
                   ))}
                 </select>

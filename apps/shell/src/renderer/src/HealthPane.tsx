@@ -25,6 +25,15 @@ import {
   type WbHealthYoga,
 } from './workbench-pins'
 import { WbDeleteBtn, WbRowActions } from './WbRowActions'
+import { WbExcelExportBtn } from './WbExcelExportBtn'
+import {
+  exportHealthDietsCsv,
+  exportHealthFastingCsv,
+  exportHealthRunsCsv,
+  exportHealthSportsCsv,
+  exportHealthVegCsv,
+  exportHealthYogaCsv,
+} from './workbench-list-excel'
 
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
@@ -165,9 +174,18 @@ function RunningSub({ vi }: { vi: boolean }): ReactElement {
           <span>{label('Ghi chú', 'Note')}</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm buổi chạy', 'Add run')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={add}>
+            {label('Thêm buổi chạy', 'Add run')}
+          </button>
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportHealthRunsCsv(items)}
+            fileName="health-runs"
+            sheetName={label('Chay bo', 'Running')}
+          />
+        </div>
       </div>
       <SimpleList
         vi={vi}
@@ -272,9 +290,18 @@ function YogaSub({ vi }: { vi: boolean }): ReactElement {
           <span>{label('Ghi chú', 'Note')}</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm buổi yoga', 'Add session')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={add}>
+            {label('Thêm buổi yoga', 'Add session')}
+          </button>
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportHealthYogaCsv(items)}
+            fileName="health-yoga"
+            sheetName="Yoga"
+          />
+        </div>
       </div>
       <SimpleList
         vi={vi}
@@ -360,9 +387,18 @@ function SportsSub({ vi }: { vi: boolean }): ReactElement {
           <span>{label('Ghi chú', 'Note')}</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm buổi tập', 'Add workout')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={add}>
+            {label('Thêm buổi tập', 'Add workout')}
+          </button>
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportHealthSportsCsv(items)}
+            fileName="health-sports"
+            sheetName={label('The thao', 'Sports')}
+          />
+        </div>
       </div>
       <SimpleList
         vi={vi}
@@ -457,9 +493,18 @@ function DietSub({ vi }: { vi: boolean }): ReactElement {
           <span>{label('Ghi chú / thực đơn gợi ý', 'Notes / meal ideas')}</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm chương trình', 'Add plan')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={add}>
+            {label('Thêm chương trình', 'Add plan')}
+          </button>
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportHealthDietsCsv(items)}
+            fileName="health-diets"
+            sheetName={label('An kieng', 'Diet')}
+          />
+        </div>
       </div>
       <ul className="wb-module-list">
         {items.length === 0 ? (
@@ -575,9 +620,18 @@ function FastingSub({ vi }: { vi: boolean }): ReactElement {
           <span>{label('Ghi chú', 'Note')}</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm ngày IF', 'Add IF day')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={add}>
+            {label('Thêm ngày IF', 'Add IF day')}
+          </button>
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportHealthFastingCsv(items)}
+            fileName="health-fasting"
+            sheetName={label('Nhin an', 'Fasting')}
+          />
+        </div>
       </div>
       <ul className="wb-module-list">
         {items.length === 0 ? (
@@ -708,9 +762,18 @@ function VegSub({ vi }: { vi: boolean }): ReactElement {
           <span>{label('Ghi chú', 'Note')}</span>
           <input value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
-        <button type="button" className="btn btn-primary" onClick={add}>
-          {label('Thêm ngày', 'Add day')}
-        </button>
+        <div className="teacher-chip-row">
+          <button type="button" className="btn btn-primary" onClick={add}>
+            {label('Thêm ngày', 'Add day')}
+          </button>
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportHealthVegCsv(items)}
+            fileName="health-veg"
+            sheetName={label('An chay', 'Plant-based')}
+          />
+        </div>
       </div>
       <ul className="wb-module-list">
         {items.length === 0 ? (

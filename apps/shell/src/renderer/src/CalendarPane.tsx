@@ -10,6 +10,8 @@ import {
   type WbCalendarItem,
 } from './workbench-pins'
 import { WbDeleteBtn, WbEditBtn, WbRowActions } from './WbRowActions'
+import { WbExcelExportBtn } from './WbExcelExportBtn'
+import { exportCalendarCsv } from './workbench-list-excel'
 
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
@@ -263,6 +265,13 @@ export function CalendarPane({
             {label('Danh sách', 'List')}
           </button>
         </div>
+        <WbExcelExportBtn
+          vi={vi}
+          disabled={items.length === 0}
+          csv={exportCalendarCsv(items)}
+          fileName="calendar"
+          sheetName={label('Lich', 'Calendar')}
+        />
       </div>
 
       {upcoming.length > 0 ? (

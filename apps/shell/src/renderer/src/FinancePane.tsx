@@ -15,6 +15,12 @@ import {
   type WbFinanceItem,
 } from './workbench-pins'
 import { WbDeleteBtn, WbEditBtn, WbRowActions } from './WbRowActions'
+import { WbExcelExportBtn } from './WbExcelExportBtn'
+import {
+  exportFinanceCsv,
+  exportFinanceGoalsCsv,
+  exportFinanceInvestCsv,
+} from './workbench-list-excel'
 
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
@@ -202,6 +208,13 @@ function GoalsSub({ vi }: { vi: boolean }): ReactElement {
               {label('Huỷ sửa', 'Cancel edit')}
             </button>
           ) : null}
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportFinanceGoalsCsv(items)}
+            fileName="finance-goals"
+            sheetName={label('Muc tieu', 'Goals')}
+          />
         </div>
       </div>
       <ul className="wb-module-list">
@@ -409,6 +422,13 @@ function SpendingSub({ vi }: { vi: boolean }): ReactElement {
               {label('Huỷ sửa', 'Cancel edit')}
             </button>
           ) : null}
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportFinanceCsv(items)}
+            fileName="finance-spending"
+            sheetName={label('Chi tieu', 'Spending')}
+          />
         </div>
       </div>
       <ul className="wb-module-list">
@@ -611,6 +631,13 @@ function InvestSub({ vi }: { vi: boolean }): ReactElement {
               {label('Huỷ sửa', 'Cancel edit')}
             </button>
           ) : null}
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportFinanceInvestCsv(items)}
+            fileName="finance-invest"
+            sheetName={label('Dau tu', 'Invest')}
+          />
         </div>
       </div>
       <ul className="wb-module-list">

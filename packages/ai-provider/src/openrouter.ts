@@ -7,13 +7,49 @@ export const OPENROUTER_API_BASE = 'https://openrouter.ai/api/v1'
 export const OPENROUTER_CREDITS_URL = 'https://openrouter.ai/settings/credits'
 export const OPENROUTER_KEYS_URL = 'https://openrouter.ai/settings/keys'
 
-/** Shared catalog for UniAI (genspark id) and the explicit OpenRouter provider. */
+/**
+ * Shared catalog for UniAI (genspark id), the explicit OpenRouter provider,
+ * and My AI natural-chat model picker. Ids match openrouter.ai/api/v1/models
+ * (curated 2026-10 — latest flagship + fast tiers per vendor; no :batch).
+ */
 export const OPENROUTER_CHAT_MODELS = [
   'openrouter/auto',
+  // Anthropic
+  'anthropic/claude-opus-5.5',
+  'anthropic/claude-sonnet-5.5',
   'anthropic/claude-sonnet-5',
+  'anthropic/claude-opus-5',
+  'anthropic/claude-haiku-5.5',
+  'anthropic/claude-fable-5.1',
+  // OpenAI
   'openai/gpt-5.6-sol',
   'openai/gpt-5.6-terra',
+  'openai/gpt-5.6-luna',
+  // Google
+  'google/gemini-3.8-flash',
+  'google/gemini-3.7-flash',
+  'google/gemini-3.1-pro-preview',
+  // DeepSeek
+  'deepseek/deepseek-v4-pro',
+  'deepseek/deepseek-v4-flash',
+  'deepseek/deepseek-v4.1-flash',
+  // Moonshot / Kimi
   'moonshotai/kimi-k3',
+  'moonshotai/kimi-k2.7-code',
+  // Zhipu GLM
+  'z-ai/glm-5.3',
+  'z-ai/glm-5.3-flash',
+  // Qwen
+  'qwen/qwen3.8-max-prime',
+  'qwen/qwen3.8-flash',
+  // xAI Grok
+  'x-ai/grok-4.7',
+  'x-ai/grok-4.6',
+  // MiniMax
+  'minimax/minimax-m3',
+  // Mistral
+  'mistralai/mistral-large-4-0',
+  'mistralai/mistral-medium-3-5',
 ] as const
 
 export const OPENROUTER_DEFAULT_MODEL = 'openrouter/auto'

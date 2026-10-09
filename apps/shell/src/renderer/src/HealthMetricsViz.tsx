@@ -16,6 +16,8 @@ import {
   type WbHealthMetric,
   type WbHealthMetricGoal,
 } from './workbench-pins'
+import { WbExcelExportBtn } from './WbExcelExportBtn'
+import { exportHealthMetricsCsv } from './workbench-list-excel'
 
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
@@ -310,6 +312,13 @@ export function HealthMetricsViz({ vi }: { vi: boolean }): ReactElement {
                 <button type="button" className="btn btn-secondary" onClick={saveGoal}>
                   {label('Đặt mục tiêu', 'Set goal')}
                 </button>
+                <WbExcelExportBtn
+                  vi={vi}
+                  disabled={items.length === 0}
+                  csv={exportHealthMetricsCsv(items)}
+                  fileName="health-metrics"
+                  sheetName={label('Chi so', 'Metrics')}
+                />
               </div>
             </div>
           </section>

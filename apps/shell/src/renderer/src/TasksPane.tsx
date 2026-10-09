@@ -17,6 +17,8 @@ import {
   type WbTaskPriority,
   type WbTaskStatus,
 } from './workbench-pins'
+import { WbExcelExportBtn } from './WbExcelExportBtn'
+import { exportTasksCsv } from './workbench-list-excel'
 
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
@@ -184,6 +186,13 @@ export function TasksPane({ practiceId, vi }: { practiceId: PracticeId; vi: bool
             ))}
           </div>
         ) : null}
+        <WbExcelExportBtn
+          vi={vi}
+          disabled={items.length === 0}
+          csv={exportTasksCsv(items)}
+          fileName="tasks"
+          sheetName={label('Cong viec', 'Tasks')}
+        />
       </div>
 
       {view !== 'dashboard' && view !== 'calendar' ? (

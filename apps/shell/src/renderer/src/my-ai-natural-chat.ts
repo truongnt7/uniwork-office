@@ -9,10 +9,45 @@
 import {
   OPENROUTER_CHAT_MODELS,
   type AiSettings,
-} from '@genoffice/ai-provider'
+} from '@genoffice/ai-provider/browser'
 
 /** OpenRouter catalog shown in the My AI natural-chat model picker. */
 export const NATURAL_CHAT_MODEL_OPTIONS: readonly string[] = OPENROUTER_CHAT_MODELS
+
+/** Short labels for the picker (fallback: bare OpenRouter id). */
+const NATURAL_CHAT_MODEL_LABELS: Record<string, string> = {
+  'openrouter/auto': 'Auto (OpenRouter)',
+  'anthropic/claude-opus-5.5': 'Claude Opus 5.5',
+  'anthropic/claude-sonnet-5.5': 'Claude Sonnet 5.5',
+  'anthropic/claude-sonnet-5': 'Claude Sonnet 5',
+  'anthropic/claude-opus-5': 'Claude Opus 5',
+  'anthropic/claude-haiku-5.5': 'Claude Haiku 5.5',
+  'anthropic/claude-fable-5.1': 'Claude Fable 5.1',
+  'openai/gpt-5.6-sol': 'GPT-5.6 Sol',
+  'openai/gpt-5.6-terra': 'GPT-5.6 Terra',
+  'openai/gpt-5.6-luna': 'GPT-5.6 Luna',
+  'google/gemini-3.8-flash': 'Gemini 3.8 Flash',
+  'google/gemini-3.7-flash': 'Gemini 3.7 Flash',
+  'google/gemini-3.1-pro-preview': 'Gemini 3.1 Pro',
+  'deepseek/deepseek-v4-pro': 'DeepSeek V4 Pro',
+  'deepseek/deepseek-v4-flash': 'DeepSeek V4 Flash',
+  'deepseek/deepseek-v4.1-flash': 'DeepSeek V4.1 Flash',
+  'moonshotai/kimi-k3': 'Kimi K3',
+  'moonshotai/kimi-k2.7-code': 'Kimi K2.7 Code',
+  'z-ai/glm-5.3': 'GLM 5.3',
+  'z-ai/glm-5.3-flash': 'GLM 5.3 Flash',
+  'qwen/qwen3.8-max-prime': 'Qwen 3.8 Max',
+  'qwen/qwen3.8-flash': 'Qwen 3.8 Flash',
+  'x-ai/grok-4.7': 'Grok 4.7',
+  'x-ai/grok-4.6': 'Grok 4.6',
+  'minimax/minimax-m3': 'MiniMax M3',
+  'mistralai/mistral-large-4-0': 'Mistral Large 4',
+  'mistralai/mistral-medium-3-5': 'Mistral Medium 3.5',
+}
+
+export function naturalChatModelLabel(modelId: string): string {
+  return NATURAL_CHAT_MODEL_LABELS[modelId] ?? modelId
+}
 
 /** Empty / missing = use the model from Settings (AI Model pane). */
 export function normalizeNaturalChatModel(raw: unknown): string {

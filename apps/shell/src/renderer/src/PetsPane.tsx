@@ -22,6 +22,8 @@ import {
   type WbPetSpecies,
 } from './workbench-pins'
 import { WbDeleteBtn, WbRowActions } from './WbRowActions'
+import { WbExcelExportBtn } from './WbExcelExportBtn'
+import { exportPetCareCsv, exportPetsCsv } from './workbench-list-excel'
 
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
@@ -252,11 +254,20 @@ function RosterView({
             `${pets.length} pets · tap a card for profile & photos.`,
           )}
         </p>
-        <button type="button" className="btn btn-primary" onClick={() => setShowForm((v) => !v)}>
-          {showForm
-            ? label('Đóng form', 'Close form')
-            : label('+ Thêm thú cưng', '+ Add pet')}
-        </button>
+        <div className="teacher-chip-row">
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={pets.length === 0}
+            csv={exportPetsCsv(pets)}
+            fileName="pets"
+            sheetName={label('Thu cung', 'Pets')}
+          />
+          <button type="button" className="btn btn-primary" onClick={() => setShowForm((v) => !v)}>
+            {showForm
+              ? label('Đóng form', 'Close form')
+              : label('+ Thêm thú cưng', '+ Add pet')}
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -738,11 +749,20 @@ function CareView({
             'Schedule care and log results — stored on this device only.',
           )}
         </p>
-        <button type="button" className="btn btn-primary" onClick={() => setShowForm((v) => !v)}>
-          {showForm
-            ? label('Đóng form', 'Close form')
-            : label('+ Lịch chăm sóc', '+ Schedule care')}
-        </button>
+        <div className="teacher-chip-row">
+          <WbExcelExportBtn
+            vi={vi}
+            disabled={items.length === 0}
+            csv={exportPetCareCsv(items, pets)}
+            fileName="pet-care"
+            sheetName={label('Cham soc', 'Care')}
+          />
+          <button type="button" className="btn btn-primary" onClick={() => setShowForm((v) => !v)}>
+            {showForm
+              ? label('Đóng form', 'Close form')
+              : label('+ Lịch chăm sóc', '+ Schedule care')}
+          </button>
+        </div>
       </div>
 
       <div className="wb-pets-care-filters" role="group" aria-label={label('Lọc lịch', 'Filter')}>

@@ -1906,6 +1906,45 @@ export interface RosterImportRow {
   email?: string
 }
 
+function normHeader(s: string): string {
+  return s
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'd')
+    .toLowerCase()
+    .trim()
+}
+
+function isRosterHeaderRow(cols: readonly string[]): boolean {
+  const head = normHeader(cols[0] ?? '')
+  return /^(stt|name|ho ten|hoten|student|hoc sinh|ho va ten)$/.test(head)
+}
+
+/** Parse spreadsheet / paste rows: name, class, parent, phone, email. */
+export function parseRosterImportRows(table: readonly (readonly string[])[]): RosterImportRow[] {
+  const rows: RosterImportRow[] = []
+  for (const raw of table) {
+    const cols = raw.map((c) => String(c ?? '').trim())
+    if (!cols.some(Boolean)) continue
+    // Drop leading STT column when present
+    let offset = 0
+    if (cols[0] && /^\d+$/.test(cols[0]) && cols.length >= 2) offset = 1
+    const nameCol = cols[offset] ?? ''
+    if (!nameCol) continue
+    if (rows.length === 0 && isRosterHeaderRow(cols.slice(offset))) continue
+    if (rows.length === 0 && isRosterHeaderRow(cols)) continue
+    rows.push({
+      name: nameCol,
+      ...(cols[offset + 1] ? { className: cols[offset + 1] } : {}),
+      ...(cols[offset + 2] ? { parentName: cols[offset + 2] } : {}),
+      ...(cols[offset + 3] ? { phone: cols[offset + 3] } : {}),
+      ...(cols[offset + 4] ? { email: cols[offset + 4] } : {}),
+    })
+  }
+  return rows
+}
+
 /**
  * Parse paste of CSV/TSV lines: name, class, parent, phone, email.
  * Header row (name/họ tên…) is skipped when detected.
@@ -1915,31 +1954,99 @@ export function parseRosterImport(text: string): RosterImportRow[] {
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean)
-  const rows: RosterImportRow[] = []
-  for (const line of lines) {
-    const cols = line.includes('\t')
+  const table = lines.map((line) =>
+    line.includes('\t')
       ? line.split('\t').map((c) => c.trim())
-      : line.split(/[,;]/).map((c) => c.trim())
-    if (!cols[0]) continue
-    const head = cols[0]
-      .normalize('NFD')
-      .replace(/\p{M}/gu, '')
-      .toLowerCase()
-    if (
-      rows.length === 0 &&
-      /^(name|ho ten|hoten|student|hoc sinh)$/.test(head)
-    ) {
+      : line.split(/[,;]/).map((c) => c.trim()),
+  )
+  return parseRosterImportRows(table)
+}
+
+export function exportStudentsCsv(students: readonly WbStudentItem[]): string {
+  const header = ['STT', 'Họ tên', 'Lớp', 'Phụ huynh', 'SĐT', 'Email', 'Ghi chú']
+  const lines = [header.join(',')]
+  students.forEach((s, i) => {
+    lines.push(
+      [
+        String(i + 1),
+        csvEscape(s.name),
+        csvEscape(s.className ?? ''),
+        csvEscape(s.parentName ?? ''),
+        csvEscape(s.phone ?? ''),
+        csvEscape(s.email ?? ''),
+        csvEscape(s.note ?? ''),
+      ].join(','),
+    )
+  })
+  return `\uFEFF${lines.join('\n')}`
+}
+
+export function exportParentsCsv(parents: readonly WbParentItem[]): string {
+  const header = ['STT', 'Họ tên', 'Học sinh', 'SĐT', 'Email', 'Ghi chú']
+  const lines = [header.join(',')]
+  parents.forEach((p, i) => {
+    lines.push(
+      [
+        String(i + 1),
+        csvEscape(p.name),
+        csvEscape(p.studentName ?? ''),
+        csvEscape(p.phone ?? ''),
+        csvEscape(p.email ?? ''),
+        csvEscape(p.note ?? ''),
+      ].join(','),
+    )
+  })
+  return `\uFEFF${lines.join('\n')}`
+}
+
+export function applyParentsImport(
+  students: WbStudentItem[],
+  parents: WbParentItem[],
+  table: readonly (readonly string[])[],
+): { students: WbStudentItem[]; parents: WbParentItem[]; added: number } {
+  let nextStudents = [...students]
+  let nextParents = [...parents]
+  let added = 0
+  let started = false
+  for (const raw of table) {
+    const cols = raw.map((c) => String(c ?? '').trim())
+    if (!cols.some(Boolean)) continue
+    let offset = 0
+    if (cols[0] && /^\d+$/.test(cols[0]) && cols.length >= 2) offset = 1
+    const name = cols[offset] ?? ''
+    if (!name) continue
+    const head = normHeader(name)
+    if (!started && /^(stt|name|ho ten|hoten|parent|phu huynh)$/.test(head)) {
+      started = true
       continue
     }
-    rows.push({
-      name: cols[0]!,
-      ...(cols[1] ? { className: cols[1] } : {}),
-      ...(cols[2] ? { parentName: cols[2] } : {}),
-      ...(cols[3] ? { phone: cols[3] } : {}),
-      ...(cols[4] ? { email: cols[4] } : {}),
-    })
+    started = true
+    const studentNames = (cols[offset + 1] ?? '')
+      .split(/[;,/|]/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    const phone = cols[offset + 2]?.trim()
+    const email = cols[offset + 3]?.trim()
+    const note = cols[offset + 4]?.trim()
+    const ensured = ensureParentByName(nextParents, name)
+    nextParents = ensured.parents
+    const parent = {
+      ...ensured.parent,
+      ...(phone ? { phone } : {}),
+      ...(email ? { email } : {}),
+      ...(note ? { note } : {}),
+    }
+    nextParents = nextParents.map((p) => (p.id === parent.id ? parent : p))
+    for (const sn of studentNames) {
+      const hit = nextStudents.find((s) => normHeader(s.name) === normHeader(sn))
+      if (!hit) continue
+      const linked = linkStudentParent(nextStudents, nextParents, hit.id, parent.id)
+      nextStudents = linked.students
+      nextParents = linked.parents
+    }
+    added += 1
   }
-  return rows
+  return { ...syncStudentParentDenorm(nextStudents, nextParents), added }
 }
 
 /** Merge import rows into students + parents with hard links. */
@@ -2049,6 +2156,58 @@ export function exportGradebookCsv(
 function csvEscape(v: string): string {
   if (/[",\n\r]/.test(v)) return `"${v.replace(/"/g, '""')}"`
   return v
+}
+
+/** Import gradebook rows (header: STT?, Họ tên, score columns…). Matches students by name. */
+export function importGradebookFromRows(
+  book: WbGradebook,
+  students: readonly WbStudentItem[],
+  table: readonly (readonly string[])[],
+): { book: WbGradebook; updated: number } {
+  if (table.length === 0) return { book, updated: 0 }
+  const header = table[0]!.map((c) => String(c ?? '').trim())
+  let nameIdx = header.findIndex((h) =>
+    /^(ho ten|hoten|name|hoc sinh|student|ho va ten)$/.test(normHeader(h)),
+  )
+  if (nameIdx < 0) nameIdx = header.length >= 2 && /^\d+$/.test(header[0] ?? '') ? 1 : 0
+  const colMap: { label: string; index: number; id: string }[] = []
+  let columns = [...book.columns]
+  for (let i = 0; i < header.length; i++) {
+    if (i === nameIdx) continue
+    const label = header[i]?.trim()
+    if (!label || /^(stt|#|no\.?)$/i.test(label)) continue
+    let col = columns.find((c) => normHeader(c.label) === normHeader(label))
+    if (!col) {
+      col = { id: newRosterId(), label }
+      columns = [...columns, col]
+    }
+    colMap.push({ label, index: i, id: col.id })
+  }
+  const classStudents = students.filter((s) => (s.className ?? '') === book.className)
+  const byName = new Map(classStudents.map((s) => [normHeader(s.name), s]))
+  const scores: WbGradebook['scores'] = { ...book.scores }
+  let updated = 0
+  for (const raw of table.slice(1)) {
+    const cols = raw.map((c) => String(c ?? '').trim())
+    const name = cols[nameIdx]?.trim()
+    if (!name) continue
+    const student = byName.get(normHeader(name))
+    if (!student) continue
+    const row = { ...(scores[student.id] ?? {}) }
+    let touched = false
+    for (const m of colMap) {
+      const v = cols[m.index]?.trim() ?? ''
+      if (v) {
+        row[m.id] = v
+        touched = true
+      }
+    }
+    if (touched) {
+      scores[student.id] = row
+      updated += 1
+    }
+  }
+  return { book: { ...book, columns, scores }, updated }
 }
 
 // —— P2 teacher ops: attendance · timetable · question bank ——————————————
@@ -2176,16 +2335,87 @@ export function exportQuestionsCsv(items: readonly WbQuestionItem[]): string {
   return `\uFEFF${lines.join('\n')}`
 }
 
+export function importQuestionsFromRows(
+  existing: readonly WbQuestionItem[],
+  table: readonly (readonly string[])[],
+): { items: WbQuestionItem[]; added: number } {
+  if (table.length === 0) return { items: [...existing], added: 0 }
+  const header = table[0]!.map((c) => normHeader(String(c ?? '')))
+  const findCol = (...names: string[]) =>
+    header.findIndex((h) => names.some((n) => h === n || h.includes(n)))
+  let stemIdx = findCol('cau hoi', 'stem', 'question', 'cau')
+  let answerIdx = findCol('dap an', 'answer')
+  let subjectIdx = findCol('mon', 'subject')
+  let gradeIdx = findCol('lop', 'grade', 'class')
+  let tagsIdx = findCol('tag')
+  let diffIdx = findCol('do kho', 'difficulty', 'level')
+  const hasHeader = stemIdx >= 0 || findCol('stt') === 0
+  if (!hasHeader) {
+    stemIdx = 0
+    answerIdx = 1
+    subjectIdx = 2
+    gradeIdx = 3
+    tagsIdx = 4
+    diffIdx = 5
+  }
+  const body = hasHeader ? table.slice(1) : table
+  const addedItems: WbQuestionItem[] = []
+  for (const raw of body) {
+    const cols = raw.map((c) => String(c ?? '').trim())
+    const stem = (stemIdx >= 0 ? cols[stemIdx] : cols[0])?.trim()
+    if (!stem) continue
+    const diffRaw = (diffIdx >= 0 ? cols[diffIdx] : '')?.trim().toLowerCase() ?? ''
+    const difficulty: QuestionDifficulty | undefined = /hard|kho/.test(diffRaw)
+      ? 'hard'
+      : /easy|de/.test(diffRaw)
+        ? 'easy'
+        : /medium|trung/.test(diffRaw)
+          ? 'medium'
+          : undefined
+    const tagsRaw = tagsIdx >= 0 ? cols[tagsIdx] ?? '' : ''
+    const tags = tagsRaw
+      .split(/[;,|/]/)
+      .map((t) => t.trim())
+      .filter(Boolean)
+    addedItems.push({
+      id: newRosterId(),
+      stem,
+      createdAt: new Date().toISOString(),
+      ...(answerIdx >= 0 && cols[answerIdx]?.trim()
+        ? { answer: cols[answerIdx]!.trim() }
+        : {}),
+      ...(subjectIdx >= 0 && cols[subjectIdx]?.trim()
+        ? { subject: cols[subjectIdx]!.trim() }
+        : {}),
+      ...(gradeIdx >= 0 && cols[gradeIdx]?.trim() ? { grade: cols[gradeIdx]!.trim() } : {}),
+      ...(tags.length ? { tags } : {}),
+      ...(difficulty ? { difficulty } : {}),
+    })
+  }
+  return { items: [...addedItems, ...existing], added: addedItems.length }
+}
+
+const ATTENDANCE_MARK_LABEL: Record<AttendanceMark, string> = {
+  present: 'Có mặt',
+  absent: 'Vắng',
+  late: 'Đi muộn',
+  excused: 'Có phép',
+}
+
+export function parseAttendanceMark(raw: string): AttendanceMark | null {
+  const t = normHeader(raw)
+  if (!t) return null
+  if (/^(c|co mat|present|p|x)$/.test(t)) return 'present'
+  if (/^(v|vang|absent|a)$/.test(t)) return 'absent'
+  if (/^(m|di muon|late|l)$/.test(t)) return 'late'
+  if (/^(cp|co phep|excused|e)$/.test(t)) return 'excused'
+  return null
+}
+
 export function exportAttendanceCsv(
   session: WbAttendanceSession,
   students: readonly WbStudentItem[],
 ): string {
-  const markLabel: Record<AttendanceMark, string> = {
-    present: 'Có mặt',
-    absent: 'Vắng',
-    late: 'Đi muộn',
-    excused: 'Có phép',
-  }
   const rows = students
     .filter((s) => (s.className ?? '') === session.className)
     .slice()
@@ -2193,9 +2423,145 @@ export function exportAttendanceCsv(
   const lines = [['STT', 'Họ tên', 'Trạng thái'].join(',')]
   rows.forEach((s, i) => {
     const m = session.marks[s.id]
-    lines.push([String(i + 1), csvEscape(s.name), csvEscape(m ? markLabel[m] : '')].join(','))
+    lines.push(
+      [String(i + 1), csvEscape(s.name), csvEscape(m ? ATTENDANCE_MARK_LABEL[m] : '')].join(','),
+    )
   })
   return `\uFEFF${lines.join('\n')}`
+}
+
+export function importAttendanceFromRows(
+  session: WbAttendanceSession,
+  students: readonly WbStudentItem[],
+  table: readonly (readonly string[])[],
+): { session: WbAttendanceSession; updated: number } {
+  if (table.length === 0) return { session, updated: 0 }
+  const header = table[0]!.map((c) => normHeader(String(c ?? '')))
+  let nameIdx = header.findIndex((h) =>
+    /^(ho ten|hoten|name|hoc sinh|student)$/.test(h),
+  )
+  let markIdx = header.findIndex((h) =>
+    /^(trang thai|status|mark|diem danh)$/.test(h),
+  )
+  const hasHeader = nameIdx >= 0 || markIdx >= 0
+  if (!hasHeader) {
+    nameIdx = 1
+    markIdx = 2
+  } else {
+    if (nameIdx < 0) nameIdx = 1
+    if (markIdx < 0) markIdx = Math.max(nameIdx + 1, 2)
+  }
+  const body = hasHeader ? table.slice(1) : table
+  const classStudents = students.filter((s) => (s.className ?? '') === session.className)
+  const byName = new Map(classStudents.map((s) => [normHeader(s.name), s]))
+  const marks = { ...session.marks }
+  let updated = 0
+  for (const raw of body) {
+    const cols = raw.map((c) => String(c ?? '').trim())
+    const name = cols[nameIdx]?.trim()
+    if (!name) continue
+    const student = byName.get(normHeader(name))
+    if (!student) continue
+    const mark = parseAttendanceMark(cols[markIdx] ?? '')
+    if (!mark) continue
+    marks[student.id] = mark
+    updated += 1
+  }
+  return { session: { ...session, marks }, updated }
+}
+
+const DAY_LABELS_VI = ['T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'CN'] as const
+const DAY_LABELS_EN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
+
+export function exportTimetableCsv(slots: readonly WbTimetableSlot[]): string {
+  const header = ['Ngày', 'Tiết', 'Môn', 'Lớp', 'Phòng', 'Ghi chú']
+  const lines = [header.join(',')]
+  const sorted = slots.slice().sort((a, b) => a.day - b.day || a.period.localeCompare(b.period))
+  for (const s of sorted) {
+    lines.push(
+      [
+        csvEscape(DAY_LABELS_VI[s.day] ?? String(s.day)),
+        csvEscape(s.period),
+        csvEscape(s.subject ?? ''),
+        csvEscape(s.className ?? ''),
+        csvEscape(s.room ?? ''),
+        csvEscape(s.note ?? ''),
+      ].join(','),
+    )
+  }
+  return `\uFEFF${lines.join('\n')}`
+}
+
+export function parseTimetableDay(raw: string): TimetableDay | null {
+  const t = normHeader(raw)
+  if (!t) return null
+  if (/^(0|t2|thu 2|mon|monday)$/.test(t)) return 0
+  if (/^(1|t3|thu 3|tue|tuesday)$/.test(t)) return 1
+  if (/^(2|t4|thu 4|wed|wednesday)$/.test(t)) return 2
+  if (/^(3|t5|thu 5|thu|thursday)$/.test(t)) return 3
+  if (/^(4|t6|thu 6|fri|friday)$/.test(t)) return 4
+  if (/^(5|t7|thu 7|sat|saturday)$/.test(t)) return 5
+  if (/^(6|cn|chu nhat|sun|sunday)$/.test(t)) return 6
+  const n = Number(t)
+  if (n >= 0 && n <= 6) return n as TimetableDay
+  return null
+}
+
+export function importTimetableFromRows(
+  existing: readonly WbTimetableSlot[],
+  table: readonly (readonly string[])[],
+): { slots: WbTimetableSlot[]; imported: number } {
+  if (table.length === 0) return { slots: [...existing], imported: 0 }
+  const header = table[0]!.map((c) => normHeader(String(c ?? '')))
+  const findCol = (...names: string[]) => header.findIndex((h) => names.some((n) => h === n))
+  let dayIdx = findCol('ngay', 'day', 'thu')
+  let periodIdx = findCol('tiet', 'period')
+  let subjectIdx = findCol('mon', 'subject')
+  let classIdx = findCol('lop', 'class')
+  let roomIdx = findCol('phong', 'room')
+  let noteIdx = findCol('ghi chu', 'note')
+  const hasHeader = dayIdx >= 0 || periodIdx >= 0
+  if (!hasHeader) {
+    dayIdx = 0
+    periodIdx = 1
+    subjectIdx = 2
+    classIdx = 3
+    roomIdx = 4
+    noteIdx = 5
+  }
+  const body = hasHeader ? table.slice(1) : table
+  const byKey = new Map(existing.map((s) => [slotKey(s.day, s.period), s]))
+  let imported = 0
+  for (const raw of body) {
+    const cols = raw.map((c) => String(c ?? '').trim())
+    const day = parseTimetableDay(dayIdx >= 0 ? cols[dayIdx] ?? '' : '')
+    const period = (periodIdx >= 0 ? cols[periodIdx] : '')?.trim()
+    if (day == null || !period) continue
+    const subject = subjectIdx >= 0 ? cols[subjectIdx]?.trim() : ''
+    const className = classIdx >= 0 ? cols[classIdx]?.trim() : ''
+    const room = roomIdx >= 0 ? cols[roomIdx]?.trim() : ''
+    const note = noteIdx >= 0 ? cols[noteIdx]?.trim() : ''
+    if (!subject && !className && !room && !note) continue
+    const key = slotKey(day, period)
+    const prev = byKey.get(key)
+    const row: WbTimetableSlot = {
+      id: prev?.id ?? newRosterId(),
+      day,
+      period,
+      ...(subject ? { subject } : {}),
+      ...(className ? { className } : {}),
+      ...(room ? { room } : {}),
+      ...(note ? { note } : {}),
+    }
+    byKey.set(key, row)
+    imported += 1
+  }
+  return { slots: [...byKey.values()], imported }
+}
+
+/** @internal — used by export helpers / tests */
+export function timetableDayLabel(day: TimetableDay, vi: boolean): string {
+  return vi ? (DAY_LABELS_VI[day] ?? String(day)) : (DAY_LABELS_EN[day] ?? String(day))
 }
 
 /** Match học sinh + email PH from free text (My AI playbook). */

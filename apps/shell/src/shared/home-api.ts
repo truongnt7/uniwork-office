@@ -241,6 +241,12 @@ export interface HomeApi {
   getAiPanelPrefs(): Promise<AiPanelPrefs>
   /** merge + persist; broadcasts 'app:ai-panel-prefs-changed' to all web contents */
   setAiPanelPrefs(patch: Partial<AiPanelPrefs>): Promise<AiPanelPrefs>
+  /** My AI natural chat opt-in (unset until first prompt / Settings) */
+  getMyAiNaturalChatPref(): Promise<'unset' | 'on' | 'off'>
+  setMyAiNaturalChatPref(value: 'on' | 'off'): Promise<'unset' | 'on' | 'off'>
+  /** Optional OpenRouter model override for My AI natural chat ('' = Settings default) */
+  getMyAiNaturalChatModel(): Promise<string>
+  setMyAiNaturalChatModel(model: string): Promise<string>
   /** effective default save folder for new/untitled files (configured in userData/app-settings.json, falls back to <Documents>/GenOffice) */
   getDefaultSaveDir(): Promise<string>
   /** directory picker to change the default save folder; resolves to the new folder, or null when canceled or the pick was unusable */
@@ -338,6 +344,21 @@ export interface WorkbenchStoreApi {
     error?: string
     canceled?: boolean
   }>
+  /** Pick .xlsx/.csv and return first-sheet rows for Workbench tab import. */
+  pickSpreadsheet(): Promise<{
+    ok: boolean
+    rows?: string[][]
+    name?: string
+    error?: string
+    canceled?: boolean
+  }>
+  /** Write CSV as .xlsx (default save dir) and optionally open in Sheets. */
+  saveXlsxFromCsv(input: {
+    csv: string
+    fileName: string
+    sheetName?: string
+    open?: boolean
+  }): Promise<{ ok: boolean; path?: string; error?: string; canceled?: boolean }>
 }
 
 export interface AiCatalogEntry extends AiProviderMeta {
@@ -672,6 +693,10 @@ export const HOME_CHANNELS = {
   setAnalyticsEnabled: 'home:set-analytics-enabled',
   getAiPanelPrefs: 'home:get-ai-panel-prefs',
   setAiPanelPrefs: 'home:set-ai-panel-prefs',
+  getMyAiNaturalChatPref: 'home:get-my-ai-natural-chat-pref',
+  setMyAiNaturalChatPref: 'home:set-my-ai-natural-chat-pref',
+  getMyAiNaturalChatModel: 'home:get-my-ai-natural-chat-model',
+  setMyAiNaturalChatModel: 'home:set-my-ai-natural-chat-model',
   getDefaultSaveDir: 'home:get-default-save-dir',
   pickDefaultSaveDir: 'home:pick-default-save-dir',
   openGenTeam: 'home:open-genteam',
@@ -700,6 +725,8 @@ export const HOME_CHANNELS = {
   wbImportKeys: 'home:wb-import-keys',
   wbExportBackup: 'home:wb-export-backup',
   wbImportBackup: 'home:wb-import-backup',
+  wbPickSpreadsheet: 'home:wb-pick-spreadsheet',
+  wbSaveXlsxFromCsv: 'home:wb-save-xlsx-from-csv',
 } as const
 
 export const PROJECT_CHANNELS = {

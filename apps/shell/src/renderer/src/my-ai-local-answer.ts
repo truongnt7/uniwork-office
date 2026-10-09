@@ -1,6 +1,7 @@
 /**
  * Local Q&A for My AI — answer from on-device Workbench / recents.
- * No Hub / Token. LLM only when the user later taps “Clarify with AI”.
+ * No Hub / Token. When Hub AI is ready, unknown fallbacks stream natural chat
+ * (see my-ai-natural-chat); strong local pulse/calendar/task hits stay free.
  */
 import type { PracticeId } from '@uniwork/practice-core'
 import type { MyAiRecentHint } from './context-manager'

@@ -5,6 +5,7 @@ import {
   attendanceSummary,
   exportAttendanceCsv,
   findAttendanceSession,
+  importAttendanceFromRows,
   listStudentClasses,
   readAttendance,
   readStudents,
@@ -13,6 +14,11 @@ import {
   type WbAttendanceSession,
   type WbStudentItem,
 } from './workbench-pins'
+import {
+  exportCsvAsXlsx,
+  normalizeExportBase,
+  pickSpreadsheetRows,
+} from './workbench-excel-io'
 
 const PERIODS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'] as const
 
@@ -35,16 +41,6 @@ function todayIso(): string {
   return `${y}-${m}-${day}`
 }
 
-function downloadCsv(filename: string, csv: string): void {
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
 export function AttendancePane({
   practiceId,
   vi,
@@ -62,6 +58,8 @@ export function AttendancePane({
   const [marks, setMarks] = useState<Record<string, AttendanceMark>>({})
   const [note, setNote] = useState('')
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     setStudents(readStudents(practiceId))
@@ -144,17 +142,62 @@ export function AttendancePane({
     marks,
   })
 
-  const exportCsv = () => {
+  const currentSession = (): WbAttendanceSession => ({
+    id: sessionId ?? 'tmp',
+    date,
+    className,
+    marks,
+    ...(period.trim() ? { period: period.trim() } : {}),
+    ...(note.trim() ? { note: note.trim() } : {}),
+  })
+
+  const exportExcel = async () => {
     if (!className) return
-    const session: WbAttendanceSession = {
-      id: sessionId ?? 'tmp',
-      date,
-      className,
-      marks,
-      ...(period.trim() ? { period: period.trim() } : {}),
+    setBusy(true)
+    setNotice(null)
+    try {
+      const session = currentSession()
+      const csv = exportAttendanceCsv(session, students)
+      const res = await exportCsvAsXlsx({
+        csv,
+        fileName: `diem-danh-${normalizeExportBase(className)}-${date}.xlsx`,
+        sheetName: 'Attendance',
+        openInSheets: true,
+      })
+      setNotice(
+        res.ok
+          ? label(`Đã xuất và mở trong Sheets: ${res.path}`, `Exported and opened in Sheets: ${res.path}`)
+          : label(res.error || 'Không xuất được.', res.error || 'Export failed.'),
+      )
+    } finally {
+      setBusy(false)
     }
-    const csv = exportAttendanceCsv(session, students)
-    downloadCsv(`diem-danh-${className}-${date}.csv`, csv)
+  }
+
+  const importExcel = async () => {
+    if (!className || !date) return
+    setBusy(true)
+    setNotice(null)
+    try {
+      const picked = await pickSpreadsheetRows()
+      if (!picked.ok) {
+        if (!picked.canceled) {
+          setNotice(label(picked.error || 'Không đọc được file.', picked.error || 'Could not read file.'))
+        }
+        return
+      }
+      const result = importAttendanceFromRows(currentSession(), students, picked.rows)
+      setMarks(result.session.marks)
+      persistSession(result.session.marks, note)
+      setNotice(
+        label(
+          `Đã nhập ${result.updated} dòng điểm danh từ ${picked.name}.`,
+          `Imported ${result.updated} attendance rows from ${picked.name}.`,
+        ),
+      )
+    } finally {
+      setBusy(false)
+    }
   }
 
   if (classes.length === 0) {
@@ -205,13 +248,27 @@ export function AttendancePane({
         <span className="teacher-count">
           C{summary.present} · V{summary.absent} · M{summary.late} · P{summary.excused}
         </span>
-        <button type="button" className="btn btn-secondary" onClick={markAllPresent}>
+        <button type="button" className="btn btn-secondary" onClick={markAllPresent} disabled={busy}>
           {label('Tất cả có mặt', 'All present')}
         </button>
-        <button type="button" className="btn btn-secondary" onClick={exportCsv}>
-          {label('Xuất CSV', 'Export CSV')}
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => void importExcel()}
+          disabled={busy || !className}
+        >
+          {label('Nhập Excel', 'Import Excel')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => void exportExcel()}
+          disabled={busy || !className}
+        >
+          {label('Xuất Excel', 'Export Excel')}
         </button>
       </div>
+      {notice ? <p className="new-chat-attach-notice">{notice}</p> : null}
       <label className="wb-module-form teacher-form-wide" style={{ marginBottom: 12 }}>
         <span>{label('Ghi chú buổi', 'Session note')}</span>
         <input

@@ -27,12 +27,16 @@ import {
   WbRowActions,
 } from './WbRowActions'
 import {
+  applyParentsImport,
   applyRosterImport,
   createEmailDraft,
   ensureParentByName,
+  exportParentsCsv,
+  exportStudentsCsv,
   linkStudentParent,
   listStudentClasses,
   parseRosterImport,
+  parseRosterImportRows,
   pinModule,
   readClients,
   readContracts,
@@ -67,6 +71,7 @@ import {
   type WbStudentItem,
   type WbTravelTrip,
 } from './workbench-pins'
+import { exportCsvAsXlsx, pickSpreadsheetRows } from './workbench-excel-io'
 
 interface Props {
   moduleId: WorkbenchModuleId
@@ -1274,6 +1279,8 @@ function StudentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean 
   const [email, setEmail] = useState('')
   const [note, setNote] = useState('')
   const [followUp, setFollowUp] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     setItems(readStudents(practiceId))
@@ -1384,6 +1391,57 @@ function StudentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean 
     persistBoth(result.students, result.parents)
     setImportText('')
     setImporting(false)
+    setNotice(label(`Đã nhập ${result.added} học sinh.`, `Imported ${result.added} students.`))
+  }
+
+  const importExcel = async () => {
+    setBusy(true)
+    setNotice(null)
+    try {
+      const picked = await pickSpreadsheetRows()
+      if (!picked.ok) {
+        if (!picked.canceled) {
+          setNotice(label(picked.error || 'Không đọc được file.', picked.error || 'Could not read file.'))
+        }
+        return
+      }
+      const rows = parseRosterImportRows(picked.rows)
+      if (rows.length === 0) {
+        setNotice(label('File không có dòng học sinh hợp lệ.', 'No valid student rows in file.'))
+        return
+      }
+      const result = applyRosterImport(items, parents, rows)
+      persistBoth(result.students, result.parents)
+      setImporting(false)
+      setNotice(
+        label(
+          `Đã nhập ${result.added} học sinh từ ${picked.name}.`,
+          `Imported ${result.added} students from ${picked.name}.`,
+        ),
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const exportExcel = async () => {
+    setBusy(true)
+    setNotice(null)
+    try {
+      const res = await exportCsvAsXlsx({
+        csv: exportStudentsCsv(filtered),
+        fileName: 'danh-sach-hoc-sinh.xlsx',
+        sheetName: 'Students',
+        openInSheets: true,
+      })
+      setNotice(
+        res.ok
+          ? label(`Đã xuất và mở trong Sheets: ${res.path}`, `Exported and opened in Sheets: ${res.path}`)
+          : label(res.error || 'Không xuất được.', res.error || 'Export failed.'),
+      )
+    } finally {
+      setBusy(false)
+    }
   }
 
   const composeEmail = (it: WbStudentItem) => {
@@ -1417,8 +1475,8 @@ function StudentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean 
     <>
       <p className="teacher-hint">
         {label(
-          'Lọc theo lớp · liên kết cứng với Phụ huynh · dán danh sách (CSV/TSV: tên, lớp, PH, SĐT, email).',
-          'Filter by class · hard-link to Parents · paste roster (CSV/TSV: name, class, parent, phone, email).',
+          'Lọc theo lớp · liên kết Phụ huynh · Nhập Excel (.xlsx/.csv: tên, lớp, PH, SĐT, email) hoặc dán danh sách.',
+          'Filter by class · link Parents · Import Excel (.xlsx/.csv: name, class, parent, phone, email) or paste roster.',
         )}
       </p>
       <div className="wb-db-toolbar">
@@ -1436,12 +1494,28 @@ function StudentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean 
         <button
           type="button"
           className="btn btn-secondary"
+          disabled={busy}
+          onClick={() => void importExcel()}
+        >
+          {label('Nhập Excel', 'Import Excel')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={busy || filtered.length === 0}
+          onClick={() => void exportExcel()}
+        >
+          {label('Xuất Excel', 'Export Excel')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
           onClick={() => {
             clearForm()
             setImporting((v) => !v)
           }}
         >
-          {label('Nhập danh sách', 'Import roster')}
+          {label('Dán danh sách', 'Paste roster')}
         </button>
         {classes.length > 0 ? (
           <label className="wb-roster-filter">
@@ -1461,6 +1535,7 @@ function StudentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean 
           {classFilter ? ` / ${items.length}` : ''}
         </span>
       </div>
+      {notice ? <p className="new-chat-attach-notice">{notice}</p> : null}
       {importing ? (
         <div className="wb-module-form wb-composer-panel">
           <label className="teacher-form-wide">
@@ -1650,6 +1725,8 @@ function ParentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [note, setNote] = useState('')
+  const [notice, setNotice] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     setItems(readParents(practiceId))
@@ -1674,6 +1751,50 @@ function ParentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
     setPhone('')
     setEmail('')
     setNote('')
+  }
+
+  const importExcel = async () => {
+    setBusy(true)
+    setNotice(null)
+    try {
+      const picked = await pickSpreadsheetRows()
+      if (!picked.ok) {
+        if (!picked.canceled) {
+          setNotice(label(picked.error || 'Không đọc được file.', picked.error || 'Could not read file.'))
+        }
+        return
+      }
+      const result = applyParentsImport(students, items, picked.rows)
+      persistBoth(result.students, result.parents)
+      setNotice(
+        label(
+          `Đã nhập ${result.added} phụ huynh từ ${picked.name}.`,
+          `Imported ${result.added} parents from ${picked.name}.`,
+        ),
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const exportExcel = async () => {
+    setBusy(true)
+    setNotice(null)
+    try {
+      const res = await exportCsvAsXlsx({
+        csv: exportParentsCsv(items),
+        fileName: 'danh-sach-phu-huynh.xlsx',
+        sheetName: 'Parents',
+        openInSheets: true,
+      })
+      setNotice(
+        res.ok
+          ? label(`Đã xuất và mở trong Sheets: ${res.path}`, `Exported and opened in Sheets: ${res.path}`)
+          : label(res.error || 'Không xuất được.', res.error || 'Export failed.'),
+      )
+    } finally {
+      setBusy(false)
+    }
   }
 
   const startEdit = (it: WbParentItem) => {
@@ -1770,8 +1891,8 @@ function ParentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
     <>
       <p className="teacher-hint">
         {label(
-          'Chọn học sinh để liên kết cứng (một PH có thể có nhiều HS).',
-          'Pick students to hard-link (one parent may have many students).',
+          'Chọn học sinh để liên kết · Nhập/Xuất Excel (cột: tên, học sinh, SĐT, email).',
+          'Pick students to link · Import/Export Excel (columns: name, students, phone, email).',
         )}
       </p>
       <div className="wb-db-toolbar">
@@ -1785,8 +1906,25 @@ function ParentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
         >
           {label('Thêm phụ huynh', 'New parent')}
         </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={busy}
+          onClick={() => void importExcel()}
+        >
+          {label('Nhập Excel', 'Import Excel')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={busy || items.length === 0}
+          onClick={() => void exportExcel()}
+        >
+          {label('Xuất Excel', 'Export Excel')}
+        </button>
         <span className="teacher-count">{items.length}</span>
       </div>
+      {notice ? <p className="new-chat-attach-notice">{notice}</p> : null}
       {showForm ? (
         <div className="wb-module-form wb-composer-panel">
           <label>

@@ -10,24 +10,16 @@ import {
 } from './WbRowActions'
 import {
   exportQuestionsCsv,
+  importQuestionsFromRows,
   readQuestions,
   writeQuestions,
   type QuestionDifficulty,
   type WbQuestionItem,
 } from './workbench-pins'
+import { exportCsvAsXlsx, pickSpreadsheetRows } from './workbench-excel-io'
 
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
-}
-
-function downloadCsv(filename: string, csv: string): void {
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
 }
 
 function escapeHtml(s: string): string {
@@ -63,6 +55,8 @@ export function QuestionBankPane({
   const [tags, setTags] = useState('')
   const [difficulty, setDifficulty] = useState<QuestionDifficulty | ''>('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     setItems(readQuestions(practiceId))
@@ -193,11 +187,71 @@ export function QuestionBankPane({
         <button
           type="button"
           className="btn btn-secondary"
-          onClick={() => downloadCsv('ngan-hang-cau-hoi.csv', exportQuestionsCsv(filtered))}
-          disabled={filtered.length === 0}
+          disabled={busy}
+          onClick={() => {
+            void (async () => {
+              setBusy(true)
+              setNotice(null)
+              try {
+                const picked = await pickSpreadsheetRows()
+                if (!picked.ok) {
+                  if (!picked.canceled) {
+                    setNotice(
+                      label(picked.error || 'Không đọc được file.', picked.error || 'Could not read file.'),
+                    )
+                  }
+                  return
+                }
+                const result = importQuestionsFromRows(items, picked.rows)
+                persist(result.items)
+                setNotice(
+                  label(
+                    `Đã nhập ${result.added} câu hỏi từ ${picked.name}.`,
+                    `Imported ${result.added} questions from ${picked.name}.`,
+                  ),
+                )
+              } finally {
+                setBusy(false)
+              }
+            })()
+          }}
         >
-          {label('Xuất CSV', 'Export CSV')}
+          {label('Nhập Excel', 'Import Excel')}
         </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={filtered.length === 0 || busy}
+          onClick={() => {
+            void (async () => {
+              setBusy(true)
+              setNotice(null)
+              try {
+                const res = await exportCsvAsXlsx({
+                  csv: exportQuestionsCsv(filtered),
+                  fileName: 'ngan-hang-cau-hoi.xlsx',
+                  sheetName: 'Questions',
+                  openInSheets: true,
+                })
+                setNotice(
+                  res.ok
+                    ? label(
+                        `Đã xuất và mở trong Sheets: ${res.path}`,
+                        `Exported and opened in Sheets: ${res.path}`,
+                      )
+                    : label(res.error || 'Không xuất được.', res.error || 'Export failed.'),
+                )
+              } finally {
+                setBusy(false)
+              }
+            })()
+          }}
+        >
+          {label('Xuất Excel', 'Export Excel')}
+        </button>
+      </div>
+      {notice ? <p className="new-chat-attach-notice">{notice}</p> : null}
+      <div className="wb-db-toolbar">
         <label className="wb-roster-filter">
           <span className="sr-only">{label('Môn', 'Subject')}</span>
           <select value={filterSubject} onChange={(e) => setFilterSubject(e.target.value)}>

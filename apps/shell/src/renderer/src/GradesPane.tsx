@@ -4,6 +4,7 @@ import type { PracticeId } from '@uniwork/practice-core'
 import {
   ensureGradebook,
   exportGradebookCsv,
+  importGradebookFromRows,
   listStudentClasses,
   readGradebooks,
   readStudents,
@@ -11,19 +12,14 @@ import {
   type WbGradebook,
   type WbStudentItem,
 } from './workbench-pins'
+import {
+  exportCsvAsXlsx,
+  normalizeExportBase,
+  pickSpreadsheetRows,
+} from './workbench-excel-io'
 
 function newId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
-}
-
-function downloadCsv(filename: string, csv: string): void {
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
 }
 
 export function GradesPane({
@@ -39,6 +35,8 @@ export function GradesPane({
   const classes = useMemo(() => listStudentClasses(students), [students])
   const [className, setClassName] = useState('')
   const [colLabel, setColLabel] = useState('')
+  const [notice, setNotice] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     const nextStudents = readStudents(practiceId)
@@ -133,11 +131,52 @@ export function GradesPane({
     })
   }
 
-  const exportCsv = () => {
+  const exportExcel = async () => {
     if (!active) return
-    const csv = exportGradebookCsv(active, students)
-    const safe = active.className.replace(/[^\w.-]+/g, '_') || 'lop'
-    downloadCsv(`so-diem-${safe}.csv`, csv)
+    setBusy(true)
+    setNotice(null)
+    try {
+      const csv = exportGradebookCsv(active, students)
+      const safe = normalizeExportBase(active.className)
+      const res = await exportCsvAsXlsx({
+        csv,
+        fileName: `so-diem-${safe}.xlsx`,
+        sheetName: active.className.slice(0, 31) || 'Grades',
+        openInSheets: true,
+      })
+      setNotice(
+        res.ok
+          ? label(`Đã xuất và mở trong Sheets: ${res.path}`, `Exported and opened in Sheets: ${res.path}`)
+          : label(res.error || 'Không xuất được.', res.error || 'Export failed.'),
+      )
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const importExcel = async () => {
+    if (!active || !className) return
+    setBusy(true)
+    setNotice(null)
+    try {
+      const picked = await pickSpreadsheetRows()
+      if (!picked.ok) {
+        if (!picked.canceled) {
+          setNotice(label(picked.error || 'Không đọc được file.', picked.error || 'Could not read file.'))
+        }
+        return
+      }
+      const result = importGradebookFromRows(active, students, picked.rows)
+      updateBook(className, () => result.book)
+      setNotice(
+        label(
+          `Đã nhập ${result.updated} dòng điểm từ ${picked.name}.`,
+          `Imported ${result.updated} score rows from ${picked.name}.`,
+        ),
+      )
+    } finally {
+      setBusy(false)
+    }
   }
 
   if (classes.length === 0) {
@@ -157,8 +196,8 @@ export function GradesPane({
     <>
       <p className="teacher-hint">
         {label(
-          'Sổ điểm theo lớp — nhập điểm từng cột, xuất CSV mở bằng Excel / Sheets.',
-          'Class gradebook — enter scores by column, export CSV for Excel / Sheets.',
+          'Sổ điểm theo lớp — nhập điểm, Xuất Excel để mở trong UniWork Sheets, hoặc Nhập Excel để cập nhật điểm.',
+          'Class gradebook — enter scores, Export Excel to open in UniWork Sheets, or Import Excel to update scores.',
         )}
       </p>
       <div className="wb-db-toolbar">
@@ -175,10 +214,24 @@ export function GradesPane({
         <span className="teacher-count">
           {classStudents.length} {label('HS', 'students')}
         </span>
-        <button type="button" className="btn btn-secondary" onClick={exportCsv} disabled={!book}>
-          {label('Xuất CSV', 'Export CSV')}
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => void importExcel()}
+          disabled={!book || busy}
+        >
+          {label('Nhập Excel', 'Import Excel')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => void exportExcel()}
+          disabled={!book || busy}
+        >
+          {label('Xuất Excel', 'Export Excel')}
         </button>
       </div>
+      {notice ? <p className="new-chat-attach-notice">{notice}</p> : null}
 
       <div className="wb-module-form wb-composer-panel wb-grades-addcol">
         <label>

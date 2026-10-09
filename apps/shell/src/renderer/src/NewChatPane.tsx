@@ -75,6 +75,17 @@ import {
   looksLikeMissingAiActivation,
   softAiActivationMessage,
 } from './my-ai-activation'
+import {
+  NATURAL_CHAT_MODEL_OPTIONS,
+  naturalChatSystemPrompt,
+  naturalChatUserPayload,
+  normalizeNaturalChatModel,
+  shouldAutoNaturalChat,
+  shouldPromptNaturalChatOptIn,
+  withNaturalChatModel,
+  type MyAiNaturalChatPref,
+} from './my-ai-natural-chat'
+import type { AiSettings } from '@genoffice/ai-provider'
 import type { ActiveOfficeTab, RecentEntry } from '../../shared/home-api'
 import { FILE_EXCERPT_MAX_FILES, formatExcerptsForPrompt } from '../../shared/file-excerpt'
 
@@ -310,21 +321,6 @@ function enrichBrief(brief: string, pack: MyAiContextPack, userText: string): st
   return parts.join('\n')
 }
 
-function contextFootnotePlain(vi: boolean, excerpts = false): string {
-  if (excerpts) {
-    return vi
-      ? 'Đã đọc excerpt trên máy + ngữ cảnh Workbench. Không bịa nội dung ngoài excerpt.'
-      : 'Used on-device file excerpts + Workbench context. Did not invent text beyond excerpts.'
-  }
-  return vi
-    ? 'Đã dùng ngữ cảnh máy: việc / ghi chú / email / lịch / Recent.'
-    : 'Used on-device context: tasks / notes / email / calendar / Recents.'
-}
-
-function contextFootnote(vi: boolean, excerpts = false): string {
-  return `\n\n_(${contextFootnotePlain(vi, excerpts)})_`
-}
-
 interface Props {
   practiceId: PracticeId
   ensureWorkbench: () => void
@@ -353,6 +349,8 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     route: MyAiRoute
     userText: string
     attachments: AttachmentMeta[]
+    /** First-time natural-chat opt-in vs Token/deep-read consent */
+    kind?: 'token' | 'natural-chat-opt-in'
   } | null>(null)
   const pendingResumeRef = useRef<{
     steps: MyAiStep[]
@@ -371,6 +369,12 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
   const [auditOpen, setAuditOpen] = useState(false)
   const [auditRows, setAuditRows] = useState<MyAiAuditEntry[]>([])
   const [aiReady, setAiReady] = useState<boolean | null>(null)
+  const [naturalChatPref, setNaturalChatPref] = useState<MyAiNaturalChatPref>('unset')
+  const naturalChatPrefRef = useRef<MyAiNaturalChatPref>('unset')
+  /** '' = Settings default; otherwise OpenRouter model id for natural chat */
+  const [naturalChatModel, setNaturalChatModel] = useState('')
+  const naturalChatModelRef = useRef('')
+  const [settingsModelLabel, setSettingsModelLabel] = useState('')
 
   const refreshActiveTab = () => {
     void window.aiOffice.activeOfficeTab?.().then((tab) => setActiveTab(tab))
@@ -388,14 +392,45 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     inputRef.current?.focus()
   }, [])
 
+  const refreshNaturalChatPref = () => {
+    void window.aiOffice.getMyAiNaturalChatPref?.().then((p) => {
+      if (p === 'on' || p === 'off' || p === 'unset') {
+        naturalChatPrefRef.current = p
+        setNaturalChatPref(p)
+      }
+    })
+  }
+
+  const refreshNaturalChatModel = () => {
+    void window.aiOffice.getMyAiNaturalChatModel?.().then((m) => {
+      const next = normalizeNaturalChatModel(m)
+      naturalChatModelRef.current = next
+      setNaturalChatModel(next)
+    })
+    void window.aiOffice.getAiSettings?.().then((s) => {
+      if (!s) return
+      setAiReady(aiSettingsReady(s))
+      const p = s.provider
+      const model = s.providers?.[p]?.model?.trim() || ''
+      setSettingsModelLabel(model)
+    })
+  }
+
   useEffect(() => {
     refreshActiveTab()
-    void window.aiOffice.getAiSettings?.().then((s) => {
-      if (s) setAiReady(aiSettingsReady(s))
-    })
-    const onFocus = () => refreshActiveTab()
+    refreshNaturalChatPref()
+    refreshNaturalChatModel()
+    const onFocus = () => {
+      refreshActiveTab()
+      refreshNaturalChatPref()
+      refreshNaturalChatModel()
+    }
     const onVis = () => {
-      if (document.visibilityState === 'visible') refreshActiveTab()
+      if (document.visibilityState === 'visible') {
+        refreshActiveTab()
+        refreshNaturalChatPref()
+        refreshNaturalChatModel()
+      }
     }
     window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onVis)
@@ -566,11 +601,14 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     images?: Awaited<ReturnType<typeof collectImageAttachments>>
     /** When false, stream without leaving a chat bubble (plan aggregation). */
     showBubble?: boolean
+    /** Natural-chat OpenRouter model override (empty = Settings default) */
+    modelOverride?: string
   }): Promise<{ ok: boolean; content?: string; error?: string; messageId?: string }> => {
     const api = window.aiOffice
     const showBubble = opts.showBubble !== false
     if (!api.getAiSettings) return { ok: false, error: 'AI unavailable' }
-    const settings = await api.getAiSettings()
+    const baseSettings = await api.getAiSettings()
+    const settings: AiSettings = withNaturalChatModel(baseSettings, opts.modelOverride)
 
     const provider = settings.provider
     const model = settings.providers?.[provider]?.model
@@ -689,7 +727,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     requestAnimationFrame(() => inputRef.current?.focus())
   }
 
-  const describeCreate = (app: OfficeApp, mode: string, brief?: string, usedCtx?: boolean) => {
+  const describeCreate = (app: OfficeApp, mode: string, brief?: string, _usedCtx?: boolean) => {
     const name = officeAppLabel(app, vi)
     let body: string
     if (mode.endsWith('+ai') && brief) {
@@ -706,7 +744,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
         `Opened a new ${name} — continue in the new tab.`,
       )
     }
-    return usedCtx ? body + contextFootnote(vi) : body
+    return body
   }
 
   const openPathChoice = async (path: string, name: string) => {
@@ -777,6 +815,26 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       const pending = pendingConsentRef.current
       pendingConsentRef.current = null
       pendingResumeRef.current = null
+      if (pending?.kind === 'natural-chat-opt-in') {
+        void window.aiOffice.setMyAiNaturalChatPref?.('off').then((p) => {
+          naturalChatPrefRef.current = p
+          setNaturalChatPref(p)
+        })
+        appendMyAiAudit({
+          practiceId,
+          userText: pending.userText,
+          routeKind: pending.route.kind,
+          summary: 'Natural chat opt-in declined',
+          ok: true,
+          consented: false,
+        })
+        turnAttachmentsRef.current = pending.attachments
+        void runRoute(pending.route, pending.userText, {
+          skipUserPush: true,
+          attachments: pending.attachments,
+        })
+        return
+      }
       if (pending) {
         appendMyAiAudit({
           practiceId,
@@ -813,6 +871,13 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       return
     }
     if (choice.kind === 'confirm') {
+      const pending = pendingConsentRef.current
+      if (pending?.kind === 'natural-chat-opt-in') {
+        void window.aiOffice.setMyAiNaturalChatPref?.('on').then((p) => {
+          naturalChatPrefRef.current = p
+          setNaturalChatPref(p)
+        })
+      }
       void resumePendingConsent()
       return
     }
@@ -1226,7 +1291,6 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
           `Tóm tắt tệp đính kèm (${atts.length})`,
           `Attached files summary (${atts.length})`,
         ),
-        footnote: contextFootnotePlain(vi, usedAi || Boolean(attachBlock?.trim())),
       })
       const text = summaryToPlainText(artifact)
       return {
@@ -1311,16 +1375,13 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
             )
           : ''
 
-      const footnote = [contextFootnotePlain(vi, okCount > 0 || usedAi), unreadNote]
-        .filter(Boolean)
-        .join(' ')
       const artifact = parseSummaryArtifact(summary, {
         vi,
         kicker: label(
           `Tóm tắt file gần đây (${pool.length}, đọc ${okCount} excerpt)`,
           `Recent files summary (${pool.length}, ${okCount} excerpts read)`,
         ),
-        footnote,
+        ...(unreadNote ? { footnote: unreadNote } : {}),
       })
       const text = summaryToPlainText(artifact)
 
@@ -1430,7 +1491,6 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
         const artifact = parseSummaryArtifact(summary, {
           vi,
           kicker: label(`Tóm tắt “${tab.title}”`, `Summary of “${tab.title}”`),
-          footnote: contextFootnotePlain(vi, ok),
         })
         return {
           text: summaryToPlainText(artifact),
@@ -1705,7 +1765,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
         return
       }
 
-      // unknown — Local Q&A first; Hub AI only after Token consent (Settings model)
+      // unknown only — clear actions already returned via executeStep / plan above
       const localSnap = buildLocalAnswerSnapshot(
         practiceId,
         entries.slice(0, 8).map((e) => ({ name: e.name, ext: e.ext, mtimeMs: e.mtimeMs })),
@@ -1716,22 +1776,105 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       let streamedMessageId: string | undefined
       const attachBlock = await collectAttachmentTextBlock(turnAttachmentsRef.current)
       const images = await collectImageAttachments(turnAttachmentsRef.current)
-      if (opts?.consentGranted) {
+      let settingsReady = aiReady === true
+      try {
+        const settings = await window.aiOffice.getAiSettings?.()
+        if (settings) {
+          settingsReady = aiSettingsReady(settings)
+          setAiReady(settingsReady)
+        }
+      } catch {
+        /* keep badge state */
+      }
+      const hasAttachBits =
+        turnAttachmentsRef.current.length > 0 || Boolean(attachBlock) || images.length > 0
+      const pref = naturalChatPrefRef.current
+      if (
+        shouldPromptNaturalChatOptIn({
+          aiReady: settingsReady,
+          routeKind: route.kind,
+          naturalChatPref: pref,
+          userText,
+          hasAttachments: hasAttachBits,
+          consentGranted: opts?.consentGranted,
+          localTopic: local.topic,
+          localContextUsed: local.contextUsed,
+        })
+      ) {
+        pendingConsentRef.current = {
+          route,
+          userText,
+          attachments: [...turnAttachmentsRef.current],
+          kind: 'natural-chat-opt-in',
+        }
+        push({
+          role: 'assistant',
+          text: label(
+            'Mình có thể chat tự nhiên bằng AI khi câu hỏi chưa rõ lệnh — có thể trừ Token.\n\nBật chat tự nhiên? (Đổi lại được trong Cài đặt.)',
+            'I can chat naturally with AI when your request isn’t a clear command — this may use Tokens.\n\nEnable natural chat? (You can change this in Settings.)',
+          ),
+          choices: [
+            {
+              id: 'natural-chat-on',
+              label: label('Bật chat tự nhiên', 'Enable natural chat'),
+              kind: 'confirm',
+              value: 'natural-chat-on',
+            },
+            {
+              id: 'natural-chat-off',
+              label: label('Để sau', 'Not now'),
+              kind: 'cancel',
+              value: 'natural-chat-off',
+            },
+          ],
+        })
+        appendMyAiAudit({
+          practiceId,
+          userText,
+          routeKind: 'unknown',
+          stepKind: 'natural_chat_opt_in',
+          summary: 'Awaiting natural chat opt-in',
+          ok: true,
+          consented: false,
+        })
+        return
+      }
+      const autoChat = shouldAutoNaturalChat({
+        aiReady: settingsReady,
+        routeKind: route.kind,
+        userText,
+        hasAttachments: hasAttachBits,
+        naturalChatPref: pref,
+        consentGranted: opts?.consentGranted,
+        localTopic: local.topic,
+        localContextUsed: local.contextUsed,
+      })
+      if (autoChat) {
         try {
-          if (userText.length >= 8 || attachBlock || images.length > 0) {
-            const res = await runStreamedAi({
-              system: vi
-                ? `Bạn là Trợ lý UniWork trên desktop. Trả lời ngắn (≤4 câu) tiếng Việt dựa ngữ cảnh máy / tệp đính kèm — không bịa file. Nếu chưa rõ, hỏi 1 câu và đề xuất 2–3 hành động (soạn Word / mở file / thêm việc / mở lịch).\n\n${pack.plainText.slice(0, 2_500)}`
-                : `You are UniWork desktop My AI. Reply briefly (≤4 sentences) using only on-device context / attachments — do not invent files. If unclear, ask one question and suggest 2–3 actions (draft Word / open file / add task / open calendar).\n\n${pack.plainText.slice(0, 2_500)}`,
-              user: [userText, attachBlock ? `\n\nAttachments:\n${attachBlock}` : ''].join(''),
-              images,
-              showBubble: true,
+          const res = await runStreamedAi({
+            system: naturalChatSystemPrompt(vi, pack.plainText),
+            user: naturalChatUserPayload(userText, attachBlock),
+            images,
+            showBubble: true,
+            modelOverride: naturalChatModelRef.current,
+          })
+          if (res.ok && res.content?.trim()) {
+            clarify = res.content.trim()
+            usedAi = true
+            streamedMessageId = res.messageId
+            appendMyAiAudit({
+              practiceId,
+              userText,
+              routeKind: 'unknown',
+              stepKind: 'natural_chat',
+              summary: clarify.slice(0, 200),
+              ok: true,
+              consented: true,
             })
-            if (res.ok && res.content?.trim()) {
-              clarify = res.content.trim()
-              usedAi = true
-              streamedMessageId = res.messageId
-            }
+          } else if (!res.ok && looksLikeMissingAiActivation(res.error || '')) {
+            // Surface activation CTA via local path below
+            settingsReady = false
+            setAiReady(false)
           }
         } catch {
           /* keep local answer */
@@ -1808,6 +1951,12 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
                 value: label('Thêm công việc ', 'Add a task '),
               },
             ]),
+        {
+          id: 'summarize-recents',
+          label: label('Tóm tắt Recent…', 'Summarize Recents…'),
+          kind: 'prompt' as const,
+          value: label('Tóm tắt file gần đây', 'Summarize recent files'),
+        },
       ]
       // Dedupe by id
       const seenChoice = new Set<string>()
@@ -1819,6 +1968,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
 
       const offerAi =
         !usedAi &&
+        !settingsReady &&
         local.offerAi &&
         (userText.length >= 8 || turnAttachmentsRef.current.length > 0)
       if (offerAi) {
@@ -1833,23 +1983,29 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
           kind: 'confirm',
           value: 'ai',
         })
+      } else if (!usedAi && settingsReady && local.offerAi) {
+        // Strong local answer kept — optional deeper chat
+        pendingConsentRef.current = {
+          route,
+          userText,
+          attachments: [...turnAttachmentsRef.current],
+        }
+        uniqueChoices.unshift({
+          id: 'ai-clarify',
+          label: label('Hỏi sâu bằng AI', 'Ask AI for more'),
+          kind: 'confirm',
+          value: 'ai',
+        })
       }
 
       const text =
         clarify +
-        (usedAi
-          ? contextFootnote(vi)
-          : local.topic === 'fallback' || local.topic === 'off_topic'
-            ? offerAi
-              ? label(
-                  '\n\nMuốn mình suy nghĩ sâu hơn thì bấm “Làm rõ bằng AI” nhé.',
-                  '\n\nWant a deeper take? Tap “Clarify with AI”.',
-                )
-              : ''
-            : label(
-                '\n\n_(Trả lời nhanh từ dữ liệu trên máy.)_',
-                '\n\n_(Quick answer from on-device data.)_',
-              ))
+        (!usedAi && (local.topic === 'fallback' || local.topic === 'off_topic') && offerAi
+          ? label(
+              '\n\nMuốn mình suy nghĩ sâu hơn thì bấm “Làm rõ bằng AI” nhé.',
+              '\n\nWant a deeper take? Tap “Clarify with AI”.',
+            )
+          : '')
 
       if (streamedMessageId) {
         patchMessage(streamedMessageId, {
@@ -1908,13 +2064,20 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       text = label('Tóm tắt nội dung tệp đính kèm.', 'Summarize the attached files.')
     }
 
-    // Pending Token/deep-read consent: typed ok / cancel / short noise must not
-    // wipe attachments and fall through to the unknown local fallback.
+    // Pending Token/deep-read / natural-chat opt-in: typed ok / cancel / short noise
+    // must not wipe attachments and fall through to the unknown local fallback.
     const pendingConsent = pendingConsentRef.current
     if (pendingConsent && sentAtts.length === 0) {
       const replyKind = classifyConsentReply(text)
       const restates = consentReplyRestatesRoute(text, pendingConsent.route)
+      const isNaturalOptIn = pendingConsent.kind === 'natural-chat-opt-in'
       if (replyKind === 'affirm' || restates) {
+        if (isNaturalOptIn) {
+          void window.aiOffice.setMyAiNaturalChatPref?.('on').then((p) => {
+            naturalChatPrefRef.current = p
+            setNaturalChatPref(p)
+          })
+        }
         submitLockRef.current = true
         setInput('')
         void resumePendingConsent({ userAckText: text }).finally(() => {
@@ -1927,6 +2090,26 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
         pendingResumeRef.current = null
         setInput('')
         push({ role: 'user', text })
+        if (isNaturalOptIn) {
+          void window.aiOffice.setMyAiNaturalChatPref?.('off').then((p) => {
+            naturalChatPrefRef.current = p
+            setNaturalChatPref(p)
+          })
+          appendMyAiAudit({
+            practiceId,
+            userText: pendingConsent.userText,
+            routeKind: pendingConsent.route.kind,
+            summary: 'Natural chat opt-in declined (typed)',
+            ok: true,
+            consented: false,
+          })
+          turnAttachmentsRef.current = pendingConsent.attachments
+          void runRoute(pendingConsent.route, pendingConsent.userText, {
+            skipUserPush: true,
+            attachments: pendingConsent.attachments,
+          })
+          return
+        }
         appendMyAiAudit({
           practiceId,
           userText: pendingConsent.userText,
@@ -1946,11 +2129,31 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
         push({ role: 'user', text })
         push({
           role: 'assistant',
-          text: label(
-            'Mình đang chờ bạn xác nhận bước dùng AI/Token ở trên. Bấm “Làm luôn” để tiếp tục, hoặc “Hủy”.',
-            'Still waiting on the AI/Token step above. Tap “Do it” to continue, or “Cancel”.',
-          ),
-          choices: consentChoiceButtons(),
+          text: isNaturalOptIn
+            ? label(
+                'Mình đang chờ bạn chọn: bấm “Bật chat tự nhiên” hoặc “Để sau”.',
+                'Still waiting — tap “Enable natural chat” or “Not now”.',
+              )
+            : label(
+                'Mình đang chờ bạn xác nhận bước dùng AI/Token ở trên. Bấm “Làm luôn” để tiếp tục, hoặc “Hủy”.',
+                'Still waiting on the AI/Token step above. Tap “Do it” to continue, or “Cancel”.',
+              ),
+          choices: isNaturalOptIn
+            ? [
+                {
+                  id: 'natural-chat-on',
+                  label: label('Bật chat tự nhiên', 'Enable natural chat'),
+                  kind: 'confirm' as const,
+                  value: 'natural-chat-on',
+                },
+                {
+                  id: 'natural-chat-off',
+                  label: label('Để sau', 'Not now'),
+                  kind: 'cancel' as const,
+                  value: 'natural-chat-off',
+                },
+              ]
+            : consentChoiceButtons(),
         })
         return
       }
@@ -2068,8 +2271,8 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
             <h1>{label('Bạn muốn làm gì hôm nay?', 'What do you want to get done?')}</h1>
             <p className="new-chat-sub">
               {label(
-                'Ví dụ: “Soạn báo giá Word và thêm việc follow-up, mở Clients”, “Tóm tắt file gần đây”.',
-                'e.g. “Draft a Word quote and add a follow-up task, open Clients”, “Summarize recent files”.',
+                'Hỏi tự nhiên hoặc ra lệnh: “Hôm nay mình nên làm gì?”, “Soạn báo giá Word”, “Tóm tắt file gần đây”.',
+                'Ask naturally or give a command: “What should I do today?”, “Draft a Word quote”, “Summarize recent files”.',
               )}
             </p>
             <div className="new-chat-suggestions" role="list">
@@ -2225,8 +2428,8 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
           value={input}
           disabled={busy}
           placeholder={label(
-            'Soạn Word… · Đính kèm file/ảnh · Tóm tắt Recent…',
-            'Draft Word… · Attach files/images · Summarize Recents…',
+            'Hỏi bất kỳ… · Soạn Word · Đính kèm · Tóm tắt Recent…',
+            'Ask anything… · Draft Word · Attach · Summarize Recents…',
           )}
           onChange={(e) => setInput(e.target.value)}
           onPaste={(e) => {
@@ -2288,6 +2491,34 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
             >
               {label('Đính kèm', 'Attach')}
             </button>
+            {naturalChatPref === 'on' && aiReady ? (
+              <label className="new-chat-model-pick">
+                <span className="new-chat-model-pick-label">{label('Model', 'Model')}</span>
+                <select
+                  className="new-chat-model-select"
+                  disabled={busy}
+                  value={naturalChatModel}
+                  aria-label={label('Model chat tự nhiên', 'Natural chat model')}
+                  onChange={(e) => {
+                    const next = normalizeNaturalChatModel(e.target.value)
+                    naturalChatModelRef.current = next
+                    setNaturalChatModel(next)
+                    void window.aiOffice.setMyAiNaturalChatModel?.(next)
+                  }}
+                >
+                  <option value="">
+                    {settingsModelLabel
+                      ? label(`Mặc định (${settingsModelLabel})`, `Default (${settingsModelLabel})`)
+                      : label('Mặc định (Cài đặt)', 'Default (Settings)')}
+                  </option>
+                  {NATURAL_CHAT_MODEL_OPTIONS.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <span>
               {label('Enter gửi · Shift+Enter xuống dòng', 'Enter to send · Shift+Enter for newline')}
             </span>

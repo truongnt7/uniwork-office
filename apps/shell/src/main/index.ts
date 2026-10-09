@@ -148,7 +148,13 @@ import {
   defaultSaveDir,
   uniquePathIn,
 } from '../../../docs/src/main/docs-main'
-import { blankXlsxBuffer } from '@genoffice/xlsx-gateway/gateway/csv-import'
+import {
+  blankXlsxBuffer,
+  csvToXlsxBuffer,
+  parseCsv,
+  resolveImportDelimiter,
+} from '@genoffice/xlsx-gateway/gateway/csv-import'
+import { xlsxToRows } from '@genoffice/file-parse'
 import { blankPdfBuffer } from '../../../pdf/src/main/blank-pdf'
 import {
   configureSheetsRuntime,
@@ -3639,6 +3645,68 @@ function registerHomeIpc(): void {
     }
   })
 
+  ipcMain.handle(HOME_CHANNELS.wbPickSpreadsheet, async (event) => {
+    try {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      const picked = await showOpenDialogWithMemory(dialog, win, {
+        properties: ['openFile'],
+        filters: [
+          { name: 'Excel / CSV', extensions: ['xlsx', 'xlsm', 'csv', 'tsv', 'txt'] },
+        ],
+      })
+      if (picked.canceled || !picked.filePaths[0]) {
+        return { ok: false as const, canceled: true as const }
+      }
+      const filePath = picked.filePaths[0]!
+      const ext = extname(filePath).toLowerCase().replace(/^\./, '')
+      const bytes = readFileSync(filePath)
+      if (ext === 'csv' || ext === 'tsv' || ext === 'txt') {
+        const text = bytes.toString('utf8')
+        const rows = parseCsv(text, resolveImportDelimiter(text))
+        return { ok: true as const, rows, name: basename(filePath) }
+      }
+      const sheets = await xlsxToRows(new Uint8Array(bytes))
+      const first = sheets[0]
+      if (!first) return { ok: false as const, error: 'Workbook has no sheets' }
+      return { ok: true as const, rows: first.rows, name: basename(filePath) }
+    } catch (err) {
+      console.error('[workbench] pickSpreadsheet failed', err)
+      return { ok: false as const, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle(
+    HOME_CHANNELS.wbSaveXlsxFromCsv,
+    async (
+      _event,
+      input?: { csv?: string; fileName?: string; sheetName?: string; open?: boolean },
+    ) => {
+      try {
+        const csv = typeof input?.csv === 'string' ? input.csv : ''
+        if (!csv.trim()) return { ok: false as const, error: 'Empty spreadsheet' }
+        const rawName =
+          typeof input?.fileName === 'string' && input.fileName.trim()
+            ? input.fileName.trim()
+            : 'workbench.xlsx'
+        const fileName = rawName.toLowerCase().endsWith('.xlsx') ? rawName : `${rawName}.xlsx`
+        const sheetName =
+          typeof input?.sheetName === 'string' && input.sheetName.trim()
+            ? input.sheetName.trim().slice(0, 31)
+            : 'Sheet1'
+        const filePath = uniquePathIn(defaultSaveDir(), fileName)
+        writeFileSync(filePath, await csvToXlsxBuffer(csv, sheetName))
+        if (input?.open !== false && tabManager) {
+          tabManager.openSheetsTab(filePath)
+          analytics.track('file_open', { kind: 'xlsx' })
+        }
+        return { ok: true as const, path: filePath }
+      } catch (err) {
+        console.error('[workbench] saveXlsxFromCsv failed', err)
+        return { ok: false as const, error: err instanceof Error ? err.message : String(err) }
+      }
+    },
+  )
+
   ipcMain.handle(HOME_CHANNELS.activeOfficeTab, () => {
     const tab = tabManager?.activeOfficeTab()
     if (!tab) return null
@@ -4031,6 +4099,43 @@ function registerHomeIpc(): void {
     for (const wc of webContents.getAllWebContents()) wc.send('app:ai-panel-prefs-changed', next)
     return next
   })
+
+  const readMyAiNaturalChatPref = (): 'unset' | 'on' | 'off' => {
+    const raw = readAppSettings(APP_SETTINGS_PATH()).myAiNaturalChat
+    if (raw === true || raw === 'on' || raw === 'true') return 'on'
+    if (raw === false || raw === 'off' || raw === 'false') return 'off'
+    return 'unset'
+  }
+
+  ipcMain.handle(HOME_CHANNELS.getMyAiNaturalChatPref, (): 'unset' | 'on' | 'off' =>
+    readMyAiNaturalChatPref(),
+  )
+
+  ipcMain.handle(
+    HOME_CHANNELS.setMyAiNaturalChatPref,
+    (_event, value: unknown): 'unset' | 'on' | 'off' => {
+      const next = value === 'on' || value === true ? 'on' : value === 'off' || value === false ? 'off' : null
+      if (!next) return readMyAiNaturalChatPref()
+      writeAppSetting(APP_SETTINGS_PATH(), 'myAiNaturalChat', next === 'on')
+      return next
+    },
+  )
+
+  const readMyAiNaturalChatModel = (): string => {
+    const raw = readAppSettings(APP_SETTINGS_PATH()).myAiNaturalChatModel
+    return typeof raw === 'string' ? raw.trim().slice(0, 120) : ''
+  }
+
+  ipcMain.handle(HOME_CHANNELS.getMyAiNaturalChatModel, (): string => readMyAiNaturalChatModel())
+
+  ipcMain.handle(
+    HOME_CHANNELS.setMyAiNaturalChatModel,
+    (_event, value: unknown): string => {
+      const next = typeof value === 'string' ? value.trim().slice(0, 120) : ''
+      writeAppSetting(APP_SETTINGS_PATH(), 'myAiNaturalChatModel', next)
+      return next
+    },
+  )
 
   // effective folder where new/untitled files land; the editor mains resolve
   // the same setting themselves (configuredDefaultSaveDir via docs' defaultSaveDir)

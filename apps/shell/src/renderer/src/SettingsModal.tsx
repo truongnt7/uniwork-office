@@ -1175,6 +1175,7 @@ export function SettingsModal({
   const [analyticsSaving, setAnalyticsSaving] = useState(false)
   const [autoSaveOn, setAutoSaveOn] = useState(false)
   const [aiPrefs, setAiPrefs] = useState<AiPanelPrefs>(DEFAULT_AI_PANEL_PREFS)
+  const [naturalChatOn, setNaturalChatOn] = useState(false)
   const [channel, setChannel] = useState<'stable' | 'beta'>('stable')
   const [appVersion, setAppVersion] = useState('')
 
@@ -1194,6 +1195,9 @@ export function SettingsModal({
     })
     void window.aiOffice.getAiPanelPrefs?.().then((prefs) => {
       if (alive) setAiPrefs(prefs)
+    })
+    void window.aiOffice.getMyAiNaturalChatPref?.().then((p) => {
+      if (alive) setNaturalChatOn(p === 'on')
     })
     void window.aiOffice.getUpdateChannel?.().then((ch) => {
       if (alive) setChannel(ch)
@@ -1415,6 +1419,28 @@ export function SettingsModal({
                     aria-checked={aiPrefs.spellcheck}
                     aria-label={t('setAiSpellcheck')}
                     onClick={() => updateAiPrefs({ spellcheck: !aiPrefs.spellcheck })}
+                  />
+                </div>
+                <div className="set-field">
+                  <div className="set-field-text">
+                    <div className="set-field-stack">
+                      <div className="set-field-label">{t('setMyAiNaturalChat')}</div>
+                      <div className="set-field-desc">{t('setMyAiNaturalChatDesc')}</div>
+                    </div>
+                  </div>
+                  <button
+                    className="set-switch"
+                    role="switch"
+                    aria-checked={naturalChatOn}
+                    aria-label={t('setMyAiNaturalChat')}
+                    onClick={() => {
+                      const next = !naturalChatOn
+                      setNaturalChatOn(next)
+                      void window.aiOffice
+                        .setMyAiNaturalChatPref?.(next ? 'on' : 'off')
+                        .then((p) => setNaturalChatOn(p === 'on'))
+                        .catch(() => setNaturalChatOn(!next))
+                    }}
                   />
                 </div>
                 <Field

@@ -3,6 +3,8 @@ import type { ReactElement } from 'react'
 import type { PracticeId } from '@uniwork/practice-core'
 import { EDU_SUBJECTS } from '@uniwork/edu-core'
 import {
+  exportTimetableCsv,
+  importTimetableFromRows,
   listStudentClasses,
   readStudents,
   readTimetable,
@@ -11,6 +13,7 @@ import {
   type TimetableDay,
   type WbTimetableSlot,
 } from './workbench-pins'
+import { exportCsvAsXlsx, pickSpreadsheetRows } from './workbench-excel-io'
 
 const PERIODS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'] as const
 const DAYS: { day: TimetableDay; vi: string; en: string }[] = [
@@ -41,6 +44,8 @@ export function TimetablePane({
   const [className, setClassName] = useState('')
   const [room, setRoom] = useState('')
   const [note, setNote] = useState('')
+  const [notice, setNotice] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     setSlots(readTimetable(practiceId))
@@ -119,10 +124,82 @@ export function TimetablePane({
     <>
       <p className="teacher-hint">
         {label(
-          'Nhập TKB tuần — chạm ô tiết để gán môn / lớp / phòng. Xóa nội dung để trống ô.',
-          'Weekly timetable — tap a cell to set subject / class / room. Clear to empty.',
+          'Nhập TKB tuần — chạm ô tiết để gán môn / lớp / phòng. Có thể Nhập / Xuất Excel.',
+          'Weekly timetable — tap a cell to set subject / class / room. Import / Export Excel supported.',
         )}
       </p>
+      <div className="wb-db-toolbar">
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={busy}
+          onClick={() => {
+            void (async () => {
+              setBusy(true)
+              setNotice(null)
+              try {
+                const picked = await pickSpreadsheetRows()
+                if (!picked.ok) {
+                  if (!picked.canceled) {
+                    setNotice(
+                      label(
+                        picked.error || 'Không đọc được file.',
+                        picked.error || 'Could not read file.',
+                      ),
+                    )
+                  }
+                  return
+                }
+                const result = importTimetableFromRows(slots, picked.rows)
+                persist(result.slots)
+                setNotice(
+                  label(
+                    `Đã nhập ${result.imported} tiết từ ${picked.name}.`,
+                    `Imported ${result.imported} periods from ${picked.name}.`,
+                  ),
+                )
+              } finally {
+                setBusy(false)
+              }
+            })()
+          }}
+        >
+          {label('Nhập Excel', 'Import Excel')}
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          disabled={busy || slots.length === 0}
+          onClick={() => {
+            void (async () => {
+              setBusy(true)
+              setNotice(null)
+              try {
+                const res = await exportCsvAsXlsx({
+                  csv: exportTimetableCsv(slots),
+                  fileName: 'thoi-khoa-bieu.xlsx',
+                  sheetName: 'Timetable',
+                  openInSheets: true,
+                })
+                setNotice(
+                  res.ok
+                    ? label(
+                        `Đã xuất và mở trong Sheets: ${res.path}`,
+                        `Exported and opened in Sheets: ${res.path}`,
+                      )
+                    : label(res.error || 'Không xuất được.', res.error || 'Export failed.'),
+                )
+              } finally {
+                setBusy(false)
+              }
+            })()
+          }}
+        >
+          {label('Xuất Excel', 'Export Excel')}
+        </button>
+        <span className="teacher-count">{slots.length}</span>
+      </div>
+      {notice ? <p className="new-chat-attach-notice">{notice}</p> : null}
       <div className="wb-tkb-scroll">
         <table className="wb-tkb-table">
           <thead>

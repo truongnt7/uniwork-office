@@ -69,8 +69,13 @@ async function zipText(zip: JSZip, path: string): Promise<string | undefined> {
   return file ? file.async('text') : undefined
 }
 
-/** extract sheet text from an xlsx: one "# SheetName" section per sheet, cells joined with " | " */
-export async function xlsxToText(bytes: Uint8Array): Promise<string> {
+export interface XlsxSheetRows {
+  name: string
+  rows: string[][]
+}
+
+/** Structured sheet grids from an xlsx (first sheet is usually the import target). */
+export async function xlsxToRows(bytes: Uint8Array): Promise<XlsxSheetRows[]> {
   const zip = await JSZip.loadAsync(bytes)
   const workbookXml = await zipText(zip, 'xl/workbook.xml')
   if (!workbookXml) throw new Error('Invalid xlsx: missing xl/workbook.xml')
@@ -101,13 +106,13 @@ export async function xlsxToText(bytes: Uint8Array): Promise<string> {
     }
   }
 
-  const sections: string[] = []
+  const out: XlsxSheetRows[] = []
   for (const sheet of sheets) {
     const path = relTargets.get(String(sheet['@_r:id'] ?? ''))
     const sheetXml = path ? await zipText(zip, path) : undefined
     if (!sheetXml) continue
     const worksheet = parser.parse(sheetXml) as Record<string, any>
-    const lines: string[] = [`# ${String(sheet['@_name'] ?? '')}`]
+    const rows: string[][] = []
     for (const row of asArray(worksheet.worksheet?.sheetData?.row) as Array<
       Record<string, unknown>
     >) {
@@ -118,9 +123,17 @@ export async function xlsxToText(bytes: Uint8Array): Promise<string> {
         while (cells.length < col) cells.push('')
         cells[col] = text
       }
-      lines.push(cells.join(' | '))
+      rows.push(cells)
     }
-    sections.push(lines.join('\n'))
+    out.push({ name: String(sheet['@_name'] ?? ''), rows })
   }
-  return sections.join('\n\n')
+  return out
+}
+
+/** extract sheet text from an xlsx: one "# SheetName" section per sheet, cells joined with " | " */
+export async function xlsxToText(bytes: Uint8Array): Promise<string> {
+  const sheets = await xlsxToRows(bytes)
+  return sheets
+    .map((s) => [`# ${s.name}`, ...s.rows.map((r) => r.join(' | '))].join('\n'))
+    .join('\n\n')
 }

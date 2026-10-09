@@ -307,6 +307,27 @@ const homeApi: HomeApi = {
   async setAiPanelPrefs(patch) {
     return normalizeAiPanelPrefs(await ipcRenderer.invoke(HOME_CHANNELS.setAiPanelPrefs, patch))
   },
+  async getMyAiNaturalChatPref() {
+    const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.getMyAiNaturalChatPref)
+    if (result === 'on' || result === 'off' || result === 'unset') return result
+    return 'unset'
+  },
+  async setMyAiNaturalChatPref(value) {
+    const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.setMyAiNaturalChatPref, value)
+    if (result === 'on' || result === 'off' || result === 'unset') return result
+    return 'unset'
+  },
+  async getMyAiNaturalChatModel() {
+    const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.getMyAiNaturalChatModel)
+    return typeof result === 'string' ? result : ''
+  },
+  async setMyAiNaturalChatModel(model) {
+    const result: unknown = await ipcRenderer.invoke(
+      HOME_CHANNELS.setMyAiNaturalChatModel,
+      typeof model === 'string' ? model : '',
+    )
+    return typeof result === 'string' ? result : ''
+  },
   async getDefaultSaveDir() {
     const result: unknown = await ipcRenderer.invoke(HOME_CHANNELS.getDefaultSaveDir)
     return typeof result === 'string' ? result : ''
@@ -523,6 +544,23 @@ const homeApi: HomeApi = {
         keyCount?: number
         keys?: Record<string, string>
         media?: import('../../shared/home-api').WorkbenchIdbMediaDump
+        error?: string
+        canceled?: boolean
+      }
+    },
+    async pickSpreadsheet() {
+      return (await ipcRenderer.invoke(HOME_CHANNELS.wbPickSpreadsheet)) as {
+        ok: boolean
+        rows?: string[][]
+        name?: string
+        error?: string
+        canceled?: boolean
+      }
+    },
+    async saveXlsxFromCsv(input) {
+      return (await ipcRenderer.invoke(HOME_CHANNELS.wbSaveXlsxFromCsv, input)) as {
+        ok: boolean
+        path?: string
         error?: string
         canceled?: boolean
       }

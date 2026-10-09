@@ -104,6 +104,13 @@ export interface DeckAccess {
   /** Survey: shows a card with options and waits for the user's choices, returning an answer summary. */
   askClarification?(questions: ClarifyQuestion[]): Promise<{ answers: string; cancelled?: boolean }>
   /**
+   * Outline review gate: shows an editable dàn bài (core hook + pages) and waits for the user
+   * to confirm / edit / cancel before slides are generated.
+   */
+  confirmOutline?(
+    draft: OutlineDraft,
+  ): Promise<{ cancelled?: boolean; draft?: OutlineDraft }>
+  /**
    * In-tool image search (embedded in the tool):
    * given English keywords, returns an array of real image URLs (at most N).
    * On search failure returns an empty array (fail-open; doesn't block the main generation path).
@@ -232,6 +239,44 @@ export interface ClarifyQuestion {
   options: string[]
   /** Multi-select (single-select by default) */
   multi?: boolean
+}
+
+/** Editable deck outline shown to the user before slides are generated. */
+export interface OutlinePageDraft {
+  title: string
+  brief: string
+  type?: string
+  layout?: string
+  image_queries?: string[]
+}
+
+export interface OutlineDraft {
+  coreHook: string
+  style: string
+  pages: OutlinePageDraft[]
+  topic?: string
+}
+
+function normalizeOutlinePages(pages: Array<Record<string, unknown>>): OutlinePageDraft[] {
+  return pages.map((p, i) => ({
+    title: String(p.title ?? '').trim() || `Page ${i + 1}`,
+    brief: String(p.brief ?? '').trim(),
+    ...(p.type ? { type: String(p.type) } : {}),
+    ...(p.layout ? { layout: String(p.layout) } : {}),
+    ...(Array.isArray(p.image_queries)
+      ? { image_queries: (p.image_queries as unknown[]).map(String) }
+      : {}),
+  }))
+}
+
+function pagesFromOutlineDraft(pages: OutlinePageDraft[]): Array<Record<string, unknown>> {
+  return pages.map((p) => ({
+    title: p.title,
+    brief: p.brief,
+    ...(p.type ? { type: p.type } : {}),
+    ...(p.layout ? { layout: p.layout } : {}),
+    ...(p.image_queries?.length ? { image_queries: p.image_queries } : {}),
+  }))
 }
 
 const TOOLS: AgentToolDef[] = [
@@ -433,7 +478,7 @@ const TOOLS: AgentToolDef[] = [
   {
     name: 'plan_deck',
     description:
-      "[When creating a whole new deck, call after researching material/images and before generate_deck] Outputs a structured plan: the Core Hook + unified style scheme + each page's title/content brief/layout/image keywords. Think the whole deck through first, to avoid starting strong and fizzling out. The plan is echoed to the user.",
+      "[Optional early plan] Outputs a structured plan (Core Hook + style + per-page title/brief/layout). Prefer generate_deck(topic + approx_pages) which plans internally and shows the user an editable outline before creating slides. If you call plan_deck, still pass the plan into generate_deck — the user will review/edit the outline there.",
     inputSchema: {
       type: 'object',
       properties: {
@@ -517,11 +562,12 @@ const TOOLS: AgentToolDef[] = [
   {
     name: 'generate_deck',
     description:
-      '[First choice for creating a whole new deck — self-driven pipeline: auto image search, page-by-page generation with live display, no missing pages]' +
-      ' Recommended usage (especially with many pages): pass only topic + approx_pages (+ optional style/context); the system plans the outline internally (auto-batched beyond 12 pages), **auto-searches images** (no advance image_search — the system searches from the planned image_queries keywords internally and fills real URLs back before writing HTML), writes HTML page by page, and lands pages onto the canvas one by one.' +
-      ' You don\'t hand-write dozens of pages, and neither "only page 1 got generated" nor "arguments were truncated" can happen — the page count is guaranteed by the system loop.' +
-      ' (If you already know each page you may pass core_hook+style+pages directly; pages[].image_queries takes English image-search keywords, searched internally; if you already know real http(s) URLs pass them directly — the system respects existing URLs and does not re-search.)' +
-      ' To add a few pages to an existing deck, pass pages (briefs for just the new pages) + insert_mode:"append".',
+      '[First choice for creating a whole new deck — self-driven pipeline: plan outline → **user edits/confirms dàn bài** → auto image search → page-by-page generation]' +
+      ' Recommended usage (especially with many pages): pass only topic + approx_pages (+ optional style/context); the system plans the outline internally (auto-batched beyond 12 pages), then **pauses for the user to review/edit page titles & briefs** before generating slides.' +
+      ' After confirmation it **auto-searches images**, writes pages one by one, and lands them onto the canvas.' +
+      ' You don\'t hand-write dozens of pages — the page count is guaranteed by the system loop.' +
+      ' (If you already know each page you may pass core_hook+style+pages directly; the user still reviews that outline before slides are created.)' +
+      ' To add a few pages to an existing deck, pass pages (briefs for just the new pages) + insert_mode:"append" (outline review is skipped for append).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -578,6 +624,11 @@ const TOOLS: AgentToolDef[] = [
           enum: ['replace', 'append'],
           description:
             'replace (default, new whole deck) = replace everything; append = append at the end',
+        },
+        confirm_outline: {
+          type: 'boolean',
+          description:
+            'Show the editable outline card for the user before generating slides (default true for replace). Pass false only when plan_deck already confirmed the same pages with the user.',
         },
         style_template: {
           type: 'string',
@@ -1617,11 +1668,30 @@ async function executeTool(
     }
 
     case 'plan_deck': {
-      const coreHook = String(call.input.core_hook ?? '').trim()
-      const style = String(call.input.style ?? '').trim()
-      const pages = Array.isArray(call.input.pages) ? call.input.pages : []
+      let coreHook = String(call.input.core_hook ?? '').trim()
+      let style = String(call.input.style ?? '').trim()
+      let pages = Array.isArray(call.input.pages) ? (call.input.pages as Array<Record<string, unknown>>) : []
       if (!coreHook || !style || pages.length === 0) {
         return fail(t('aiFailPlan'), 'plan_deck requires core_hook + style + non-empty pages')
+      }
+      // Let the user edit the outline early when the UI supports it.
+      if (access.confirmOutline) {
+        const review = await access.confirmOutline({
+          coreHook,
+          style,
+          pages: normalizeOutlinePages(pages),
+        })
+        if (review.cancelled || !review.draft || review.draft.pages.length === 0) {
+          return {
+            output:
+              'The user cancelled outline review. Do not call generate_deck. Ask how they want to change the topic or structure.',
+            mutated: false,
+            summary: t('aiSumOutlineCancelled'),
+          }
+        }
+        coreHook = review.draft.coreHook.trim() || coreHook
+        style = review.draft.style.trim() || style
+        pages = pagesFromOutlineDraft(review.draft.pages)
       }
       // Planning summary echoed back to the user
       const lines = pages.map((p: Record<string, unknown>, i: number) => {
@@ -1640,7 +1710,7 @@ async function executeTool(
       }
       const summary = t('aiSumPlan', { count: pages.length, hook: coreHook })
       return {
-        output: `Plan confirmed:\nCore Hook: ${coreHook}\nStyle: ${style}\n${lines.join('\n')}\nNow follow this plan and call generate_deck once, passing core_hook + style + all ${pages.length} pages (each page's brief strictly following the plan above). Each turn a <generation-progress> note tells you how many pages remain; do not stop before they are complete.`,
+        output: `Plan confirmed by user:\nCore Hook: ${coreHook}\nStyle: ${style}\n${lines.join('\n')}\nCall generate_deck ONCE with core_hook + style + all ${pages.length} pages exactly as above (pass confirm_outline:false so the outline is not shown twice). Do not invent a different structure.`,
         mutated: false,
         summary,
       }
@@ -1780,7 +1850,7 @@ async function executeTool(
         if (!filled) {
           return fail(
             t('aiFailGenDeck'),
-            `Unknown builtin_template "${builtinTemplateId}". Use a built-in gallery id (pitch-deck, quarterly-report, product-launch, training, meeting-brief, lesson, sales-proposal, project-kickoff, marketing-plan, company-intro, weekly-status, workshop).`,
+            `Unknown builtin_template "${builtinTemplateId}". Use a built-in gallery id from the template picker.`,
           )
         }
         topic = filled.topic
@@ -1937,6 +2007,56 @@ async function executeTool(
           summary: t('aiStagePlanDone', { n: pages.length }),
         })
       }
+
+      // ── Step 1.25: user reviews / edits the outline before any slides are generated.
+      // Skipped for append, or when plan_deck already confirmed (confirm_outline:false).
+      const wantOutlineConfirm =
+        insertMode !== 'append' && call.input.confirm_outline !== false && pages.length > 0
+      if (wantOutlineConfirm && access.confirmOutline) {
+        if (cancelled()) return cancelResult(0, pages.length)
+        access.onProgress?.({
+          stage: 'plan',
+          label: t('aiStageOutlineReview'),
+          done: pages.length,
+          total: pages.length,
+          status: 'running',
+          summary: t('aiStageOutlineReviewRunning'),
+        })
+        const review = await access.confirmOutline({
+          coreHook: coreHook || topic || '',
+          style: styleSkill || style || '',
+          pages: normalizeOutlinePages(pages),
+          ...(topic ? { topic } : {}),
+        })
+        if (review.cancelled || !review.draft || review.draft.pages.length === 0) {
+          access.onProgress?.({
+            stage: 'plan',
+            label: t('aiStageOutlineReview'),
+            done: 0,
+            total: pages.length,
+            status: 'error',
+            summary: t('aiSumOutlineCancelled'),
+          })
+          return {
+            output:
+              'The user cancelled outline review. Do not generate slides. Ask what they want to change about the topic or structure.',
+            mutated: false,
+            summary: t('aiSumOutlineCancelled'),
+          }
+        }
+        coreHook = review.draft.coreHook.trim() || coreHook
+        if (review.draft.style.trim()) style = review.draft.style.trim()
+        pages = pagesFromOutlineDraft(review.draft.pages)
+        access.onProgress?.({
+          stage: 'plan',
+          label: t('aiStageOutlineReview'),
+          done: pages.length,
+          total: pages.length,
+          status: 'done',
+          summary: t('aiSumOutlineConfirmed', { n: pages.length }),
+        })
+      }
+      if (cancelled()) return cancelResult(0, pages.length)
 
       // ── Step 1.5: in-tool image search —
       // walk every page's image_queries and replace "English keywords (non-URL)" with real image URLs.

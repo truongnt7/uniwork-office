@@ -14,11 +14,13 @@ import {
   createSlidesSkill,
   type DeckAccess,
   type ClarifyQuestion,
+  type OutlineDraft,
   type DeckProgressEvent,
   type PageProgressItem,
 } from './slides-skill'
 import { extractJsonObject, parseOutlineJson } from './outline-json'
 import { EditQueueCard } from './EditQueueCard'
+import { OutlineEditorModal } from './OutlineEditorModal'
 import {
   buildPageInstruction,
   groupByPage,
@@ -715,6 +717,11 @@ export function AiPanel({
   const clarifyResolverRef = useRef<((r: { answers: string; cancelled?: boolean }) => void) | null>(
     null,
   )
+  // Editable outline gate (dàn bài) before generate_deck creates slides.
+  const [activeOutline, setActiveOutline] = useState<OutlineDraft | null>(null)
+  const outlineResolverRef = useRef<
+    ((r: { cancelled?: boolean; draft?: OutlineDraft }) => void) | null
+  >(null)
 
   /** Synchronous re-entry guard between runWith trigger and loop.run (see the comment inside runWith) */
   const runStartingRef = useRef(false)
@@ -1033,6 +1040,17 @@ export function AiPanel({
         return new Promise<{ answers: string; cancelled?: boolean }>((resolve) => {
           clarifyResolverRef.current = resolve
           setActiveClarify(questions)
+        })
+      },
+      confirmOutline: (draft: OutlineDraft) => {
+        return new Promise<{ cancelled?: boolean; draft?: OutlineDraft }>((resolve) => {
+          outlineResolverRef.current = resolve
+          setActiveOutline({
+            coreHook: draft.coreHook,
+            style: draft.style,
+            pages: draft.pages.map((p) => ({ ...p })),
+            ...(draft.topic ? { topic: draft.topic } : {}),
+          })
         })
       },
       isCloudPageGenEnabled: async () => {
@@ -1888,8 +1906,15 @@ export function AiPanel({
     setActiveClarify(null)
   }
 
+  const dismissOutline = () => {
+    outlineResolverRef.current?.({ cancelled: true })
+    outlineResolverRef.current = null
+    setActiveOutline(null)
+  }
+
   const cancel = () => {
     dismissClarify()
+    dismissOutline()
     qcAbortRef.current?.abort()
     loopRef.current?.cancel()
   }
@@ -2282,7 +2307,28 @@ export function AiPanel({
             </span>
           </div>
         )}
+        {activeOutline && (
+          <div className="ai-clarify-chip" role="status">
+            <span className="ai-clarify-chip-eyebrow">{t('aiOutlineWaiting')}</span>
+          </div>
+        )}
       </div>
+
+      {activeOutline ? (
+        <OutlineEditorModal
+          draft={activeOutline}
+          onConfirm={(draft) => {
+            outlineResolverRef.current?.({ draft })
+            outlineResolverRef.current = null
+            setActiveOutline(null)
+          }}
+          onCancel={() => {
+            outlineResolverRef.current?.({ cancelled: true })
+            outlineResolverRef.current = null
+            setActiveOutline(null)
+          }}
+        />
+      ) : null}
 
       {activeClarify ? (
         /* Docked in the composer slot with the composer's own outer spacing */

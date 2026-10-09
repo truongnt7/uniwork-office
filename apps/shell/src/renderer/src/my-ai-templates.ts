@@ -4,7 +4,16 @@
  */
 import type { PracticeId } from '@uniwork/practice-core'
 import type { OfficeApp } from './my-ai-router'
-import { readClients, readContracts, readMatters, type WbClientItem } from './workbench-pins'
+import {
+  readClients,
+  readContracts,
+  readMatters,
+  readParents,
+  readStudents,
+  type WbClientItem,
+  type WbParentItem,
+  type WbStudentItem,
+} from './workbench-pins'
 
 export type TemplateSlotId =
   | 'client'
@@ -228,6 +237,60 @@ const TEMPLATES: readonly PracticeDocTemplate[] = [
     ],
   },
   {
+    id: 'teacher-parent-letter',
+    playbookId: 'teacher-parent-letter',
+    labelVi: 'Thư thông báo phụ huynh',
+    labelEn: 'Parent notice letter',
+    app: 'docs',
+    slots: [
+      { id: 'topic', required: true, labelVi: 'Nội dung thông báo', labelEn: 'Notice topic' },
+      { id: 'party', required: false, labelVi: 'Phụ huynh', labelEn: 'Parent' },
+      { id: 'scope', required: false, labelVi: 'Học sinh / lớp', labelEn: 'Student / class' },
+      { id: 'deadline', required: false, labelVi: 'Thời hạn / ngày họp', labelEn: 'Deadline / meeting date' },
+    ],
+    outlineVi: [
+      'Kính gửi phụ huynh',
+      'Lý do / nội dung thông báo',
+      'Thông tin học sinh / lớp (nếu có)',
+      'Việc cần phụ huynh hỗ trợ / thời hạn',
+      'Lời cảm ơn / chữ ký giáo viên',
+    ],
+    outlineEn: [
+      'Dear parent / guardian',
+      'Reason / notice body',
+      'Student / class details (if any)',
+      'Ask / deadline',
+      'Thanks / teacher signature',
+    ],
+  },
+  {
+    id: 'teacher-student-comment',
+    playbookId: 'teacher-student-comment',
+    labelVi: 'Nhận xét học sinh',
+    labelEn: 'Student comment',
+    app: 'docs',
+    slots: [
+      { id: 'party', required: true, labelVi: 'Học sinh', labelEn: 'Student' },
+      { id: 'topic', required: true, labelVi: 'Kỳ / nội dung nhận xét', labelEn: 'Term / focus' },
+      { id: 'subject', required: false, labelVi: 'Môn học', labelEn: 'Subject' },
+      { id: 'scope', required: false, labelVi: 'Điểm mạnh / cần cải thiện', labelEn: 'Strengths / improve' },
+    ],
+    outlineVi: [
+      'Thông tin học sinh / lớp / môn',
+      'Thái độ học tập & chuyên cần',
+      'Kiến thức / kỹ năng đạt được',
+      'Điểm cần cải thiện',
+      'Đề xuất cho phụ huynh',
+    ],
+    outlineEn: [
+      'Student / class / subject',
+      'Attitude & attendance',
+      'Knowledge / skills',
+      'Areas to improve',
+      'Suggestions for parents',
+    ],
+  },
+  {
     id: 'cs-reply',
     playbookId: 'cs-reply',
     labelVi: 'Trả lời CSKH',
@@ -287,8 +350,18 @@ export function extractSlotsFromUserText(text: string): ResolvedSlots {
   if (client?.[1]?.trim()) out.client = client[1].trim().slice(0, 120)
 
   const party =
-    /(?:với|với bên|đối tác|doi tac|bên b|ben b|counterparty)\s*[:\-–]?\s*([^,.;\n]+)/i.exec(raw)
+    /(?:với|với bên|đối tác|doi tac|bên b|ben b|counterparty|phụ huynh|phu huynh|parent)\s*[:\-–]?\s*([^,.;\n]+)/i.exec(
+      raw,
+    )
   if (party?.[1]?.trim()) out.party = party[1].trim().slice(0, 120)
+
+  const studentHint =
+    /(?:học sinh|hoc sinh|student)\s*[:\-–]?\s*([^,.;\n]+)/i.exec(raw)
+  if (studentHint?.[1]?.trim()) {
+    // Prefer scope for “HS/lớp”; party for templates that treat student as primary party.
+    if (!out.scope) out.scope = studentHint[1].trim().slice(0, 120)
+    if (!out.party) out.party = studentHint[1].trim().slice(0, 120)
+  }
 
   const investor =
     /(?:chủ đầu tư|chu dau tu|investor|CĐT|cdt)\s*[:\-–]?\s*([^,.;\n]+)/i.exec(raw)
@@ -346,6 +419,16 @@ function matchClient(nameHint: string, clients: WbClientItem[]): WbClientItem | 
   )
 }
 
+function matchByName<T extends { name: string }>(nameHint: string, rows: T[]): T | undefined {
+  const n = stripDiacritics(nameHint.toLowerCase())
+  if (!n) return undefined
+  return (
+    rows.find((r) => stripDiacritics(r.name.toLowerCase()) === n) ||
+    rows.find((r) => stripDiacritics(r.name.toLowerCase()).includes(n)) ||
+    rows.find((r) => n.includes(stripDiacritics(r.name.toLowerCase())))
+  )
+}
+
 export interface TemplateResolveResult {
   template: PracticeDocTemplate
   slots: ResolvedSlots
@@ -397,11 +480,50 @@ export function resolveTemplateSlots(
     /* matters may be absent in some builds */
   }
 
+  // Teacher roster: match HS / PH into slots
+  if (practiceId === 'teacher') {
+    let students: WbStudentItem[] = []
+    let parents: WbParentItem[] = []
+    try {
+      students = readStudents(practiceId)
+      parents = readParents(practiceId)
+    } catch {
+      /* ignore */
+    }
+    if (template.id === 'teacher-parent-letter') {
+      if (slots.party) {
+        const p = matchByName(slots.party, parents)
+        if (p) {
+          slots.party = p.name
+          if (!slots.scope && p.studentName) slots.scope = p.studentName
+        }
+      }
+      if (slots.scope) {
+        const s = matchByName(slots.scope, students)
+        if (s) {
+          slots.scope = s.className ? `${s.name} · ${s.className}` : s.name
+          if (!slots.party && s.parentName) slots.party = s.parentName
+        }
+      }
+    }
+    if (template.id === 'teacher-student-comment') {
+      if (slots.party) {
+        const s = matchByName(slots.party, students)
+        if (s) {
+          slots.party = s.className ? `${s.name} (${s.className})` : s.name
+        }
+      } else if (students.length === 1) {
+        const s = students[0]!
+        slots.party = s.className ? `${s.name} (${s.className})` : s.name
+      }
+    }
+  }
+
   // topic from residual: strip playbook noise if still empty
   if (!slots.topic && !slots.subject && !slots.project) {
     const residual = userText
       .replace(
-        /(?:soạn|soan|tạo|tao|viết|viet|draft|create|báo giá|bao gia|quote|hợp đồng|hop dong|chiến dịch|chien dich|giáo án|giao an|nhật ký|nhat ky|word|excel|và.+$)/gi,
+        /(?:soạn|soan|tạo|tao|viết|viet|draft|create|báo giá|bao gia|quote|hợp đồng|hop dong|chiến dịch|chien dich|giáo án|giao an|thư phụ huynh|thu phu huynh|nhận xét|nhan xet|nhật ký|nhat ky|word|excel|và.+$)/gi,
         ' ',
       )
       .replace(/\s+/g, ' ')

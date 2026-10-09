@@ -7,6 +7,7 @@ import {
   type PracticeId,
 } from '@uniwork/practice-core'
 import type { MyAiStep } from './my-ai-router'
+import { resolveStudentParentContact } from './workbench-pins'
 
 export interface MyAiPlaybookChip {
   id: string
@@ -25,7 +26,7 @@ export interface MyAiPlaybook {
   chip: MyAiPlaybookChip
   /** Match NL (already lowercased + diacritics-stripped variants checked by caller) */
   match: (lower: string, lowerNorm: string) => boolean
-  buildSteps: (raw: string) => MyAiStep[]
+  buildSteps: (raw: string, practiceId?: PracticeId) => MyAiStep[]
 }
 
 function stripDiacritics(s: string): string {
@@ -534,6 +535,82 @@ const PLAYBOOKS: readonly MyAiPlaybook[] = [
     },
   },
   {
+    id: 'teacher-parent-letter',
+    practiceIds: ['teacher', 'principal'],
+    labelVi: 'Thư phụ huynh',
+    labelEn: 'Parent letter',
+    chip: {
+      id: 'teacher-parent-letter',
+      labelVi: 'Thư PH + email',
+      labelEn: 'Parent letter + email',
+      promptVi: 'Soạn thư thông báo phụ huynh và mở Email để gửi',
+      promptEn: 'Draft a parent notice letter and open Email to send',
+    },
+    match: (lower, norm) =>
+      /(?:thư phụ huynh|thu phu huynh|thông báo phụ huynh|thong bao phu huynh|thư PH|parent (?:letter|notice)|gửi phụ huynh|gui phu huynh)/i.test(
+        lower,
+      ) || /(?:thu phu huynh|thong bao phu huynh|parent letter|parent notice)/i.test(norm),
+    buildSteps: (raw) => {
+      const brief =
+        residualBrief(raw, [
+          AND_TAIL,
+          /(?:soạn|soan|tạo|tao|viết|viet|draft)/gi,
+          /(?:thư|thu|thông báo|thong bao|phụ huynh|phu huynh|parent|letter|notice|word)/gi,
+        ]) || 'Thông báo phụ huynh'
+      return [
+        fillTemplate('teacher-parent-letter', raw),
+        wb('open', 'email', `Email PH: ${brief.slice(0, 80)}`, 'Mở Email'),
+      ]
+    },
+  },
+  {
+    id: 'teacher-student-comment',
+    practiceIds: ['teacher', 'principal'],
+    labelVi: 'Nhận xét → email PH',
+    labelEn: 'Comment → parent email',
+    chip: {
+      id: 'teacher-student-comment',
+      labelVi: 'Nhận xét → email PH',
+      labelEn: 'Comment → parent email',
+      promptVi: 'Soạn nhận xét học sinh và tạo nháp email gửi phụ huynh',
+      promptEn: 'Draft a student comment and create a parent email draft',
+    },
+    match: (lower, norm) =>
+      /(?:nhận xét học sinh|nhan xet hoc sinh|nhận xét HS|nhan xet hs|nhận xét.*(?:email|phụ huynh|phu huynh)|gửi nhận xét|gui nhan xet|student comment|report card comment|comment.*parent)/i.test(
+        lower,
+      ) || /(?:nhan xet|student comment|comment.*parent)/i.test(norm),
+    buildSteps: (raw, practiceId) => {
+      const brief =
+        residualBrief(raw, [
+          AND_TAIL,
+          /(?:soạn|soan|tạo|tao|viết|viet|draft)/gi,
+          /(?:nhận xét|nhan xet|học sinh|hoc sinh|student|comment|word|email|phụ huynh|phu huynh)/gi,
+        ]) || 'Nhận xét học sinh'
+      const hit =
+        practiceId === 'teacher' || practiceId === 'principal'
+          ? resolveStudentParentContact(practiceId, raw)
+          : null
+      const studentLabel = hit?.student.name ?? ''
+      const toLine = hit?.email ? `to: ${hit.email}\n` : ''
+      const subject = studentLabel
+        ? `Nhận xét học sinh ${studentLabel}`
+        : 'Nhận xét học sinh'
+      const bodyHint = hit?.parent?.name
+        ? `Xin chào ${hit.parent.name},\n\n${brief}`
+        : brief
+      return [
+        fillTemplate('teacher-student-comment', raw),
+        wb(
+          'add_item',
+          'email',
+          `${toLine}${subject}\n${bodyHint}`,
+          'Tạo nháp email PH',
+        ),
+        wb('open', 'email', 'Mở Email', 'Open Email'),
+      ]
+    },
+  },
+  {
     id: 'teacher-lesson',
     practiceIds: ['teacher', 'principal'],
     labelVi: 'Giáo án + slide',
@@ -604,7 +681,7 @@ export function matchPracticePlaybook(
   for (const book of PLAYBOOKS) {
     if (!practiceAllows(book, practiceId)) continue
     if (!book.match(lower, lowerNorm)) continue
-    const steps = book.buildSteps(raw).slice(0, 4)
+    const steps = book.buildSteps(raw, practiceId).slice(0, 4)
     if (steps.length < 2) continue
     return { playbook: book, steps }
   }

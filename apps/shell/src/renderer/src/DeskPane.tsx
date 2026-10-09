@@ -6,6 +6,7 @@ import {
   DESK_WIDGETS,
   addDaysIso,
   daysFromToday,
+  defaultDeskLayout,
   formatMonthShort,
   getDeskWidget,
   lastNMonthKeys,
@@ -24,7 +25,9 @@ import {
   readFinance,
   readGrowth,
   readMatters,
+  readStudents,
   readTasks,
+  pinModule,
 } from './workbench-pins'
 import {
   remindersEnabled,
@@ -92,8 +95,18 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
     const clients = readClients(practiceId)
     const contracts = readContracts(practiceId)
     const matters = readMatters(practiceId)
+    const students = readStudents(practiceId)
     const today = new Date()
     const todayIso = today.toISOString().slice(0, 10)
+    const lessonsToday = calendar
+      .filter((c) => c.date === todayIso && !c.done)
+      .slice()
+      .sort((a, b) => {
+        const pa = a.period ? Number(a.period) : 99
+        const pb = b.period ? Number(b.period) : 99
+        return pa - pb || a.title.localeCompare(b.title)
+      })
+    const followUpStudents = students.filter((s) => s.followUp)
     const month = monthKey(today)
 
     const openTasks = tasks.filter((t) => !t.done)
@@ -269,6 +282,8 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
       matterCounts,
       contractsOpen: contracts.filter((c) => c.status === 'active' || c.status === 'draft').length,
       mattersOpen: matters.filter((m) => m.status !== 'closed').length,
+      lessonsToday,
+      followUpStudents,
     }
   }, [practiceId, vi, tick])
 
@@ -289,7 +304,15 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
     if (layout.includes(id)) return
     persist([...layout, id])
   }
-  const reset = () => persist(DESK_WIDGETS.filter((w) => w.defaultOn).map((w) => w.id))
+  const reset = () => persist(defaultDeskLayout(practiceId))
+
+  const openModule = (moduleId: 'calendar' | 'students' | 'grades') => {
+    pinModule(practiceId, moduleId)
+    window.dispatchEvent(new Event('uniwork:wb-pins-changed'))
+    window.dispatchEvent(
+      new CustomEvent('uniwork:wb-open-module', { detail: { moduleId } }),
+    )
+  }
 
   const money = (n: number) =>
     n.toLocaleString(vi ? 'vi-VN' : 'en-US', { maximumFractionDigits: 0 })
@@ -334,6 +357,10 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
         return DESK_CHART.legal
       case 'matters-status':
         return DESK_CHART.matter
+      case 'lessons-today':
+        return DESK_CHART.events
+      case 'students-followup':
+        return DESK_CHART.clients
       default:
         return 'var(--accent)'
     }
@@ -483,8 +510,8 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
             <h3>{label('Thêm vào Không gian của tôi', 'Add to My Space')}</h3>
             <p className="teacher-hint">
               {label(
-                'Tuỳ chọn: sự kiện, gia đình, khách hàng, hợp đồng, vụ việc.',
-                'Optional: events, family, clients, contracts, matters.',
+                'Tuỳ chọn: sự kiện, gia đình, khách hàng, hợp đồng, vụ việc, tiết dạy, HS follow-up.',
+                'Optional: events, family, clients, contracts, matters, lessons, follow-ups.',
               )}
             </p>
             <ul className="wb-desk-customize-list">
@@ -732,6 +759,68 @@ export function DeskPane({ practiceId, vi }: Props): ReactElement {
                     empty={label('Chưa có vụ việc.', 'No matters.')}
                   />
                 )}
+                {id === 'lessons-today' &&
+                  (data.lessonsToday.length === 0 ? (
+                    <div>
+                      <p className="teacher-empty">
+                        {label(
+                          'Hôm nay chưa có tiết trên Lịch — thêm sự kiện + chọn tiết.',
+                          'No periods on Calendar today — add an event and pick a period.',
+                        )}
+                      </p>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => openModule('calendar')}
+                      >
+                        {label('Mở Lịch', 'Open Calendar')}
+                      </button>
+                    </div>
+                  ) : (
+                    <ul className="wb-desk-reminders">
+                      {data.lessonsToday.map((c) => (
+                        <li key={c.id}>
+                          <span className="wb-desk-rem-date">
+                            {c.period
+                              ? label(`Tiết ${c.period}`, `P${c.period}`)
+                              : label('Tiết', 'Period')}
+                          </span>
+                          <strong>{c.title}</strong>
+                          <span className="wb-desk-rem-src">{c.packTitle ?? ''}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ))}
+                {id === 'students-followup' &&
+                  (data.followUpStudents.length === 0 ? (
+                    <div>
+                      <p className="teacher-empty">
+                        {label(
+                          'Chưa đánh dấu HS follow-up — bật ★ trên tab Học sinh.',
+                          'No follow-up students — toggle ★ on Students.',
+                        )}
+                      </p>
+                      <button
+                        type="button"
+                        className="btn btn-secondary"
+                        onClick={() => openModule('students')}
+                      >
+                        {label('Mở Học sinh', 'Open Students')}
+                      </button>
+                    </div>
+                  ) : (
+                    <ul className="wb-desk-reminders">
+                      {data.followUpStudents.map((s) => (
+                        <li key={s.id}>
+                          <span className="wb-desk-rem-date">{s.className ?? '—'}</span>
+                          <strong>{s.name}</strong>
+                          <span className="wb-desk-rem-src">
+                            {s.parentName ?? s.note ?? ''}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  ))}
               </div>
             </article>
           )

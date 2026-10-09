@@ -17,12 +17,26 @@ import {
   type AttachmentMeta,
 } from './my-ai-attachments'
 import {
+  classifyConsentReply,
+  consentReplyRestatesRoute,
   describeConsent,
   describeRouteDone,
+  isShortUnclearConsentReply,
   routeNeedsConsent,
   workbenchModuleLabel,
 } from './my-ai-consent'
 import { clearMyAiHistory, loadMyAiHistory, saveMyAiHistory } from './my-ai-history'
+import {
+  exportSummaryArtifact,
+  MyAiSummaryCard,
+  shareSummaryArtifact,
+} from './MyAiSummaryCard'
+import {
+  parseSummaryArtifact,
+  summarySystemPrompt,
+  summaryToPlainText,
+  type MyAiSummaryArtifact,
+} from './my-ai-summary'
 import {
   answerMyAiLocally,
   buildLocalAnswerSnapshot,
@@ -84,6 +98,8 @@ interface ChatMessage {
   contextUsed?: boolean
   streaming?: boolean
   attachments?: AttachmentMeta[]
+  /** Structured summarize card (when present, preferred over plain text). */
+  summary?: MyAiSummaryArtifact
 }
 
 const PASTE_MIME_EXT: Record<string, string> = {
@@ -294,15 +310,19 @@ function enrichBrief(brief: string, pack: MyAiContextPack, userText: string): st
   return parts.join('\n')
 }
 
-function contextFootnote(vi: boolean, excerpts = false): string {
+function contextFootnotePlain(vi: boolean, excerpts = false): string {
   if (excerpts) {
     return vi
-      ? '\n\n_(Đã đọc excerpt trên máy + ngữ cảnh Workbench. Không bịa nội dung ngoài excerpt.)_'
-      : '\n\n_(Used on-device file excerpts + Workbench context. Did not invent text beyond excerpts.)_'
+      ? 'Đã đọc excerpt trên máy + ngữ cảnh Workbench. Không bịa nội dung ngoài excerpt.'
+      : 'Used on-device file excerpts + Workbench context. Did not invent text beyond excerpts.'
   }
   return vi
-    ? '\n\n_(Đã dùng ngữ cảnh máy: việc / ghi chú / email / lịch / Recent.)_'
-    : '\n\n_(Used on-device context: tasks / notes / email / calendar / Recents.)_'
+    ? 'Đã dùng ngữ cảnh máy: việc / ghi chú / email / lịch / Recent.'
+    : 'Used on-device context: tasks / notes / email / calendar / Recents.'
+}
+
+function contextFootnote(vi: boolean, excerpts = false): string {
+  return `\n\n_(${contextFootnotePlain(vi, excerpts)})_`
 }
 
 interface Props {
@@ -329,7 +349,11 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const pendingConsentRef = useRef<{ route: MyAiRoute; userText: string } | null>(null)
+  const pendingConsentRef = useRef<{
+    route: MyAiRoute
+    userText: string
+    attachments: AttachmentMeta[]
+  } | null>(null)
   const pendingResumeRef = useRef<{
     steps: MyAiStep[]
     userText: string
@@ -340,6 +364,8 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
   const turnAttachmentsRef = useRef<AttachmentMeta[]>([])
   const streamCancelRef = useRef<(() => void) | null>(null)
   const skipPersistRef = useRef(false)
+  /** Blocks double Enter/Send before `busy` flips true. */
+  const submitLockRef = useRef(false)
   const practiceChips = useMemo(() => practiceMyAiChips(practiceId), [practiceId])
   const [activeTab, setActiveTab] = useState<ActiveOfficeTab | null>(null)
   const [auditOpen, setAuditOpen] = useState(false)
@@ -420,6 +446,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
           text: m.text,
           contextUsed: m.contextUsed,
           attachments: m.attachments,
+          summary: m.summary,
         })),
     )
   }, [practiceId, messages])
@@ -786,13 +813,49 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       return
     }
     if (choice.kind === 'confirm') {
-      const pending = pendingConsentRef.current
-      pendingConsentRef.current = null
-      if (!pending) return
-      void runRoute(pending.route, pending.userText, { consentGranted: true, skipUserPush: true })
+      void resumePendingConsent()
       return
     }
     submit(choice.value)
+  }
+
+  const consentChoiceButtons = (): ChatChoice[] => [
+    {
+      id: 'consent-ok',
+      label: label('Làm luôn', 'Do it'),
+      kind: 'confirm',
+      value: 'ok',
+    },
+    {
+      id: 'consent-no',
+      label: label('Hủy', 'Cancel'),
+      kind: 'cancel',
+      value: 'no',
+    },
+  ]
+
+  const choiceChipClass = (c: ChatChoice): string =>
+    c.kind === 'confirm'
+      ? 'new-chat-chip is-consent-ok'
+      : c.kind === 'cancel'
+        ? 'new-chat-chip is-consent-no'
+        : 'new-chat-chip'
+
+  /** Resume the paused consent route (chip tap or typed affirm). */
+  const resumePendingConsent = async (opts?: { userAckText?: string }) => {
+    const pending = pendingConsentRef.current
+    pendingConsentRef.current = null
+    if (!pending) return
+    if (opts?.userAckText) {
+      push({ role: 'user', text: opts.userAckText })
+    }
+    // Restore turn attachments — consent pause must not drop the uploaded files.
+    turnAttachmentsRef.current = pending.attachments
+    await runRoute(pending.route, pending.userText, {
+      consentGranted: true,
+      skipUserPush: true,
+      attachments: pending.attachments,
+    })
   }
 
   type StepOutcome = {
@@ -803,6 +866,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     pausePlan?: boolean
     /** Reply already streamed into this message id — skip duplicate push */
     streamedMessageId?: string
+    summary?: MyAiSummaryArtifact
   }
 
   const executeStep = async (
@@ -1104,12 +1168,9 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       const names = atts.map((a) => a.name).join(', ')
       let summary = ''
       let usedAi = false
-      let streamedMessageId: string | undefined
       try {
         if (attachBlock?.trim() || images.length > 0) {
-          const system = vi
-            ? `Bạn là trợ lý desktop UniWork. Tóm tắt nội dung thật từ tệp đính kèm (tiếng Việt, gạch đầu dòng: chủ đề, điểm chính, việc có thể làm tiếp). Chỉ dùng nội dung tệp — không bịa. Nếu không đọc được, nói rõ.\n\nNgữ cảnh máy:\n${pack.plainText.slice(0, 1_200)}`
-            : `You are a UniWork desktop assistant. Summarize real content from the attached files (bullets: topic, key points, next actions). Use only attachment text/images — do not invent. If unreadable, say so.\n\nOn-device context:\n${pack.plainText.slice(0, 1_200)}`
+          const system = summarySystemPrompt(vi, pack.plainText.slice(0, 1_200))
           const user = [
             `Attached files: ${names}`,
             attachBlock ? `\n\nAttachment content:\n${attachBlock}` : '',
@@ -1122,12 +1183,17 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
             system,
             user,
             images,
-            showBubble: opts?.showAiBubble !== false,
+            showBubble: false,
           })
           if (res.ok && res.content?.trim()) {
             summary = res.content.trim()
             usedAi = true
-            streamedMessageId = res.messageId
+          } else if (!res.ok && looksLikeMissingAiActivation(res.error || '')) {
+            return {
+              text: softAiActivationMessage(vi),
+              choices: [buyAiChoice()],
+              contextUsed: Boolean(attachBlock?.trim()),
+            }
           }
         }
       } catch {
@@ -1154,22 +1220,19 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
           )
         }
       }
-      const text =
-        label(
-          `Tóm tắt tệp đính kèm (${atts.length}):\n${summary}`,
-          `Attached files summary (${atts.length}):\n${summary}`,
-        ) + contextFootnote(vi, usedAi || Boolean(attachBlock?.trim()))
-      if (streamedMessageId) {
-        patchMessage(streamedMessageId, {
-          text,
-          contextUsed: true,
-          streaming: false,
-        })
-      }
+      const artifact = parseSummaryArtifact(summary, {
+        vi,
+        kicker: label(
+          `Tóm tắt tệp đính kèm (${atts.length})`,
+          `Attached files summary (${atts.length})`,
+        ),
+        footnote: contextFootnotePlain(vi, usedAi || Boolean(attachBlock?.trim())),
+      })
+      const text = summaryToPlainText(artifact)
       return {
         text,
         contextUsed: true,
-        streamedMessageId,
+        summary: artifact,
       }
     }
 
@@ -1201,7 +1264,6 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       }
 
       let usedAi = false
-      let streamedMessageId: string | undefined
       const attachBlock = await collectAttachmentTextBlock(turnAttachmentsRef.current)
       const images = await collectImageAttachments(turnAttachmentsRef.current)
       const choices: ChatChoice[] = pool.slice(0, 5).map((e) => ({
@@ -1212,9 +1274,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       }))
       try {
         if (okCount > 0 || listing || attachBlock) {
-          const system = vi
-            ? `Bạn là trợ lý desktop UniWork. Tóm tắt nội dung thật từ excerpt file (tiếng Việt, gạch đầu dòng theo từng file: chủ đề, điểm chính, việc có thể làm tiếp). Chỉ dùng excerpt / tệp đính kèm — không bịa. Nếu excerpt trống, nói rõ không đọc được.\n\nNgữ cảnh máy:\n${pack.plainText.slice(0, 1_800)}`
-            : `You are a UniWork desktop assistant. Summarize real content from the file excerpts (bullets per file: topic, key points, suggested next actions). Use only excerpts / attachments — do not invent. If an excerpt is missing, say so.\n\nOn-device context:\n${pack.plainText.slice(0, 1_800)}`
+          const system = summarySystemPrompt(vi, pack.plainText.slice(0, 1_800))
           const user = [
             excerptBlock
               ? `Files:\n${listing}\n\nExcerpts:\n${excerptBlock}`
@@ -1225,12 +1285,17 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
             system,
             user,
             images,
-            showBubble: opts?.showAiBubble !== false,
+            showBubble: false,
           })
           if (res.ok && res.content?.trim()) {
             summary = res.content.trim()
             usedAi = true
-            streamedMessageId = res.messageId
+          } else if (!res.ok && looksLikeMissingAiActivation(res.error || '')) {
+            return {
+              text: softAiActivationMessage(vi),
+              choices: [buyAiChoice(), ...choices],
+              contextUsed: okCount > 0,
+            }
           }
         }
       } catch {
@@ -1241,31 +1306,29 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       const unreadNote =
         unread.length > 0
           ? label(
-              `\nKhông đọc được: ${unread.map((e) => `${e.name} (${e.status})`).join(', ')}.`,
-              `\nCould not read: ${unread.map((e) => `${e.name} (${e.status})`).join(', ')}.`,
+              `Không đọc được: ${unread.map((e) => `${e.name} (${e.status})`).join(', ')}.`,
+              `Could not read: ${unread.map((e) => `${e.name} (${e.status})`).join(', ')}.`,
             )
           : ''
 
-      const text =
-        label(
-          `Tóm tắt file gần đây (${pool.length}, đọc ${okCount} excerpt):\n${summary}${unreadNote}`,
-          `Recent files summary (${pool.length}, ${okCount} excerpts read):\n${summary}${unreadNote}`,
-        ) + contextFootnote(vi, okCount > 0 || usedAi)
-
-      if (streamedMessageId) {
-        patchMessage(streamedMessageId, {
-          text,
-          contextUsed: true,
-          choices,
-          streaming: false,
-        })
-      }
+      const footnote = [contextFootnotePlain(vi, okCount > 0 || usedAi), unreadNote]
+        .filter(Boolean)
+        .join(' ')
+      const artifact = parseSummaryArtifact(summary, {
+        vi,
+        kicker: label(
+          `Tóm tắt file gần đây (${pool.length}, đọc ${okCount} excerpt)`,
+          `Recent files summary (${pool.length}, ${okCount} excerpts read)`,
+        ),
+        footnote,
+      })
+      const text = summaryToPlainText(artifact)
 
       return {
         text,
         contextUsed: true,
-        streamedMessageId,
         choices,
+        summary: artifact,
       }
     }
 
@@ -1330,25 +1393,21 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
               .map((e) => e.excerpt!.slice(0, 600))
               .join('\n')
           : label('(Không đọc được excerpt — sẽ hỏi AI trong tab.)', '(No excerpt — will ask AI in-tab.)')
-        let streamedMessageId: string | undefined
         const attachBlock = await collectAttachmentTextBlock(turnAttachmentsRef.current)
         const images = await collectImageAttachments(turnAttachmentsRef.current)
         if (ok || attachBlock || images.length > 0) {
           try {
             const res = await runStreamedAi({
-              system: vi
-                ? `Tóm tắt ngắn nội dung file đang mở (tiếng Việt, gạch đầu dòng). Chỉ dùng excerpt / tệp đính kèm — không bịa.\n\n${pack.plainText.slice(0, 1_200)}`
-                : `Briefly summarize the open file (bullets). Use only the excerpt / attachments — do not invent.\n\n${pack.plainText.slice(0, 1_200)}`,
+              system: summarySystemPrompt(vi, pack.plainText.slice(0, 1_200)),
               user: [
                 `File: ${tab.title}\n\n${excerptBlock}`,
                 attachBlock ? `\n\nAttachments:\n${attachBlock}` : '',
               ].join(''),
               images,
-              showBubble: opts?.showAiBubble !== false,
+              showBubble: false,
             })
             if (res.ok && res.content?.trim()) {
               summary = res.content.trim()
-              streamedMessageId = res.messageId
             }
           } catch {
             /* keep excerpt */
@@ -1368,19 +1427,16 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
             value: label('Tiếp tục trên file đang mở', 'Continue on the open file'),
           },
         ]
-        const text =
-          label(
-            `Tóm tắt “${tab.title}”:\n${summary}`,
-            `Summary of “${tab.title}”:\n${summary}`,
-          ) + contextFootnote(vi, ok)
-        if (streamedMessageId) {
-          patchMessage(streamedMessageId, { text, contextUsed: true, choices, streaming: false })
-        }
+        const artifact = parseSummaryArtifact(summary, {
+          vi,
+          kicker: label(`Tóm tắt “${tab.title}”`, `Summary of “${tab.title}”`),
+          footnote: contextFootnotePlain(vi, ok),
+        })
         return {
-          text,
+          text: summaryToPlainText(artifact),
           contextUsed: true,
-          streamedMessageId,
           choices,
+          summary: artifact,
         }
       }
       await window.aiOffice.pushAiPreset?.({
@@ -1463,6 +1519,9 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       attachments?: AttachmentMeta[]
     },
   ) => {
+    if (opts?.attachments) {
+      turnAttachmentsRef.current = opts.attachments
+    }
     if (!opts?.skipUserPush) {
       push({
         role: 'user',
@@ -1476,26 +1535,17 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     try {
       const needs = routeNeedsConsent(route)
       if (needs.length > 0 && !opts?.consentGranted) {
-        pendingConsentRef.current = { route, userText }
+        pendingConsentRef.current = {
+          route,
+          userText,
+          attachments: opts?.attachments ?? [...turnAttachmentsRef.current],
+        }
         push({
           role: 'assistant',
           text:
             describeConsent(route, vi) +
             label('\n\nLàm luôn?', '\n\nDo it now?'),
-          choices: [
-            {
-              id: 'consent-ok',
-              label: label('Làm luôn', 'Do it'),
-              kind: 'confirm',
-              value: 'ok',
-            },
-            {
-              id: 'consent-no',
-              label: label('Hủy', 'Cancel'),
-              kind: 'cancel',
-              value: 'no',
-            },
-          ],
+          choices: consentChoiceButtons(),
         })
         appendMyAiAudit({
           practiceId,
@@ -1576,6 +1626,17 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
             label('Chưa làm tiếp được.', 'Couldn’t continue yet.')
           showDetail = false
         } else {
+          const summaryOut = [...stepOuts].reverse().find((o) => o.summary)
+          if (summaryOut?.summary) {
+            push({
+              role: 'assistant',
+              text: summaryOut.text,
+              summary: summaryOut.summary,
+              contextUsed,
+              choices: mergePlanChoices(stepOuts),
+            })
+            return
+          }
           headline = describeRouteDone(route, vi, {
             completedSteps: route.steps.length,
           })
@@ -1623,13 +1684,22 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
           consented: opts?.consentGranted === true || needs.length === 0,
         })
         if (out.streamedMessageId) {
-          // already in thread
+          if (out.summary) {
+            patchMessage(out.streamedMessageId, {
+              text: out.text,
+              summary: out.summary,
+              contextUsed: out.contextUsed,
+              choices: out.choices,
+              streaming: false,
+            })
+          }
         } else {
           push({
             role: 'assistant',
             text: out.text,
             contextUsed: out.contextUsed,
             choices: out.choices,
+            ...(out.summary ? { summary: out.summary } : {}),
           })
         }
         return
@@ -1752,7 +1822,11 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
         local.offerAi &&
         (userText.length >= 8 || turnAttachmentsRef.current.length > 0)
       if (offerAi) {
-        pendingConsentRef.current = { route, userText }
+        pendingConsentRef.current = {
+          route,
+          userText,
+          attachments: [...turnAttachmentsRef.current],
+        }
         uniqueChoices.unshift({
           id: 'ai-clarify',
           label: label('Làm rõ bằng AI (Token)', 'Clarify with AI (Tokens)'),
@@ -1806,7 +1880,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
   }
 
   const submit = (raw?: string) => {
-    if (busy) return
+    if (busy || submitLockRef.current) return
     const sentAtts = [...attachments]
     let text = (raw ?? input).trim()
     if (!text && sentAtts.length === 0) return
@@ -1833,6 +1907,56 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     if (!text && sentAtts.length > 0) {
       text = label('Tóm tắt nội dung tệp đính kèm.', 'Summarize the attached files.')
     }
+
+    // Pending Token/deep-read consent: typed ok / cancel / short noise must not
+    // wipe attachments and fall through to the unknown local fallback.
+    const pendingConsent = pendingConsentRef.current
+    if (pendingConsent && sentAtts.length === 0) {
+      const replyKind = classifyConsentReply(text)
+      const restates = consentReplyRestatesRoute(text, pendingConsent.route)
+      if (replyKind === 'affirm' || restates) {
+        submitLockRef.current = true
+        setInput('')
+        void resumePendingConsent({ userAckText: text }).finally(() => {
+          submitLockRef.current = false
+        })
+        return
+      }
+      if (replyKind === 'deny') {
+        pendingConsentRef.current = null
+        pendingResumeRef.current = null
+        setInput('')
+        push({ role: 'user', text })
+        appendMyAiAudit({
+          practiceId,
+          userText: pendingConsent.userText,
+          routeKind: pendingConsent.route.kind,
+          summary: 'User dismissed consent (typed)',
+          ok: false,
+          consented: false,
+        })
+        push({
+          role: 'assistant',
+          text: label('Đã hủy.', 'Canceled.'),
+        })
+        return
+      }
+      if (isShortUnclearConsentReply(text)) {
+        setInput('')
+        push({ role: 'user', text })
+        push({
+          role: 'assistant',
+          text: label(
+            'Mình đang chờ bạn xác nhận bước dùng AI/Token ở trên. Bấm “Làm luôn” để tiếp tục, hoặc “Hủy”.',
+            'Still waiting on the AI/Token step above. Tap “Do it” to continue, or “Cancel”.',
+          ),
+          choices: consentChoiceButtons(),
+        })
+        return
+      }
+    }
+
+    submitLockRef.current = true
     pendingConsentRef.current = null
     pendingResumeRef.current = null
     turnAttachmentsRef.current = sentAtts
@@ -1842,7 +1966,9 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       practiceId,
       hasAttachments: sentAtts.length > 0,
     })
-    void runRoute(route, text, { attachments: sentAtts })
+    void runRoute(route, text, { attachments: sentAtts }).finally(() => {
+      submitLockRef.current = false
+    })
   }
 
   useEffect(() => {
@@ -2027,8 +2153,15 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
                     )}
                   </div>
                 ) : null}
-                {m.streaming && !m.text ? (
+                {m.streaming && !m.text && !m.summary ? (
                   <AiTypingIndicator label={label('Đang suy nghĩ', 'Thinking')} />
+                ) : m.summary ? (
+                  <MyAiSummaryCard
+                    summary={m.summary}
+                    vi={vi}
+                    onExport={() => exportSummaryArtifact(m.summary!, vi)}
+                    onShare={() => shareSummaryArtifact(m.summary!, vi)}
+                  />
                 ) : (
                   <p className={m.streaming ? 'is-streaming-text' : undefined}>{m.text}</p>
                 )}
@@ -2038,7 +2171,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
                       <button
                         key={c.id}
                         type="button"
-                        className="new-chat-chip"
+                        className={choiceChipClass(c)}
                         disabled={busy}
                         onClick={() => onChoice(m.id, c)}
                       >

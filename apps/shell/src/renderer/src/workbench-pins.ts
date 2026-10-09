@@ -61,6 +61,7 @@ export function unpinPillar(practiceId: PracticeId, id: PracticePillarId): Pract
 }
 
 const TEACHER_EDU_TABS_MIGRATION = 'uniwork.wb.migrated.teacher-students-parents.v1'
+const TEACHER_GRADES_TAB_MIGRATION = 'uniwork.wb.migrated.teacher-grades.v1'
 
 /** One-time: pin Students/Parents for existing teacher installs that already had custom pins. */
 function migrateTeacherEduTabs(pins: WorkbenchModuleId[]): WorkbenchModuleId[] {
@@ -79,6 +80,22 @@ function migrateTeacherEduTabs(pins: WorkbenchModuleId[]): WorkbenchModuleId[] {
   }
 }
 
+/** One-time: pin Gradebook for teacher installs that already customized pins. */
+function migrateTeacherGradesTab(pins: WorkbenchModuleId[]): WorkbenchModuleId[] {
+  try {
+    if (wbStoreGetRaw(TEACHER_GRADES_TAB_MIGRATION) === '1') return pins
+    const have = new Set(pins)
+    const next = have.has('grades') ? pins : [...pins, 'grades' as WorkbenchModuleId]
+    wbStoreSetRaw(TEACHER_GRADES_TAB_MIGRATION, '1')
+    if (!have.has('grades')) {
+      wbStoreSetRaw(PINS_PREFIX + 'teacher', JSON.stringify(ensureCorePinnedModules(next)))
+    }
+    return next
+  } catch {
+    return pins
+  }
+}
+
 export function readPinnedModules(practiceId: PracticeId): WorkbenchModuleId[] {
   try {
     const raw = wbStoreGetRaw(PINS_PREFIX + practiceId)
@@ -86,7 +103,10 @@ export function readPinnedModules(practiceId: PracticeId): WorkbenchModuleId[] {
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return defaultPinnedModules(practiceId)
     let pins = ensureCorePinnedModules(parsed.filter(isWorkbenchModuleId))
-    if (practiceId === 'teacher') pins = migrateTeacherEduTabs(pins)
+    if (practiceId === 'teacher') {
+      pins = migrateTeacherEduTabs(pins)
+      pins = migrateTeacherGradesTab(pins)
+    }
     return pins
   } catch {
     return defaultPinnedModules(practiceId)
@@ -143,6 +163,12 @@ export interface WbCalendarItem {
   date: string
   title: string
   done?: boolean
+  /** Lesson period label, e.g. "Tiết 3". */
+  period?: string
+  /** Linked education / practice pack id. */
+  linkedProjectId?: string
+  /** Denormalized pack title for display when pack is offline. */
+  packTitle?: string
 }
 
 export type CalendarViewMode = 'list' | 'calendar'
@@ -1172,6 +1198,9 @@ export function writeEvents(practiceId: PracticeId, items: WbEventItem[]): void 
         date: e.date,
         title: e.title,
         ...(prev?.done !== undefined ? { done: prev.done } : {}),
+        ...(prev?.period ? { period: prev.period } : {}),
+        ...(prev?.linkedProjectId ? { linkedProjectId: prev.linkedProjectId } : {}),
+        ...(prev?.packTitle ? { packTitle: prev.packTitle } : {}),
       })
     }
     writeJson(`uniwork.wb.calendar.${practiceId}`, [...map.values()])
@@ -1727,15 +1756,22 @@ export interface WbStudentItem {
   id: string
   name: string
   className?: string
+  /** Hard link to a WbParentItem.id when set. */
+  parentId?: string
   parentName?: string
   phone?: string
   email?: string
   note?: string
+  /** Flag for Desk “HS cần follow-up”. */
+  followUp?: boolean
 }
 
 export interface WbParentItem {
   id: string
   name: string
+  /** Hard links to WbStudentItem.id rows. */
+  studentIds?: string[]
+  /** Denormalized student name(s) for list display. */
   studentName?: string
   phone?: string
   email?: string
@@ -1756,4 +1792,445 @@ export function readParents(practiceId: PracticeId): WbParentItem[] {
 
 export function writeParents(practiceId: PracticeId, items: WbParentItem[]): void {
   writeJson(`uniwork.wb.parents.${practiceId}`, items)
+}
+
+export function listStudentClasses(students: readonly WbStudentItem[]): string[] {
+  const set = new Set<string>()
+  for (const s of students) {
+    const c = s.className?.trim()
+    if (c) set.add(c)
+  }
+  return [...set].sort((a, b) => a.localeCompare(b, 'vi'))
+}
+
+function newRosterId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
+}
+
+/** Rebuild denormalized parent.studentName + student.parentName from ids. */
+export function syncStudentParentDenorm(
+  students: WbStudentItem[],
+  parents: WbParentItem[],
+): { students: WbStudentItem[]; parents: WbParentItem[] } {
+  const studentById = new Map(students.map((s) => [s.id, s]))
+  const parentById = new Map(parents.map((p) => [p.id, p]))
+
+  const nextStudents = students.map((s) => {
+    if (!s.parentId) return s
+    const p = parentById.get(s.parentId)
+    if (!p) {
+      const row = { ...s }
+      delete row.parentId
+      return row
+    }
+    return { ...s, parentName: p.name }
+  })
+
+  const nextParents = parents.map((p) => {
+    const ids = (p.studentIds ?? []).filter((id) => studentById.has(id))
+    const names = ids
+      .map((id) => studentById.get(id)?.name)
+      .filter((n): n is string => Boolean(n))
+    const row: WbParentItem = { ...p }
+    if (ids.length) row.studentIds = ids
+    else delete row.studentIds
+    if (names.length) row.studentName = names.join(', ')
+    else delete row.studentName
+    return row
+  })
+
+  return { students: nextStudents, parents: nextParents }
+}
+
+/**
+ * Link one student ↔ one parent (1 parent per student; parent may have many students).
+ * Clears the student's previous parent link.
+ */
+export function linkStudentParent(
+  students: WbStudentItem[],
+  parents: WbParentItem[],
+  studentId: string,
+  parentId: string | null,
+): { students: WbStudentItem[]; parents: WbParentItem[] } {
+  const nextStudents = students.map((s) => {
+    if (s.id !== studentId) return s
+    if (!parentId) {
+      const row = { ...s }
+      delete row.parentId
+      delete row.parentName
+      return row
+    }
+    const p = parents.find((x) => x.id === parentId)
+    return {
+      ...s,
+      parentId,
+      ...(p ? { parentName: p.name } : {}),
+    }
+  })
+
+  const nextParents = parents.map((p) => {
+    const ids = new Set(p.studentIds ?? [])
+    ids.delete(studentId)
+    if (parentId && p.id === parentId) ids.add(studentId)
+    const row: WbParentItem = { ...p }
+    if (ids.size) row.studentIds = [...ids]
+    else delete row.studentIds
+    return row
+  })
+
+  return syncStudentParentDenorm(nextStudents, nextParents)
+}
+
+/** Find parent by name (case/diacritic-insensitive) or create one. */
+export function ensureParentByName(
+  parents: WbParentItem[],
+  name: string,
+): { parents: WbParentItem[]; parent: WbParentItem } {
+  const n = name.trim()
+  const norm = (s: string) =>
+    s
+      .normalize('NFD')
+      .replace(/\p{M}/gu, '')
+      .toLowerCase()
+  const existing = parents.find((p) => norm(p.name) === norm(n))
+  if (existing) return { parents, parent: existing }
+  const parent: WbParentItem = { id: newRosterId(), name: n }
+  return { parents: [parent, ...parents], parent }
+}
+
+export interface RosterImportRow {
+  name: string
+  className?: string
+  parentName?: string
+  phone?: string
+  email?: string
+}
+
+/**
+ * Parse paste of CSV/TSV lines: name, class, parent, phone, email.
+ * Header row (name/họ tên…) is skipped when detected.
+ */
+export function parseRosterImport(text: string): RosterImportRow[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+  const rows: RosterImportRow[] = []
+  for (const line of lines) {
+    const cols = line.includes('\t')
+      ? line.split('\t').map((c) => c.trim())
+      : line.split(/[,;]/).map((c) => c.trim())
+    if (!cols[0]) continue
+    const head = cols[0]
+      .normalize('NFD')
+      .replace(/\p{M}/gu, '')
+      .toLowerCase()
+    if (
+      rows.length === 0 &&
+      /^(name|ho ten|hoten|student|hoc sinh)$/.test(head)
+    ) {
+      continue
+    }
+    rows.push({
+      name: cols[0]!,
+      ...(cols[1] ? { className: cols[1] } : {}),
+      ...(cols[2] ? { parentName: cols[2] } : {}),
+      ...(cols[3] ? { phone: cols[3] } : {}),
+      ...(cols[4] ? { email: cols[4] } : {}),
+    })
+  }
+  return rows
+}
+
+/** Merge import rows into students + parents with hard links. */
+export function applyRosterImport(
+  students: WbStudentItem[],
+  parents: WbParentItem[],
+  rows: readonly RosterImportRow[],
+): { students: WbStudentItem[]; parents: WbParentItem[]; added: number } {
+  let nextStudents = [...students]
+  let nextParents = [...parents]
+  let added = 0
+  for (const row of rows) {
+    const name = row.name.trim()
+    if (!name) continue
+    const studentId = newRosterId()
+    let parentId: string | undefined
+    if (row.parentName?.trim()) {
+      const ensured = ensureParentByName(nextParents, row.parentName)
+      nextParents = ensured.parents
+      parentId = ensured.parent.id
+    }
+    const student: WbStudentItem = {
+      id: studentId,
+      name,
+      ...(row.className?.trim() ? { className: row.className.trim() } : {}),
+      ...(parentId ? { parentId } : {}),
+      ...(row.phone?.trim() ? { phone: row.phone.trim() } : {}),
+      ...(row.email?.trim() ? { email: row.email.trim() } : {}),
+    }
+    nextStudents = [student, ...nextStudents]
+    if (parentId) {
+      const linked = linkStudentParent(nextStudents, nextParents, studentId, parentId)
+      nextStudents = linked.students
+      nextParents = linked.parents
+    }
+    added += 1
+  }
+  const synced = syncStudentParentDenorm(nextStudents, nextParents)
+  return { ...synced, added }
+}
+
+export interface WbGradeColumn {
+  id: string
+  label: string
+}
+
+/** Simple class gradebook — columns × students (scores as free text). */
+export interface WbGradebook {
+  className: string
+  columns: WbGradeColumn[]
+  /** studentId → columnId → score */
+  scores: Record<string, Record<string, string>>
+}
+
+export function readGradebooks(practiceId: PracticeId): WbGradebook[] {
+  const raw = readJson<WbGradebook[]>(`uniwork.wb.grades.${practiceId}`, [])
+  if (!Array.isArray(raw)) return []
+  return raw.filter((b) => b && typeof b.className === 'string')
+}
+
+export function writeGradebooks(practiceId: PracticeId, books: WbGradebook[]): void {
+  writeJson(`uniwork.wb.grades.${practiceId}`, books)
+}
+
+export function ensureGradebook(
+  books: WbGradebook[],
+  className: string,
+): { books: WbGradebook[]; book: WbGradebook } {
+  const c = className.trim()
+  const existing = books.find((b) => b.className === c)
+  if (existing) return { books, book: existing }
+  const book: WbGradebook = {
+    className: c,
+    columns: [
+      { id: newRosterId(), label: 'Miệng' },
+      { id: newRosterId(), label: '15p' },
+      { id: newRosterId(), label: '1 tiết' },
+      { id: newRosterId(), label: 'HK' },
+    ],
+    scores: {},
+  }
+  return { books: [...books, book], book }
+}
+
+/** CSV export (UTF-8 BOM for Excel). */
+export function exportGradebookCsv(
+  book: WbGradebook,
+  students: readonly WbStudentItem[],
+): string {
+  const rows = students
+    .filter((s) => (s.className ?? '') === book.className)
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name, 'vi'))
+  const header = ['STT', 'Họ tên', ...book.columns.map((c) => c.label)]
+  const lines = [header.join(',')]
+  rows.forEach((s, i) => {
+    const cells = [
+      String(i + 1),
+      csvEscape(s.name),
+      ...book.columns.map((c) => csvEscape(book.scores[s.id]?.[c.id] ?? '')),
+    ]
+    lines.push(cells.join(','))
+  })
+  return `\uFEFF${lines.join('\n')}`
+}
+
+function csvEscape(v: string): string {
+  if (/[",\n\r]/.test(v)) return `"${v.replace(/"/g, '""')}"`
+  return v
+}
+
+// —— P2 teacher ops: attendance · timetable · question bank ——————————————
+
+export type AttendanceMark = 'present' | 'absent' | 'late' | 'excused'
+
+export interface WbAttendanceSession {
+  id: string
+  date: string
+  className: string
+  period?: string
+  /** studentId → mark */
+  marks: Record<string, AttendanceMark>
+  note?: string
+}
+
+export function readAttendance(practiceId: PracticeId): WbAttendanceSession[] {
+  const raw = readJson<WbAttendanceSession[]>(`uniwork.wb.attendance.${practiceId}`, [])
+  return Array.isArray(raw) ? raw : []
+}
+
+export function writeAttendance(practiceId: PracticeId, items: WbAttendanceSession[]): void {
+  writeJson(`uniwork.wb.attendance.${practiceId}`, items)
+}
+
+export function findAttendanceSession(
+  sessions: readonly WbAttendanceSession[],
+  date: string,
+  className: string,
+  period?: string,
+): WbAttendanceSession | undefined {
+  const p = period?.trim() || undefined
+  return sessions.find(
+    (s) =>
+      s.date === date &&
+      s.className === className &&
+      (s.period?.trim() || undefined) === p,
+  )
+}
+
+export function attendanceSummary(session: WbAttendanceSession): {
+  present: number
+  absent: number
+  late: number
+  excused: number
+  total: number
+} {
+  let present = 0
+  let absent = 0
+  let late = 0
+  let excused = 0
+  for (const m of Object.values(session.marks)) {
+    if (m === 'present') present += 1
+    else if (m === 'absent') absent += 1
+    else if (m === 'late') late += 1
+    else if (m === 'excused') excused += 1
+  }
+  return { present, absent, late, excused, total: present + absent + late + excused }
+}
+
+/** Monday = 0 … Sunday = 6 */
+export type TimetableDay = 0 | 1 | 2 | 3 | 4 | 5 | 6
+
+export interface WbTimetableSlot {
+  id: string
+  day: TimetableDay
+  period: string
+  subject?: string
+  className?: string
+  room?: string
+  note?: string
+}
+
+export function readTimetable(practiceId: PracticeId): WbTimetableSlot[] {
+  const raw = readJson<WbTimetableSlot[]>(`uniwork.wb.timetable.${practiceId}`, [])
+  return Array.isArray(raw) ? raw : []
+}
+
+export function writeTimetable(practiceId: PracticeId, slots: WbTimetableSlot[]): void {
+  writeJson(`uniwork.wb.timetable.${practiceId}`, slots)
+}
+
+export function slotKey(day: TimetableDay, period: string): string {
+  return `${day}:${period}`
+}
+
+export type QuestionDifficulty = 'easy' | 'medium' | 'hard'
+
+export interface WbQuestionItem {
+  id: string
+  stem: string
+  subject?: string
+  grade?: string
+  tags?: string[]
+  answer?: string
+  difficulty?: QuestionDifficulty
+  createdAt: string
+}
+
+export function readQuestions(practiceId: PracticeId): WbQuestionItem[] {
+  const raw = readJson<WbQuestionItem[]>(`uniwork.wb.questions.${practiceId}`, [])
+  return Array.isArray(raw) ? raw : []
+}
+
+export function writeQuestions(practiceId: PracticeId, items: WbQuestionItem[]): void {
+  writeJson(`uniwork.wb.questions.${practiceId}`, items)
+}
+
+export function exportQuestionsCsv(items: readonly WbQuestionItem[]): string {
+  const header = ['STT', 'Câu hỏi', 'Đáp án', 'Môn', 'Lớp', 'Tags', 'Độ khó']
+  const lines = [header.join(',')]
+  items.forEach((q, i) => {
+    lines.push(
+      [
+        String(i + 1),
+        csvEscape(q.stem),
+        csvEscape(q.answer ?? ''),
+        csvEscape(q.subject ?? ''),
+        csvEscape(q.grade ?? ''),
+        csvEscape((q.tags ?? []).join('; ')),
+        csvEscape(q.difficulty ?? ''),
+      ].join(','),
+    )
+  })
+  return `\uFEFF${lines.join('\n')}`
+}
+
+export function exportAttendanceCsv(
+  session: WbAttendanceSession,
+  students: readonly WbStudentItem[],
+): string {
+  const markLabel: Record<AttendanceMark, string> = {
+    present: 'Có mặt',
+    absent: 'Vắng',
+    late: 'Đi muộn',
+    excused: 'Có phép',
+  }
+  const rows = students
+    .filter((s) => (s.className ?? '') === session.className)
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name, 'vi'))
+  const lines = [['STT', 'Họ tên', 'Trạng thái'].join(',')]
+  rows.forEach((s, i) => {
+    const m = session.marks[s.id]
+    lines.push([String(i + 1), csvEscape(s.name), csvEscape(m ? markLabel[m] : '')].join(','))
+  })
+  return `\uFEFF${lines.join('\n')}`
+}
+
+/** Match học sinh + email PH from free text (My AI playbook). */
+export function resolveStudentParentContact(
+  practiceId: PracticeId,
+  text: string,
+): { student: WbStudentItem; parent?: WbParentItem; email?: string } | null {
+  const students = readStudents(practiceId)
+  if (students.length === 0) return null
+  const norm = (s: string) =>
+    s
+      .normalize('NFD')
+      .replace(/\p{M}/gu, '')
+      .toLowerCase()
+  const raw = text.trim()
+  const hint =
+    /(?:học sinh|hoc sinh|student|hs)\s*[:\-–]?\s*([^,.;\n]+)/i.exec(raw)?.[1]?.trim() ||
+    /(?:nhận xét|nhan xet)\s+(?:cho\s+)?([^,.;\n]+?)(?:\s+(?:cuối|cuoi|kỳ|ky|email|phụ|phu)|$)/i.exec(
+      raw,
+    )?.[1]?.trim()
+  let student: WbStudentItem | undefined
+  if (hint) {
+    const n = norm(hint)
+    student =
+      students.find((s) => norm(s.name) === n) ||
+      students.find((s) => norm(s.name).includes(n) || n.includes(norm(s.name)))
+  }
+  if (!student && students.length === 1) student = students[0]
+  if (!student) return null
+  const parents = readParents(practiceId)
+  const parent = student.parentId
+    ? parents.find((p) => p.id === student!.parentId)
+    : student.parentName
+      ? parents.find((p) => norm(p.name) === norm(student!.parentName!))
+      : undefined
+  const email = parent?.email || student.email || undefined
+  return { student, parent, ...(email ? { email } : {}) }
 }

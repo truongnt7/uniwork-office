@@ -39,26 +39,37 @@ function mondayIndex(d: Date): number {
   return (d.getDay() + 6) % 7
 }
 
+const LESSON_PERIODS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10'] as const
+
 export function CalendarPane({
   practiceId,
   vi,
+  packId = null,
+  packTitle = null,
 }: {
   practiceId: PracticeId
   vi: boolean
+  packId?: string | null
+  packTitle?: string | null
 }): ReactElement {
   const label = (a: string, b: string) => (vi ? a : b)
+  const lessonMode = practiceId === 'teacher' || practiceId === 'principal'
   const todayIso = toIso(new Date())
   const [items, setItems] = useState<WbCalendarItem[]>(() => readCalendar(practiceId))
   const [view, setView] = useState<CalendarViewMode>(() => readCalendarView())
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()))
   const [selected, setSelected] = useState(todayIso)
   const [title, setTitle] = useState('')
+  const [period, setPeriod] = useState('')
+  const [linkPack, setLinkPack] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
 
   useEffect(() => {
     setItems(readCalendar(practiceId))
     setEditingId(null)
     setTitle('')
+    setPeriod('')
+    setLinkPack(false)
   }, [practiceId])
 
   const persist = (next: WbCalendarItem[]) => {
@@ -74,11 +85,15 @@ export function CalendarPane({
   const clearForm = () => {
     setEditingId(null)
     setTitle('')
+    setPeriod('')
+    setLinkPack(false)
   }
 
   const startEdit = (it: WbCalendarItem) => {
     setEditingId(it.id)
     setTitle(it.title)
+    setPeriod(it.period ?? '')
+    setLinkPack(Boolean(it.linkedProjectId))
     setSelected(it.date)
     setCursor(startOfMonth(new Date(it.date + 'T12:00:00')))
   }
@@ -139,22 +154,48 @@ export function CalendarPane({
     return groups
   }, [items])
 
+  const buildRow = (id: string, existing?: WbCalendarItem): WbCalendarItem => {
+    const row: WbCalendarItem = {
+      id,
+      date: selected,
+      title: title.trim(),
+    }
+    if (existing?.done) row.done = true
+    if (lessonMode) {
+      if (period.trim()) row.period = period.trim()
+      if (linkPack) {
+        if (packId) {
+          row.linkedProjectId = packId
+          if (packTitle?.trim()) row.packTitle = packTitle.trim()
+          else if (existing?.linkedProjectId === packId && existing.packTitle) {
+            row.packTitle = existing.packTitle
+          }
+        } else if (existing?.linkedProjectId) {
+          row.linkedProjectId = existing.linkedProjectId
+          if (existing.packTitle) row.packTitle = existing.packTitle
+        }
+      }
+    } else {
+      if (existing?.period) row.period = existing.period
+      if (existing?.linkedProjectId) row.linkedProjectId = existing.linkedProjectId
+      if (existing?.packTitle) row.packTitle = existing.packTitle
+    }
+    return row
+  }
+
   const save = () => {
     const t = title.trim()
     if (!t || !selected) return
     if (editingId) {
+      const existing = items.find((x) => x.id === editingId)
       persist(
         items
-          .map((x) =>
-            x.id === editingId ? { ...x, date: selected, title: t } : x,
-          )
+          .map((x) => (x.id === editingId ? buildRow(editingId, existing) : x))
           .sort((a, b) => a.date.localeCompare(b.date)),
       )
     } else {
       persist(
-        [{ id: newId(), date: selected, title: t }, ...items].sort((a, b) =>
-          a.date.localeCompare(b.date),
-        ),
+        [buildRow(newId()), ...items].sort((a, b) => a.date.localeCompare(b.date)),
       )
     }
     clearForm()
@@ -182,10 +223,15 @@ export function CalendarPane({
   return (
     <div className="wb-cal">
       <p className="teacher-hint">
-        {label(
-          'Lịch mốc hạn trực quan — xem dạng lịch tháng hoặc danh sách. Chạm ngày để thêm sự kiện.',
-          'Visual deadline calendar — month grid or list. Tap a day to add events.',
-        )}
+        {lessonMode
+          ? label(
+              'Lịch tiết dạy — gắn tiết và gói Tri thức đang chọn để mở nhanh học liệu.',
+              'Lesson calendar — attach a period and the selected Knowledge pack.',
+            )
+          : label(
+              'Lịch mốc hạn trực quan — xem dạng lịch tháng hoặc danh sách. Chạm ngày để thêm sự kiện.',
+              'Visual deadline calendar — month grid or list. Tap a day to add events.',
+            )}
       </p>
 
       <div className="wb-cal-toolbar">
@@ -257,16 +303,60 @@ export function CalendarPane({
           />
         </label>
         <label className="teacher-form-wide">
-          <span>{label('Sự kiện / hạn', 'Event / deadline')}</span>
+          <span>
+            {lessonMode
+              ? label('Tiết / sự kiện', 'Period / event')
+              : label('Sự kiện / hạn', 'Event / deadline')}
+          </span>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder={label('VD: Nộp giáo án tuần 12', 'e.g. Submit week-12 plan')}
+            placeholder={
+              lessonMode
+                ? label('VD: Phân số — luyện tập', 'e.g. Fractions — practice')
+                : label('VD: Nộp giáo án tuần 12', 'e.g. Submit week-12 plan')
+            }
             onKeyDown={(e) => {
               if (e.key === 'Enter') save()
             }}
           />
         </label>
+        {lessonMode ? (
+          <>
+            <label>
+              <span>{label('Tiết', 'Period')}</span>
+              <select value={period} onChange={(e) => setPeriod(e.target.value)}>
+                <option value="">{label('— Không chọn —', '— None —')}</option>
+                {LESSON_PERIODS.map((p) => (
+                  <option key={p} value={p}>
+                    {label(`Tiết ${p}`, `Period ${p}`)}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="wb-cal-link-pack">
+              <input
+                type="checkbox"
+                checked={linkPack}
+                disabled={!packId && !linkPack}
+                onChange={(e) => setLinkPack(e.target.checked)}
+              />
+              <span>
+                {packId
+                  ? label(
+                      `Gắn gói Tri thức${packTitle ? `: ${packTitle}` : ''}`,
+                      `Link Knowledge pack${packTitle ? `: ${packTitle}` : ''}`,
+                    )
+                  : linkPack
+                    ? label('Giữ liên kết gói hiện tại', 'Keep current pack link')
+                    : label(
+                        'Chọn gói Tri thức để gắn tiết học',
+                        'Select a Knowledge pack to link this lesson',
+                      )}
+              </span>
+            </label>
+          </>
+        ) : null}
         <div className="teacher-chip-row">
           <button type="button" className="btn btn-primary" onClick={save}>
             {editingId ? label('Lưu', 'Save') : label('Thêm', 'Add')}
@@ -370,6 +460,18 @@ export function CalendarPane({
                       />
                       <div>
                         <strong>{it.title}</strong>
+                        {it.period || it.packTitle ? (
+                          <span>
+                            {[
+                              it.period
+                                ? label(`Tiết ${it.period}`, `Period ${it.period}`)
+                                : null,
+                              it.packTitle,
+                            ]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </span>
+                        ) : null}
                       </div>
                     </label>
                     {renderItemActions(it)}
@@ -422,6 +524,18 @@ export function CalendarPane({
                           />
                           <div>
                             <strong>{it.title}</strong>
+                            {it.period || it.packTitle ? (
+                              <span>
+                                {[
+                                  it.period
+                                    ? label(`Tiết ${it.period}`, `Period ${it.period}`)
+                                    : null,
+                                  it.packTitle,
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </span>
+                            ) : null}
                           </div>
                         </label>
                         {renderItemActions(it)}

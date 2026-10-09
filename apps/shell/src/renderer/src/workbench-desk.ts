@@ -16,6 +16,8 @@ export type DeskWidgetId =
   | 'clients-kpi'
   | 'contracts-status'
   | 'matters-status'
+  | 'lessons-today'
+  | 'students-followup'
 
 export type DeskWidgetGroup = 'personal' | 'extra'
 
@@ -152,7 +154,30 @@ export const DESK_WIDGETS: readonly DeskWidgetDef[] = [
     hintEn: 'Horizontal status bars',
     defaultOn: false,
   },
+  {
+    id: 'lessons-today',
+    group: 'extra',
+    labelVi: 'Tiết hôm nay',
+    labelEn: 'Today’s periods',
+    hintVi: 'Lịch tiết dạy / gói gắn hôm nay',
+    hintEn: 'Today’s lesson periods / linked packs',
+    defaultOn: false,
+    wide: true,
+  },
+  {
+    id: 'students-followup',
+    group: 'extra',
+    labelVi: 'HS cần follow-up',
+    labelEn: 'Students to follow up',
+    hintVi: 'Học sinh đánh dấu follow-up',
+    hintEn: 'Students flagged for follow-up',
+    defaultOn: false,
+    wide: true,
+  },
 ] as const
+
+const TEACHER_DESK_DEFAULTS: readonly DeskWidgetId[] = ['lessons-today', 'students-followup']
+const TEACHER_DESK_MIGRATION = 'uniwork.wb.migrated.teacher-desk-p1.v1'
 
 /** Bright, elegant series palette for desk charts (screen UI). */
 export const DESK_CHART = {
@@ -173,8 +198,12 @@ export const DESK_CHART = {
 
 const LAYOUT_PREFIX = 'uniwork.wb.desk.layout.'
 
-export function defaultDeskLayout(): DeskWidgetId[] {
-  return DESK_WIDGETS.filter((w) => w.defaultOn).map((w) => w.id)
+export function defaultDeskLayout(practiceId?: PracticeId): DeskWidgetId[] {
+  const base = DESK_WIDGETS.filter((w) => w.defaultOn).map((w) => w.id)
+  if (practiceId === 'teacher') {
+    return [...TEACHER_DESK_DEFAULTS, ...base]
+  }
+  return base
 }
 
 export function getDeskWidget(id: DeskWidgetId): DeskWidgetDef | undefined {
@@ -188,13 +217,32 @@ export function isDeskWidgetId(value: unknown): value is DeskWidgetId {
 export function readDeskLayout(practiceId: PracticeId): DeskWidgetId[] {
   try {
     const raw = wbStoreGetRaw(LAYOUT_PREFIX + practiceId)
-    if (raw === null) return defaultDeskLayout()
+    if (raw === null) return defaultDeskLayout(practiceId)
     const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return defaultDeskLayout()
-    const ids = parsed.filter(isDeskWidgetId)
-    return ids.length > 0 ? ids : defaultDeskLayout()
+    if (!Array.isArray(parsed)) return defaultDeskLayout(practiceId)
+    let ids = parsed.filter(isDeskWidgetId)
+    if (ids.length === 0) return defaultDeskLayout(practiceId)
+    if (practiceId === 'teacher') ids = migrateTeacherDeskWidgets(ids)
+    return ids
   } catch {
-    return defaultDeskLayout()
+    return defaultDeskLayout(practiceId)
+  }
+}
+
+/** One-time: add teacher P1 desk widgets for existing customized layouts. */
+function migrateTeacherDeskWidgets(ids: DeskWidgetId[]): DeskWidgetId[] {
+  try {
+    if (wbStoreGetRaw(TEACHER_DESK_MIGRATION) === '1') return ids
+    const have = new Set(ids)
+    const missing = TEACHER_DESK_DEFAULTS.filter((id) => !have.has(id))
+    const next = missing.length === 0 ? ids : [...missing, ...ids]
+    wbStoreSetRaw(TEACHER_DESK_MIGRATION, '1')
+    if (missing.length > 0) {
+      wbStoreSetRaw(LAYOUT_PREFIX + 'teacher', JSON.stringify(next))
+    }
+    return next
+  } catch {
+    return ids
   }
 }
 

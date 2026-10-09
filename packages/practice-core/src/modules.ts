@@ -28,6 +28,10 @@ export type WorkbenchModuleId =
   | 'matters'
   | 'students'
   | 'parents'
+  | 'grades'
+  | 'attendance'
+  | 'timetable'
+  | 'questions'
 
 export interface WorkbenchModuleDef {
   id: WorkbenchModuleId
@@ -208,6 +212,38 @@ export const WORKBENCH_MODULES: readonly WorkbenchModuleDef[] = [
     hintEn: 'Parent contacts — linked student, phone, email',
     available: true,
   },
+  {
+    id: 'grades',
+    labelVi: 'Sổ điểm',
+    labelEn: 'Gradebook',
+    hintVi: 'Điểm theo lớp — cột kiểm tra, xuất CSV',
+    hintEn: 'Scores by class — columns, export CSV',
+    available: true,
+  },
+  {
+    id: 'attendance',
+    labelVi: 'Điểm danh',
+    labelEn: 'Attendance',
+    hintVi: 'Điểm danh nhẹ theo lớp / ngày / tiết',
+    hintEn: 'Light roll call by class / day / period',
+    available: true,
+  },
+  {
+    id: 'timetable',
+    labelVi: 'TKB',
+    labelEn: 'Timetable',
+    hintVi: 'Nhập thời khóa biểu tuần — tiết × thứ',
+    hintEn: 'Weekly timetable — period × weekday',
+    available: true,
+  },
+  {
+    id: 'questions',
+    labelVi: 'Ngân hàng câu hỏi',
+    labelEn: 'Question bank',
+    hintVi: 'Câu hỏi dùng lại — lọc môn/tag, xuất CSV',
+    hintEn: 'Reusable questions — filter, export CSV',
+    available: true,
+  },
 ] as const
 
 /**
@@ -222,7 +258,11 @@ export const CORE_PINNED_MODULES: readonly WorkbenchModuleId[] = [
 ]
 
 /** Teacher-suggested pins (can still be unpinned via Tab ×). */
-export const TEACHER_PINNED_MODULES: readonly WorkbenchModuleId[] = ['students', 'parents']
+export const TEACHER_PINNED_MODULES: readonly WorkbenchModuleId[] = [
+  'students',
+  'parents',
+  'grades',
+]
 
 /** Suggested pins when a practice has never customized Tab +. */
 export function defaultPinnedModules(practiceId: PracticeId): WorkbenchModuleId[] {
@@ -300,7 +340,17 @@ export const WORKBENCH_SPACE_GROUPS: readonly WorkbenchSpaceGroup[] = [
     id: 'work',
     labelVi: 'Công việc',
     labelEn: 'Work',
-    moduleIds: ['clients', 'contracts', 'matters', 'students', 'parents'],
+    moduleIds: [
+      'clients',
+      'contracts',
+      'matters',
+      'students',
+      'parents',
+      'grades',
+      'attendance',
+      'timetable',
+      'questions',
+    ],
   },
 ] as const
 

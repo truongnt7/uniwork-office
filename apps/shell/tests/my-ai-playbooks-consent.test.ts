@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
+  classifyConsentReply,
+  consentReplyRestatesRoute,
   describeRouteDone,
   describeRouteOutcome,
+  isShortUnclearConsentReply,
   routeNeedsConsent,
 } from '../src/renderer/src/my-ai-consent'
 import { matchPracticePlaybook, practiceMyAiChips } from '../src/renderer/src/my-ai-playbooks'
@@ -156,6 +159,23 @@ describe('My AI consent P0/P1', () => {
     expect(
       routeNeedsConsent({ kind: 'continue_active', brief: 'Làm rõ kết luận' }).map((n) => n.reason),
     ).toContain('ai_token')
+  })
+
+  it('classifies typed consent replies (ok / cancel / short noise)', () => {
+    expect(classifyConsentReply('ok')).toBe('affirm')
+    expect(classifyConsentReply('Làm luôn')).toBe('affirm')
+    expect(classifyConsentReply('được')).toBe('affirm')
+    expect(classifyConsentReply('Hủy')).toBe('deny')
+    expect(classifyConsentReply('không')).toBe('deny')
+    expect(classifyConsentReply('tất')).toBe('unclear')
+    expect(isShortUnclearConsentReply('tất')).toBe(true)
+    expect(isShortUnclearConsentReply('Viết báo cáo tuần cho sếp về doanh số Q3')).toBe(false)
+    expect(
+      consentReplyRestatesRoute('Viết tóm tắt', { kind: 'summarize_attachments' }),
+    ).toBe(true)
+    expect(
+      consentReplyRestatesRoute('mở lịch', { kind: 'summarize_attachments' }),
+    ).toBe(false)
   })
 
   it('P2/P3 result card: one goal, no step jargon', () => {

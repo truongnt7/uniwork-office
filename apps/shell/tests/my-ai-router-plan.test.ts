@@ -112,6 +112,15 @@ describe('my-ai multi-tool plans (B4)', () => {
     expect(
       routeMyAiText('Summarize the attached document', { hasAttachments: true }).kind,
     ).toBe('summarize_attachments')
+    // “file này” with an upload means the attachment, not the open Office tab
+    expect(routeMyAiText('Tóm tắt file này', { hasAttachments: true }).kind).toBe(
+      'summarize_attachments',
+    )
+    expect(routeMyAiText('tóm tắt', { hasAttachments: true }).kind).toBe('summarize_attachments')
+    // Explicit open-tab still wins
+    expect(
+      routeMyAiText('Tóm tắt file đang mở', { hasAttachments: true }).kind,
+    ).toBe('summarize_active')
     // Without attachments, same wording still targets Recents
     expect(routeMyAiText('Tóm tắt nội dung file').kind).toBe('summarize_recents')
     // Explicit “gần đây” keeps Recents even with attachments

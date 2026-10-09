@@ -273,3 +273,56 @@ export function describeConsent(route: MyAiRoute, vi: boolean): string {
     : ''
   return outcome + tokenNote
 }
+
+export type ConsentReplyKind = 'affirm' | 'deny' | 'unclear'
+
+/** Typed replies while a consent card is pending (users often type instead of tapping chips). */
+export function classifyConsentReply(text: string): ConsentReplyKind {
+  const bare = text
+    .trim()
+    .toLowerCase()
+    .normalize('NFC')
+    .replace(/[.!?…]+$/g, '')
+    .trim()
+  if (!bare) return 'unclear'
+  if (
+    /^(ok|okay|oke|oke luôn|yes|y|yeah|yep|sure|do it|do it now|go|go ahead|làm luôn|làm đi|làm luôn đi|được|được rồi|ừ|ừm|uh|uhm|đồng ý|dong y|đồng ý luôn|confirm|run|tiếp|tiếp tục|yes please|ok luôn|làm)$/i.test(
+      bare,
+    )
+  ) {
+    return 'affirm'
+  }
+  if (
+    /^(no|n|cancel|hủy|huỷ|thôi|không|ko|khong|stop|dừng|bỏ|hủy bỏ|huỷ bỏ)$/i.test(bare)
+  ) {
+    return 'deny'
+  }
+  return 'unclear'
+}
+
+/** Re-stating the same deep-read / summarize ask while consent is pending → treat as affirm. */
+export function consentReplyRestatesRoute(text: string, route: MyAiRoute): boolean {
+  const t = text.trim().toLowerCase().normalize('NFC')
+  if (!t) return false
+  if (
+    route.kind === 'summarize_attachments' ||
+    route.kind === 'summarize_active' ||
+    route.kind === 'summarize_recents' ||
+    (route.kind === 'plan' &&
+      route.steps.some(
+        (s) =>
+          s.kind === 'summarize_attachments' ||
+          s.kind === 'summarize_active' ||
+          s.kind === 'summarize_recents',
+      ))
+  ) {
+    return /tóm\s*tắt|summarize|summary|tldr/i.test(t)
+  }
+  return false
+}
+
+/** Short / garbled composer text while waiting for Làm luôn — keep consent, re-prompt chips. */
+export function isShortUnclearConsentReply(text: string): boolean {
+  const t = text.trim()
+  return t.length > 0 && t.length < 28 && classifyConsentReply(t) === 'unclear'
+}

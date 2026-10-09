@@ -399,6 +399,73 @@ const BADGE: Record<IconId, { bg: string; glyph: ReactElement }> = {
       </>
     ),
   },
+  grades: {
+    bg: '#CA8A04',
+    glyph: (
+      <>
+        <path
+          d="M6.5 6.5h11v11H6.5z"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          fill="none"
+        />
+        <path d="M6.5 10h11M6.5 13.5h11M10 6.5v11" stroke="currentColor" strokeWidth="1.35" />
+      </>
+    ),
+  },
+  attendance: {
+    bg: '#059669',
+    glyph: (
+      <>
+        <circle cx="12" cy="8" r="2.3" fill="currentColor" />
+        <path
+          d="M7.5 17c.7-2.4 2.2-3.5 4.5-3.5s3.8 1.1 4.5 3.5"
+          stroke="currentColor"
+          strokeWidth="1.45"
+          strokeLinecap="round"
+        />
+        <path
+          d="M15.5 10.5 17 12l2.5-2.5"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          fill="none"
+        />
+      </>
+    ),
+  },
+  timetable: {
+    bg: '#2563EB',
+    glyph: (
+      <>
+        <path
+          d="M6.5 7.5h11v10H6.5z"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          fill="none"
+        />
+        <path d="M6.5 10.5h11M10 7.5v10M14 7.5v10" stroke="currentColor" strokeWidth="1.3" />
+        <path d="M9 5.5v2M15 5.5v2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      </>
+    ),
+  },
+  questions: {
+    bg: '#7C3AED',
+    glyph: (
+      <>
+        <circle cx="12" cy="12" r="6.5" stroke="currentColor" strokeWidth="1.5" fill="none" />
+        <path
+          d="M10 9.8c.4-1 1.2-1.5 2.1-1.5 1.1 0 2 .7 2 1.8 0 1.2-.9 1.6-1.6 2.1-.5.3-.7.6-.7 1.2"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          fill="none"
+        />
+        <circle cx="12" cy="16.2" r="0.85" fill="currentColor" />
+      </>
+    ),
+  },
   add: {
     bg: '#64748B',
     glyph: (

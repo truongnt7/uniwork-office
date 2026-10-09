@@ -709,11 +709,27 @@ export function routeMyAiTextSingle(
   const lower = raw.toLowerCase()
   const lowerNorm = norm(raw)
 
-  // 0) Active Office tab (before generic summarize / open)
+  // 0) Chat attachments win over “file này” / Recents unless user names an open tab
+  //    or explicitly says “gần đây”.
+  const explicitOpenTab =
+    /(?:đang mở|dang mo|open\s+tab|tab\s+(?:này|nay|đang)|active\s+(?:file|tab|document))/i.test(
+      lower,
+    ) ||
+    /(?:đang mở|dang mo|open\s+tab|active\s+(?:file|tab|document))/i.test(lowerNorm)
+  if (
+    opts?.hasAttachments &&
+    looksLikeSummarizeIntent(lower) &&
+    !/(?:gần đây|gan day|gan đay|recents?)/i.test(lower) &&
+    !/(?:gan day|recents?)/i.test(lowerNorm) &&
+    !explicitOpenTab
+  ) {
+    return { kind: 'summarize_attachments' }
+  }
+  // 0b) Active Office tab (before Recents / open)
   if (looksLikeSummarizeActive(lower) || looksLikeSummarizeActive(lowerNorm)) {
     return { kind: 'summarize_active' }
   }
-  // 0b) Chat attachments — before Recents so “tóm tắt nội dung file” uses the upload
+  // 0c) Attachments fallback (same as 0; kept for looksLikeSummarizeAttachments edge cases)
   if (
     opts?.hasAttachments &&
     (looksLikeSummarizeAttachments(lower) || looksLikeSummarizeAttachments(lowerNorm))

@@ -3,6 +3,7 @@
  */
 import type { PracticeId } from '@uniwork/practice-core'
 import type { AttachmentMeta } from '../../shared/home-api'
+import { sanitizeSummaryForStorage, type MyAiSummaryArtifact } from './my-ai-summary'
 import { wbStoreGetRaw, wbStoreRemove, wbStoreSetRaw } from './workbench-store-client'
 
 const KEY_PREFIX = 'uniwork.my-ai.chat.v1:'
@@ -24,6 +25,7 @@ export interface StoredChatMessage {
   text: string
   contextUsed?: boolean
   attachments?: StoredAttachment[]
+  summary?: MyAiSummaryArtifact
 }
 
 function storageKey(practiceId: PracticeId): string {
@@ -68,13 +70,17 @@ export function loadMyAiHistory(practiceId: PracticeId): StoredChatMessage[] {
           ['user', 'assistant', 'system'].includes((m as StoredChatMessage).role),
       )
       .slice(-MAX_MESSAGES)
-      .map((m) => ({
-        id: m.id,
-        role: m.role,
-        text: m.text.slice(0, MAX_TEXT),
-        ...(m.contextUsed ? { contextUsed: true } : {}),
-        ...(sanitizeAtts(m.attachments) ? { attachments: sanitizeAtts(m.attachments) } : {}),
-      }))
+      .map((m) => {
+        const summary = sanitizeSummaryForStorage((m as StoredChatMessage).summary)
+        return {
+          id: m.id,
+          role: m.role,
+          text: m.text.slice(0, MAX_TEXT),
+          ...(m.contextUsed ? { contextUsed: true } : {}),
+          ...(sanitizeAtts(m.attachments) ? { attachments: sanitizeAtts(m.attachments) } : {}),
+          ...(summary ? { summary } : {}),
+        }
+      })
   } catch {
     return []
   }
@@ -88,16 +94,21 @@ export function saveMyAiHistory(
     text: string
     contextUsed?: boolean
     attachments?: AttachmentMeta[]
+    summary?: MyAiSummaryArtifact
   }>,
 ): void {
   try {
-    const payload: StoredChatMessage[] = messages.slice(-MAX_MESSAGES).map((m) => ({
-      id: m.id,
-      role: m.role,
-      text: m.text.slice(0, MAX_TEXT),
-      ...(m.contextUsed ? { contextUsed: true } : {}),
-      ...(sanitizeAtts(m.attachments) ? { attachments: sanitizeAtts(m.attachments) } : {}),
-    }))
+    const payload: StoredChatMessage[] = messages.slice(-MAX_MESSAGES).map((m) => {
+      const summary = sanitizeSummaryForStorage(m.summary)
+      return {
+        id: m.id,
+        role: m.role,
+        text: m.text.slice(0, MAX_TEXT),
+        ...(m.contextUsed ? { contextUsed: true } : {}),
+        ...(sanitizeAtts(m.attachments) ? { attachments: sanitizeAtts(m.attachments) } : {}),
+        ...(summary ? { summary } : {}),
+      }
+    })
     if (payload.length === 0) {
       wbStoreRemove(storageKey(practiceId))
       return

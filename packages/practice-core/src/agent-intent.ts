@@ -125,6 +125,29 @@ const MODULE_KEYWORDS: readonly { id: WorkbenchModuleId; keys: readonly string[]
     id: 'parents',
     keys: ['phụ huynh', 'parents', 'parent', 'cha mẹ', 'ba mẹ'],
   },
+  {
+    id: 'grades',
+    keys: ['sổ điểm', 'so diem', 'gradebook', 'grades', 'điểm số', 'diem so', 'bảng điểm'],
+  },
+  {
+    id: 'attendance',
+    keys: ['điểm danh', 'diem danh', 'attendance', 'roll call', 'điểm danh lớp'],
+  },
+  {
+    id: 'timetable',
+    keys: ['tkb', 'thời khóa biểu', 'thoi khoa bieu', 'timetable', 'schedule', 'lịch dạy tuần'],
+  },
+  {
+    id: 'questions',
+    keys: [
+      'ngân hàng câu hỏi',
+      'ngan hang cau hoi',
+      'question bank',
+      'câu hỏi',
+      'cau hoi',
+      'ngân hàng đề',
+    ],
+  },
 ]
 
 const PILLAR_KEYWORDS: readonly { id: PracticePillarId; keys: readonly string[] }[] = [

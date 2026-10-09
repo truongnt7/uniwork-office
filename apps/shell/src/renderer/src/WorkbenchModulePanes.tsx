@@ -1,9 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ReactElement } from 'react'
 import { getWorkbenchModule, type PracticeId, type WorkbenchModuleId } from '@uniwork/practice-core'
 import { WorkbenchIcon } from './WorkbenchIcons'
 import { CalendarPane } from './CalendarPane'
 import { DeskPane } from './DeskPane'
+import { AttendancePane } from './AttendancePane'
+import { GradesPane } from './GradesPane'
+import { QuestionBankPane } from './QuestionBankPane'
+import { TimetablePane } from './TimetablePane'
 import { FamilyPane } from './FamilyPane'
 import { FinancePane } from './FinancePane'
 import { FriendsPane } from './FriendsPane'
@@ -12,6 +16,7 @@ import { EmailPane } from './EmailPane'
 import { NotesPane } from './NotesPane'
 import { PetsPane } from './PetsPane'
 import { TasksPane } from './TasksPane'
+import { ensureTeacherFormSeeds } from './teacher-form-seeds'
 import {
   WbDeleteBtn,
   WbDraftBtn,
@@ -22,7 +27,12 @@ import {
   WbRowActions,
 } from './WbRowActions'
 import {
+  applyRosterImport,
   createEmailDraft,
+  ensureParentByName,
+  linkStudentParent,
+  listStudentClasses,
+  parseRosterImport,
   pinModule,
   readClients,
   readContracts,
@@ -35,6 +45,7 @@ import {
   readPersonal,
   readStudents,
   readTravel,
+  syncStudentParentDenorm,
   writeClients,
   writeContracts,
   writeEvents,
@@ -108,7 +119,14 @@ export function WorkbenchModulePane({
         </header>
       )}
       {moduleId === 'desk' && <DeskPane practiceId={practiceId} vi={vi} />}
-      {moduleId === 'calendar' && <CalendarPane practiceId={practiceId} vi={vi} />}
+      {moduleId === 'calendar' && (
+        <CalendarPane
+          practiceId={practiceId}
+          vi={vi}
+          packId={packId}
+          packTitle={contextTitle ?? null}
+        />
+      )}
       {moduleId === 'tasks' && <TasksPane practiceId={practiceId} vi={vi} />}
       {moduleId === 'notes' && <NotesPane practiceId={practiceId} vi={vi} />}
       {moduleId === 'email' && <EmailPane practiceId={practiceId} vi={vi} />}
@@ -130,6 +148,17 @@ export function WorkbenchModulePane({
       {moduleId === 'clients' && <ClientsPane practiceId={practiceId} vi={vi} />}
       {moduleId === 'students' && <StudentsPane practiceId={practiceId} vi={vi} />}
       {moduleId === 'parents' && <ParentsPane practiceId={practiceId} vi={vi} />}
+      {moduleId === 'grades' && <GradesPane practiceId={practiceId} vi={vi} />}
+      {moduleId === 'attendance' && <AttendancePane practiceId={practiceId} vi={vi} />}
+      {moduleId === 'timetable' && <TimetablePane practiceId={practiceId} vi={vi} />}
+      {moduleId === 'questions' && (
+        <QuestionBankPane
+          practiceId={practiceId}
+          vi={vi}
+          packId={packId}
+          onPackLinked={onPackLinked}
+        />
+      )}
       {moduleId === 'contracts' && (
         <ContractsPane practiceId={practiceId} vi={vi} packId={packId} onPackLinked={onPackLinked} />
       )}
@@ -203,7 +232,9 @@ function FormsPane({
   onPackLinked?: () => void
 }): ReactElement {
   const label = (a: string, b: string) => (vi ? a : b)
-  const [items, setItems] = useState<WbFormItem[]>(() => readForms(practiceId))
+  const [items, setItems] = useState<WbFormItem[]>(() =>
+    practiceId === 'teacher' ? ensureTeacherFormSeeds(practiceId) : readForms(practiceId),
+  )
   const [editingId, setEditingId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [note, setNote] = useState('')
@@ -215,7 +246,7 @@ function FormsPane({
   const [uploadNotice, setUploadNotice] = useState<string | null>(null)
 
   useEffect(() => {
-    setItems(readForms(practiceId))
+    setItems(practiceId === 'teacher' ? ensureTeacherFormSeeds(practiceId) : readForms(practiceId))
     setEditingId(null)
     setTitle('')
     setNote('')
@@ -411,6 +442,11 @@ function FormsPane({
                   {it.fileName ? (
                     <span className="teacher-hint">
                       {label('File:', 'File:')} {it.fileName}
+                    </span>
+                  ) : null}
+                  {it.templateId ? (
+                    <span className="teacher-hint">
+                      {label('My AI mẫu:', 'My AI template:')} {it.templateId}
                     </span>
                   ) : null}
                   {it.linkedProjectId ? (
@@ -1224,24 +1260,43 @@ function ClientsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
 function StudentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }): ReactElement {
   const label = (a: string, b: string) => (vi ? a : b)
   const [items, setItems] = useState<WbStudentItem[]>(() => readStudents(practiceId))
+  const [parents, setParents] = useState<WbParentItem[]>(() => readParents(practiceId))
   const [editingId, setEditingId] = useState<string | null>(null)
   const [composing, setComposing] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [importText, setImportText] = useState('')
+  const [classFilter, setClassFilter] = useState('')
   const [name, setName] = useState('')
   const [className, setClassName] = useState('')
+  const [parentId, setParentId] = useState('')
   const [parentName, setParentName] = useState('')
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [note, setNote] = useState('')
+  const [followUp, setFollowUp] = useState(false)
 
   useEffect(() => {
     setItems(readStudents(practiceId))
+    setParents(readParents(practiceId))
     setEditingId(null)
     setComposing(false)
+    setImporting(false)
+    setClassFilter('')
   }, [practiceId])
 
-  const persist = (next: WbStudentItem[]) => {
-    setItems(next)
-    writeStudents(practiceId, next)
+  const classes = useMemo(() => listStudentClasses(items), [items])
+
+  const filtered = useMemo(() => {
+    if (!classFilter) return items
+    return items.filter((s) => (s.className ?? '') === classFilter)
+  }, [items, classFilter])
+
+  const persistBoth = (nextStudents: WbStudentItem[], nextParents: WbParentItem[]) => {
+    const synced = syncStudentParentDenorm(nextStudents, nextParents)
+    setItems(synced.students)
+    setParents(synced.parents)
+    writeStudents(practiceId, synced.students)
+    writeParents(practiceId, synced.parents)
   }
 
   const clearForm = () => {
@@ -1249,48 +1304,94 @@ function StudentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean 
     setComposing(false)
     setName('')
     setClassName('')
+    setParentId('')
     setParentName('')
     setPhone('')
     setEmail('')
     setNote('')
+    setFollowUp(false)
   }
 
   const startEdit = (it: WbStudentItem) => {
     setEditingId(it.id)
     setComposing(true)
+    setImporting(false)
     setName(it.name)
     setClassName(it.className ?? '')
+    setParentId(it.parentId ?? '')
     setParentName(it.parentName ?? '')
     setPhone(it.phone ?? '')
     setEmail(it.email ?? '')
     setNote(it.note ?? '')
+    setFollowUp(Boolean(it.followUp))
   }
 
   const save = () => {
     const n = name.trim()
     if (!n) return
-    const row: WbStudentItem = {
-      id: editingId ?? newId(),
+    const id = editingId ?? newId()
+    let nextParents = parents
+    let resolvedParentId = parentId.trim() || null
+    if (!resolvedParentId && parentName.trim()) {
+      const ensured = ensureParentByName(nextParents, parentName.trim())
+      nextParents = ensured.parents
+      resolvedParentId = ensured.parent.id
+    }
+    const base: WbStudentItem = {
+      id,
       name: n,
       ...(className.trim() ? { className: className.trim() } : {}),
-      ...(parentName.trim() ? { parentName: parentName.trim() } : {}),
       ...(phone.trim() ? { phone: phone.trim() } : {}),
       ...(email.trim() ? { email: email.trim() } : {}),
       ...(note.trim() ? { note: note.trim() } : {}),
+      ...(followUp ? { followUp: true } : {}),
     }
-    if (editingId) {
-      persist(items.map((x) => (x.id === editingId ? row : x)))
-    } else {
-      persist([row, ...items])
-    }
+    const without = items.filter((x) => x.id !== id)
+    const nextStudents = [base, ...without]
+    const linked = linkStudentParent(nextStudents, nextParents, id, resolvedParentId)
+    persistBoth(linked.students, linked.parents)
     clearForm()
   }
 
+  const toggleFollowUp = (id: string) => {
+    persistBoth(
+      items.map((x) => {
+        if (x.id !== id) return x
+        if (x.followUp) {
+          const row = { ...x }
+          delete row.followUp
+          return row
+        }
+        return { ...x, followUp: true }
+      }),
+      parents,
+    )
+  }
+
+  const remove = (id: string) => {
+    const linked = linkStudentParent(items, parents, id, null)
+    persistBoth(
+      linked.students.filter((x) => x.id !== id),
+      linked.parents,
+    )
+    if (editingId === id) clearForm()
+  }
+
+  const runImport = () => {
+    const rows = parseRosterImport(importText)
+    if (rows.length === 0) return
+    const result = applyRosterImport(items, parents, rows)
+    persistBoth(result.students, result.parents)
+    setImportText('')
+    setImporting(false)
+  }
+
   const composeEmail = (it: WbStudentItem) => {
+    const parent = it.parentId ? parents.find((p) => p.id === it.parentId) : undefined
     pinModule(practiceId, 'email')
     window.dispatchEvent(new Event('uniwork:wb-pins-changed'))
     createEmailDraft(practiceId, {
-      to: it.email || undefined,
+      to: parent?.email || it.email || undefined,
       subject: label(`Về học sinh ${it.name}`, `About student ${it.name}`),
       body: label(
         `Xin chào${it.parentName ? ` ${it.parentName}` : ''},\n\n`,
@@ -1302,22 +1403,95 @@ function StudentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean 
     )
   }
 
+  const openParents = () => {
+    pinModule(practiceId, 'parents')
+    window.dispatchEvent(new Event('uniwork:wb-pins-changed'))
+    window.dispatchEvent(
+      new CustomEvent('uniwork:wb-open-module', { detail: { moduleId: 'parents' } }),
+    )
+  }
+
   const showForm = composing || Boolean(editingId)
 
   return (
     <>
+      <p className="teacher-hint">
+        {label(
+          'Lọc theo lớp · liên kết cứng với Phụ huynh · dán danh sách (CSV/TSV: tên, lớp, PH, SĐT, email).',
+          'Filter by class · hard-link to Parents · paste roster (CSV/TSV: name, class, parent, phone, email).',
+        )}
+      </p>
       <div className="wb-db-toolbar">
         <button
           type="button"
           className="btn btn-primary"
           onClick={() => {
             clearForm()
+            setImporting(false)
             setComposing(true)
           }}
         >
           {label('Thêm học sinh', 'New student')}
         </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => {
+            clearForm()
+            setImporting((v) => !v)
+          }}
+        >
+          {label('Nhập danh sách', 'Import roster')}
+        </button>
+        {classes.length > 0 ? (
+          <label className="wb-roster-filter">
+            <span className="sr-only">{label('Lọc lớp', 'Filter class')}</span>
+            <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
+              <option value="">{label('Tất cả lớp', 'All classes')}</option>
+              {classes.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+        <span className="teacher-count">
+          {filtered.length}
+          {classFilter ? ` / ${items.length}` : ''}
+        </span>
       </div>
+      {importing ? (
+        <div className="wb-module-form wb-composer-panel">
+          <label className="teacher-form-wide">
+            <span>{label('Dán danh sách', 'Paste roster')}</span>
+            <textarea
+              rows={6}
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              placeholder={label(
+                'Nguyễn Văn An, 10A1, Trần Thị Bình, 09…, a@…\n…',
+                'Alex Nguyen, 10A, Jane Doe, 09…, a@…\n…',
+              )}
+            />
+          </label>
+          <div className="teacher-chip-row">
+            <button type="button" className="btn btn-primary" onClick={runImport}>
+              {label('Nhập', 'Import')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                setImporting(false)
+                setImportText('')
+              }}
+            >
+              {label('Huỷ', 'Cancel')}
+            </button>
+          </div>
+        </div>
+      ) : null}
       {showForm ? (
         <div className="wb-module-form wb-composer-panel">
           <label>
@@ -1338,12 +1512,41 @@ function StudentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean 
               value={className}
               onChange={(e) => setClassName(e.target.value)}
               placeholder={label('VD: 10A1', 'e.g. 10A')}
+              list="wb-student-classes"
             />
+            <datalist id="wb-student-classes">
+              {classes.map((c) => (
+                <option key={c} value={c} />
+              ))}
+            </datalist>
           </label>
           <label>
-            <span>{label('Phụ huynh', 'Parent')}</span>
-            <input value={parentName} onChange={(e) => setParentName(e.target.value)} />
+            <span>{label('Phụ huynh (danh sách)', 'Parent (roster)')}</span>
+            <select
+              value={parentId}
+              onChange={(e) => {
+                setParentId(e.target.value)
+                if (e.target.value) setParentName('')
+              }}
+            >
+              <option value="">{label('— Chưa liên kết —', '— Unlinked —')}</option>
+              {parents.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
           </label>
+          {!parentId ? (
+            <label>
+              <span>{label('Hoặc tên PH mới', 'Or new parent name')}</span>
+              <input
+                value={parentName}
+                onChange={(e) => setParentName(e.target.value)}
+                placeholder={label('Tạo & liên kết PH mới', 'Create & link new parent')}
+              />
+            </label>
+          ) : null}
           <label>
             <span>{label('Điện thoại', 'Phone')}</span>
             <input value={phone} onChange={(e) => setPhone(e.target.value)} />
@@ -1355,6 +1558,14 @@ function StudentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean 
           <label className="teacher-form-wide">
             <span>{label('Ghi chú', 'Note')}</span>
             <input value={note} onChange={(e) => setNote(e.target.value)} />
+          </label>
+          <label className="wb-cal-link-pack">
+            <input
+              type="checkbox"
+              checked={followUp}
+              onChange={(e) => setFollowUp(e.target.checked)}
+            />
+            <span>{label('Cần follow-up (hiện trên Desk)', 'Needs follow-up (show on Desk)')}</span>
           </label>
           <div className="teacher-chip-row">
             <button type="button" className="btn btn-primary" onClick={save}>
@@ -1369,28 +1580,56 @@ function StudentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean 
         </div>
       ) : null}
       <ul className="wb-module-list">
-        {items.length === 0 ? (
-          <li className="teacher-empty">{label('Chưa có học sinh.', 'No students yet.')}</li>
+        {filtered.length === 0 ? (
+          <li className="teacher-empty">
+            {items.length === 0
+              ? label('Chưa có học sinh.', 'No students yet.')
+              : label('Không có học sinh lớp này.', 'No students in this class.')}
+          </li>
         ) : (
-          items.map((it) => (
-            <li key={it.id} className="wb-module-row">
+          filtered.map((it) => (
+            <li key={it.id} className={`wb-module-row${it.followUp ? ' is-followup' : ''}`}>
               <div className="wb-module-meta">
-                <strong>{it.name}</strong>
+                <strong>
+                  {it.name}
+                  {it.followUp ? (
+                    <em className="wb-followup-tag"> {label('· follow-up', '· follow-up')}</em>
+                  ) : null}
+                </strong>
                 <span>
-                  {[it.className, it.parentName, it.phone, it.email].filter(Boolean).join(' · ')}
+                  {[it.className, it.phone, it.email].filter(Boolean).join(' · ')}
                 </span>
+                {it.parentName ? (
+                  <span>
+                    {label('PH:', 'Parent:')}{' '}
+                    <button type="button" className="wb-inline-link" onClick={openParents}>
+                      {it.parentName}
+                    </button>
+                    {it.parentId ? null : (
+                      <em className="wb-soft-link">
+                        {' '}
+                        ({label('chưa liên kết id', 'soft name only')})
+                      </em>
+                    )}
+                  </span>
+                ) : null}
                 {it.note ? <span>{it.note}</span> : null}
               </div>
               <WbRowActions>
+                <button
+                  type="button"
+                  className={`btn btn-secondary${it.followUp ? ' is-active' : ''}`}
+                  title={label('Bật/tắt follow-up', 'Toggle follow-up')}
+                  onClick={() => toggleFollowUp(it.id)}
+                >
+                  {it.followUp ? '★' : '☆'}
+                </button>
                 <WbEditBtn label={label('Sửa', 'Edit')} onClick={() => startEdit(it)} />
                 <WbMailBtn
                   label={label('Soạn email', 'Draft email')}
                   onClick={() => composeEmail(it)}
                 />
-                <WbDeleteBtn
-                  label={label('Xóa', 'Delete')}
-                  onClick={() => persist(items.filter((x) => x.id !== it.id))}
-                />
+                <WbDeleteBtn label={label('Xóa', 'Delete')} onClick={() => remove(it.id)} />
               </WbRowActions>
             </li>
           ))
@@ -1403,30 +1642,35 @@ function StudentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean 
 function ParentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }): ReactElement {
   const label = (a: string, b: string) => (vi ? a : b)
   const [items, setItems] = useState<WbParentItem[]>(() => readParents(practiceId))
+  const [students, setStudents] = useState<WbStudentItem[]>(() => readStudents(practiceId))
   const [editingId, setEditingId] = useState<string | null>(null)
   const [composing, setComposing] = useState(false)
   const [name, setName] = useState('')
-  const [studentName, setStudentName] = useState('')
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([])
   const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [note, setNote] = useState('')
 
   useEffect(() => {
     setItems(readParents(practiceId))
+    setStudents(readStudents(practiceId))
     setEditingId(null)
     setComposing(false)
   }, [practiceId])
 
-  const persist = (next: WbParentItem[]) => {
-    setItems(next)
-    writeParents(practiceId, next)
+  const persistBoth = (nextStudents: WbStudentItem[], nextParents: WbParentItem[]) => {
+    const synced = syncStudentParentDenorm(nextStudents, nextParents)
+    setStudents(synced.students)
+    setItems(synced.parents)
+    writeStudents(practiceId, synced.students)
+    writeParents(practiceId, synced.parents)
   }
 
   const clearForm = () => {
     setEditingId(null)
     setComposing(false)
     setName('')
-    setStudentName('')
+    setSelectedStudentIds([])
     setPhone('')
     setEmail('')
     setNote('')
@@ -1436,29 +1680,64 @@ function ParentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
     setEditingId(it.id)
     setComposing(true)
     setName(it.name)
-    setStudentName(it.studentName ?? '')
+    setSelectedStudentIds(it.studentIds ?? [])
     setPhone(it.phone ?? '')
     setEmail(it.email ?? '')
     setNote(it.note ?? '')
   }
 
+  const toggleStudent = (studentId: string) => {
+    setSelectedStudentIds((prev) =>
+      prev.includes(studentId) ? prev.filter((id) => id !== studentId) : [...prev, studentId],
+    )
+  }
+
   const save = () => {
     const n = name.trim()
     if (!n) return
+    const id = editingId ?? newId()
     const row: WbParentItem = {
-      id: editingId ?? newId(),
+      id,
       name: n,
-      ...(studentName.trim() ? { studentName: studentName.trim() } : {}),
+      ...(selectedStudentIds.length ? { studentIds: selectedStudentIds } : {}),
       ...(phone.trim() ? { phone: phone.trim() } : {}),
       ...(email.trim() ? { email: email.trim() } : {}),
       ...(note.trim() ? { note: note.trim() } : {}),
     }
-    if (editingId) {
-      persist(items.map((x) => (x.id === editingId ? row : x)))
-    } else {
-      persist([row, ...items])
+    let nextParents = editingId
+      ? items.map((x) => (x.id === editingId ? row : x))
+      : [row, ...items]
+
+    // Relink: clear this parent's previous students, then attach selected.
+    let nextStudents = students.map((s) => {
+      if (s.parentId === id && !selectedStudentIds.includes(s.id)) {
+        const copy = { ...s }
+        delete copy.parentId
+        delete copy.parentName
+        return copy
+      }
+      return s
+    })
+    for (const sid of selectedStudentIds) {
+      const linked = linkStudentParent(nextStudents, nextParents, sid, id)
+      nextStudents = linked.students
+      nextParents = linked.parents
     }
+    persistBoth(nextStudents, nextParents)
     clearForm()
+  }
+
+  const remove = (id: string) => {
+    let nextStudents = students
+    for (const s of students.filter((x) => x.parentId === id)) {
+      const linked = linkStudentParent(nextStudents, items, s.id, null)
+      nextStudents = linked.students
+    }
+    persistBoth(
+      nextStudents,
+      items.filter((x) => x.id !== id),
+    )
+    if (editingId === id) clearForm()
   }
 
   const composeEmail = (it: WbParentItem) => {
@@ -1477,10 +1756,24 @@ function ParentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
     )
   }
 
+  const openStudents = () => {
+    pinModule(practiceId, 'students')
+    window.dispatchEvent(new Event('uniwork:wb-pins-changed'))
+    window.dispatchEvent(
+      new CustomEvent('uniwork:wb-open-module', { detail: { moduleId: 'students' } }),
+    )
+  }
+
   const showForm = composing || Boolean(editingId)
 
   return (
     <>
+      <p className="teacher-hint">
+        {label(
+          'Chọn học sinh để liên kết cứng (một PH có thể có nhiều HS).',
+          'Pick students to hard-link (one parent may have many students).',
+        )}
+      </p>
       <div className="wb-db-toolbar">
         <button
           type="button"
@@ -1492,6 +1785,7 @@ function ParentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
         >
           {label('Thêm phụ huynh', 'New parent')}
         </button>
+        <span className="teacher-count">{items.length}</span>
       </div>
       {showForm ? (
         <div className="wb-module-form wb-composer-panel">
@@ -1507,14 +1801,33 @@ function ParentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
               autoFocus
             />
           </label>
-          <label>
-            <span>{label('Học sinh', 'Student')}</span>
-            <input
-              value={studentName}
-              onChange={(e) => setStudentName(e.target.value)}
-              placeholder={label('VD: Nguyễn Văn An', 'e.g. Alex Nguyen')}
-            />
-          </label>
+          <fieldset className="wb-roster-students teacher-form-wide">
+            <legend>{label('Học sinh liên kết', 'Linked students')}</legend>
+            {students.length === 0 ? (
+              <p className="teacher-hint">
+                {label('Chưa có học sinh — thêm ở tab Học sinh.', 'No students yet — add in Students.')}{' '}
+                <button type="button" className="wb-inline-link" onClick={openStudents}>
+                  {label('Mở Học sinh', 'Open Students')}
+                </button>
+              </p>
+            ) : (
+              <div className="wb-roster-checkgrid">
+                {students.map((s) => (
+                  <label key={s.id} className="wb-roster-check">
+                    <input
+                      type="checkbox"
+                      checked={selectedStudentIds.includes(s.id)}
+                      onChange={() => toggleStudent(s.id)}
+                    />
+                    <span>
+                      {s.name}
+                      {s.className ? ` · ${s.className}` : ''}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </fieldset>
           <label>
             <span>{label('Điện thoại', 'Phone')}</span>
             <input value={phone} onChange={(e) => setPhone(e.target.value)} />
@@ -1558,6 +1871,11 @@ function ParentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
                     .filter(Boolean)
                     .join(' · ')}
                 </span>
+                {it.studentName ? (
+                  <button type="button" className="wb-inline-link" onClick={openStudents}>
+                    {label('Xem học sinh', 'View students')}
+                  </button>
+                ) : null}
                 {it.note ? <span>{it.note}</span> : null}
               </div>
               <WbRowActions>
@@ -1566,10 +1884,7 @@ function ParentsPane({ practiceId, vi }: { practiceId: PracticeId; vi: boolean }
                   label={label('Soạn email', 'Draft email')}
                   onClick={() => composeEmail(it)}
                 />
-                <WbDeleteBtn
-                  label={label('Xóa', 'Delete')}
-                  onClick={() => persist(items.filter((x) => x.id !== it.id))}
-                />
+                <WbDeleteBtn label={label('Xóa', 'Delete')} onClick={() => remove(it.id)} />
               </WbRowActions>
             </li>
           ))

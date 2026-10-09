@@ -103,12 +103,21 @@ describe('practice-core', () => {
         'matters',
         'students',
         'parents',
+        'grades',
+        'attendance',
+        'timetable',
+        'questions',
       ]),
     )
     const core = ['desk', 'tasks', 'calendar', 'forms']
     expect(defaultPinnedModules('principal')).toEqual(core)
     expect(defaultPinnedModules('legal')).toEqual(core)
-    expect(defaultPinnedModules('teacher')).toEqual([...core, 'students', 'parents'])
+    expect(defaultPinnedModules('teacher')).toEqual([
+      ...core,
+      'students',
+      'parents',
+      'grades',
+    ])
     expect(defaultPinnedModules('construction')).toEqual(core)
     expect(isCorePinnedModule('desk')).toBe(true)
     expect(isCorePinnedModule('clients')).toBe(false)

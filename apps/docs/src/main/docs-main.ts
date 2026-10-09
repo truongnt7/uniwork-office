@@ -98,6 +98,11 @@ import {
 } from '@genoffice/ai-provider'
 import { listCodexModels, shutdownCodexAppServers } from '@genoffice/ai-provider/codex-app-server'
 import {
+  clampSettingsToManagedHub,
+  isManagedAiHubOnly,
+  managedAiGateError,
+} from './managed-ai'
+import {
   getTrialAiStatus,
   recordTrialCredits,
   trialAiGateError,
@@ -2910,6 +2915,7 @@ export function registerAiIpc(): void {
     const settings = resolveAiSettings(stored, defaultAiSettings())
     // a stored BYOK provider is honored when usable; half-filled configs fall back to genspark
     settings.provider = activeProvider(settings)
+    if (isManagedAiHubOnly()) return clampSettingsToManagedHub(settings)
     return settings
   })
 
@@ -2934,7 +2940,8 @@ export function registerAiIpc(): void {
   })
 
   ipcMain.handle('ai:set-settings', (_event, settings: AiSettings) => {
-    writeJson(SETTINGS_PATH(), settings)
+    const next = isManagedAiHubOnly() ? clampSettingsToManagedHub(settings) : settings
+    writeJson(SETTINGS_PATH(), next)
   })
 
   ipcMain.handle('ai:openrouter-key-status', async (_event, apiKey: unknown) => {
@@ -2965,24 +2972,31 @@ export function registerAiIpc(): void {
   })
 
   ipcMain.handle('ai:stream', async (event, request: AiStreamRequest) => {
-    const { requestId, settings, system, messages } = request
+    const { requestId, system, messages } = request
     const tools = request.tools ?? []
+    const hubOnly = isManagedAiHubOnly()
+    const settings = hubOnly ? clampSettingsToManagedHub(request.settings) : request.settings
     const maxTokens = request.maxTokens ?? maxOutputTokensOf(settings)
     const provider = settings.provider
+    const providerLock = managedAiGateError(provider)
+    const send = (chunk: AiStreamChunk) => {
+      if (!event.sender.isDestroyed()) event.sender.send('ai:stream-chunk', chunk)
+    }
+    if (providerLock) {
+      send({ requestId, type: 'error', error: providerLock })
+      return
+    }
     const config = withTrialAiAuth(
       settings,
       provider,
       withUniAiOpenRouterAuth(settings, provider, settings.providers?.[provider]),
     )
-    const send = (chunk: AiStreamChunk) => {
-      if (!event.sender.isDestroyed()) event.sender.send('ai:stream-chunk', chunk)
-    }
     const customerKey =
       settings.providers?.genspark?.apiKey?.trim() ||
       settings.providers?.openrouter?.apiKey?.trim() ||
       ''
     const trialBlock = trialAiGateError()
-    if (trialBlock && !customerKey) {
+    if (trialBlock && (hubOnly || !customerKey)) {
       send({ requestId, type: 'error', error: trialBlock, errorCode: 'credits' as const })
       return
     }
@@ -3132,8 +3146,12 @@ export function registerAiIpc(): void {
   })
 
   ipcMain.handle('ai:chat', async (_event, request: AiChatRequest) => {
-    const { settings, system, user } = request
+    const { system, user } = request
+    const hubOnly = isManagedAiHubOnly()
+    const settings = hubOnly ? clampSettingsToManagedHub(request.settings) : request.settings
     const provider = settings.provider
+    const providerLock = managedAiGateError(provider)
+    if (providerLock) return { ok: false, error: providerLock }
     const config = withTrialAiAuth(
       settings,
       provider,
@@ -3144,7 +3162,7 @@ export function registerAiIpc(): void {
       settings.providers?.openrouter?.apiKey?.trim() ||
       ''
     const trialBlock = trialAiGateError()
-    if (trialBlock && !customerKey) {
+    if (trialBlock && (hubOnly || !customerKey)) {
       return { ok: false, error: trialBlock }
     }
     if (!config || (provider !== 'codex' && !config.apiKey)) {

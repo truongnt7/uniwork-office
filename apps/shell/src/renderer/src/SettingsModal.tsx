@@ -320,6 +320,8 @@ function AiModelPane({ t }: { t: TFunc }) {
   const [hubStatus, setHubStatus] = useState<string | null>(null)
   const [hubChecking, setHubChecking] = useState(false)
   const [trialBanner, setTrialBanner] = useState<string | null>(null)
+  /** Margin builds: UniAI + curated Token models only (no BYOK). */
+  const [hubOnly, setHubOnly] = useState(false)
   /** free-typed value of the output-cap field; committed (and clamped) on blur */
   const [maxTokensDraft, setMaxTokensDraft] = useState<string | null>(null)
 
@@ -358,16 +360,40 @@ function AiModelPane({ t }: { t: TFunc }) {
       const hubKey =
         s.providers.genspark?.apiKey?.trim() || s.providers.openrouter?.apiKey?.trim() || ''
       void window.aiOffice.getTrialAiStatus?.().then((trial) => {
-        if (!alive || !trial?.enabled) {
-          if (alive) setTrialBanner(null)
+        if (!alive) return
+        const locked = Boolean(trial?.hubOnly)
+        setHubOnly(locked)
+        if (locked) {
+          const allow =
+            trial?.allowedModels && trial.allowedModels.length > 0
+              ? trial.allowedModels
+              : null
+          setCatalog((current) =>
+            current
+              .filter((c) => c.id === 'genspark')
+              .map((c) =>
+                allow
+                  ? { ...c, models: allow, defaultModel: allow[0] ?? c.defaultModel }
+                  : c,
+              ),
+          )
+        }
+        if (!trial?.enabled) {
+          setTrialBanner(
+            locked
+              ? lang === 'vi'
+                ? 'Bản này chỉ dùng mô hình UniAI (Token Hub) — không gắn key / provider riêng.'
+                : 'This build only supports UniAI Token Hub models — no personal keys or other providers.'
+              : null,
+          )
           return
         }
         const rem = Math.round(trial.creditRemaining).toLocaleString()
         const all = Math.round(trial.creditAllowance).toLocaleString()
         setTrialBanner(
           lang === 'vi'
-            ? `AI dùng thử UniWork đã sẵn sàng — còn ${rem} / ${all} Credit. Không cần dán API key.`
-            : `UniWork trial AI is ready — ${rem} / ${all} Credits left. No API key to paste.`,
+            ? `AI dùng thử UniWork đã sẵn sàng — còn ${rem} / ${all} Credit. Chỉ mô hình UniAI; không cần dán API key.`
+            : `UniWork trial AI is ready — ${rem} / ${all} Credits left. UniAI models only; no API key to paste.`,
         )
       })
       if (
@@ -537,10 +563,19 @@ function AiModelPane({ t }: { t: TFunc }) {
             ),
           }))}
           onPick={(v) => selectProvider(v as AiSettings['provider'])}
+          disabled={hubOnly}
         />
       </div>
       <div className="set-field-desc set-ai-note">
-        {isGenspark ? t('setAiGensparkHint') : isCodex ? t('setAiCodexHint') : t('setAiByokNote')}
+        {hubOnly
+          ? lang === 'vi'
+            ? 'Bản UniWork Token: chỉ UniAI và các mô hình trong danh sách. Không hỗ trợ BYOK.'
+            : 'UniWork Token build: UniAI and listed models only. BYOK is disabled.'
+          : isGenspark
+            ? t('setAiGensparkHint')
+            : isCodex
+              ? t('setAiCodexHint')
+              : t('setAiByokNote')}
       </div>
       {trialBanner ? (
         <div className="set-field-desc set-ai-note" role="status" style={{ fontWeight: 600 }}>
@@ -596,7 +631,7 @@ function AiModelPane({ t }: { t: TFunc }) {
             }}
           />
         </div>
-      ) : (
+      ) : hubOnly ? null : (
         <>
           <div className="set-field">
             <div className="set-field-text">

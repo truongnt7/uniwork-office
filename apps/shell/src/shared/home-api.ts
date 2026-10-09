@@ -53,6 +53,10 @@ export interface TrialAiStatus {
   creditRemaining: number
   exhausted: boolean
   managed: boolean
+  /** UniAI Token Hub only — no BYOK / other providers (margin builds). */
+  hubOnly: boolean
+  /** Curated model ids when hubOnly. */
+  allowedModels: string[]
 }
 
 import type { UpdateChannel } from './update-api'

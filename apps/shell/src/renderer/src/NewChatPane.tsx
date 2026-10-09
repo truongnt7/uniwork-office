@@ -434,9 +434,13 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       naturalChatModelRef.current = next
       setNaturalChatModel(next)
     })
-    void window.aiOffice.getAiSettings?.().then((s) => {
+    void Promise.all([
+      window.aiOffice.getAiSettings?.(),
+      window.aiOffice.getTrialAiStatus?.(),
+    ]).then(([s, trial]) => {
       if (!s) return
-      setAiReady(aiSettingsReady(s))
+      const managedHub = Boolean(trial?.enabled || trial?.hubOnly)
+      setAiReady(aiSettingsReady(s, { managedHub }))
       const p = s.provider
       const model = s.providers?.[p]?.model?.trim() || ''
       setSettingsModelLabel(model)
@@ -726,7 +730,11 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       text = softCreditsMessage(
         vi,
         trial?.enabled
-          ? { trial: true, remaining: trial.creditRemaining }
+          ? {
+              trial: true,
+              remaining: trial.creditRemaining,
+              hubOnly: trial.hubOnly,
+            }
           : undefined,
       )
       choices.push(buyAiChoice(), aiSettingsChoice())
@@ -772,6 +780,13 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     if (!api.getAiSettings) return { ok: false, error: 'AI unavailable' }
     const baseSettings = await api.getAiSettings()
     const settings: AiSettings = withNaturalChatModel(baseSettings, opts.modelOverride)
+    let managedHub = false
+    try {
+      const trial = await api.getTrialAiStatus?.()
+      managedHub = Boolean(trial?.enabled || trial?.hubOnly)
+    } catch {
+      managedHub = false
+    }
 
     const provider = settings.provider
     const model = settings.providers?.[provider]?.model
@@ -782,7 +797,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       modelOverride: opts.modelOverride,
     }
 
-    if (!aiSettingsReady(settings)) {
+    if (!aiSettingsReady(settings, { managedHub })) {
       return activationFailure(opts.messageId, showBubble)
     }
 
@@ -2019,8 +2034,11 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       let settingsReady = aiReady === true
       try {
         const settings = await window.aiOffice.getAiSettings?.()
+        const trial = await window.aiOffice.getTrialAiStatus?.()
         if (settings) {
-          settingsReady = aiSettingsReady(settings)
+          settingsReady = aiSettingsReady(settings, {
+            managedHub: Boolean(trial?.enabled || trial?.hubOnly),
+          })
           setAiReady(settingsReady)
         }
       } catch {

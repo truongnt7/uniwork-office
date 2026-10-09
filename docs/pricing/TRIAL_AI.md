@@ -7,7 +7,16 @@ Mục tiêu: khách **cài xong dùng AI ngay**, không nhận API key OpenRoute
 1. Bản trial được đóng gói với metadata `uniworkTrialAi` (key + credits).
 2. Main process giữ key — **không ghi** vào `ai-settings.json`, không bắt khách dán key.
 3. Mỗi lần gọi AI (My AI / Docs…) trừ Credit ước lượng vào `userData/trial-ai-usage.json`.
-4. Hết hạn mức → AI báo lỗi credits; khách có thể dán **key riêng** (BYOK) hoặc nâng gói.
+4. Hết hạn mức → AI báo lỗi credits; khách **mua gói UniWork** để tiếp tục (bản margin không mở BYOK).
+
+## Khoá mô hình (Token margin)
+
+Bản trial / `UNIWORK_MANAGED_AI=1` gắn `uniworkManagedAi.hubOnly`:
+
+- Chỉ **UniAI** + danh sách model Token Hub anh cấu hình (`OPENROUTER_CHAT_MODELS`, hoặc subset qua `UNIWORK_MANAGED_AI_MODELS`).
+- **Không** Claude/OpenAI/Custom BYOK, không dán OpenRouter key riêng để vượt gói.
+- Main process clamp mọi `ai:stream` / `ai:chat` / `ai:set-settings` — ẩn UI Settings không đủ để bypass.
+- Debug tạm: `UNIWORK_ALLOW_BYOK=1`.
 
 Quy đổi Credit (đã có sẵn trong app): **1 USD Token Hub = 1.000 Credit** → 50.000 Credit ≈ **$50** OpenRouter.
 

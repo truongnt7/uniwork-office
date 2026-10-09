@@ -645,6 +645,13 @@ if (trialOpenRouterKey) {
     credits: trialCredits,
   }
 }
+// Margin builds: lock chat to UniAI + curated Token Hub models (no BYOK).
+// Trial packages always lock; UNIWORK_MANAGED_AI=1 locks without a trial key.
+const managedAi =
+  process.env.UNIWORK_MANAGED_AI === '1' || Boolean(trialOpenRouterKey)
+if (managedAi) {
+  extraMetadata.uniworkManagedAi = { hubOnly: true }
+}
 if (Object.keys(extraMetadata).length) config.extraMetadata = extraMetadata
 
 module.exports = config

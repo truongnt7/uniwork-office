@@ -7,6 +7,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { app } from 'electron'
 import type { AiProviderConfig, AiProviderId, AiSettings } from '@genoffice/ai-provider'
+import { isManagedAiHubOnly, managedAiModelAllowlist } from './managed-ai'
 
 export const DEFAULT_TRIAL_CREDITS = 50_000
 
@@ -24,6 +25,13 @@ export interface TrialAiStatus {
   exhausted: boolean
   /** True when this install is using the managed trial key (no customer BYOK). */
   managed: boolean
+  /**
+   * Hub-only lock: UniAI + curated Token models only (no BYOK / other providers).
+   * Used so UniWork can monetize Token margin on this build.
+   */
+  hubOnly: boolean
+  /** Model ids customers may pick when hubOnly. */
+  allowedModels: string[]
 }
 
 interface TrialUsageFile {
@@ -118,6 +126,8 @@ export function recordTrialCredits(credits: number): TrialAiStatus {
 }
 
 export function getTrialAiStatus(): TrialAiStatus {
+  const hubOnly = isManagedAiHubOnly()
+  const allowedModels = [...managedAiModelAllowlist()]
   const cfg = getTrialAiConfig()
   if (!cfg.enabled) {
     return {
@@ -127,6 +137,8 @@ export function getTrialAiStatus(): TrialAiStatus {
       creditRemaining: 0,
       exhausted: false,
       managed: false,
+      hubOnly,
+      allowedModels,
     }
   }
   const creditUsed = getTrialCreditUsed()
@@ -138,6 +150,8 @@ export function getTrialAiStatus(): TrialAiStatus {
     creditRemaining,
     exhausted: creditRemaining <= 0,
     managed: true,
+    hubOnly,
+    allowedModels,
   }
 }
 
@@ -163,6 +177,9 @@ export function trialAiGateError(): string | null {
   const status = getTrialAiStatus()
   if (!status.enabled) return null
   if (!status.exhausted) return null
+  if (status.hubOnly) {
+    return `Trial AI credit exhausted (${status.creditAllowance} Credit). Purchase a UniWork AI plan to continue.`
+  }
   return `Trial AI credit exhausted (${status.creditAllowance} Credit). Add your own OpenRouter key in Settings, or upgrade your UniWork plan.`
 }
 

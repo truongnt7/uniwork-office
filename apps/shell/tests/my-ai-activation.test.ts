@@ -16,6 +16,10 @@ describe('my-ai-activation', () => {
     expect(aiSettingsReady(defaultAiSettings())).toBe(false)
   })
 
+  it('treats managed hub / trial as ready without a pasted key', () => {
+    expect(aiSettingsReady(defaultAiSettings(), { managedHub: true })).toBe(true)
+  })
+
   it('is ready when UniAI Token Hub key is set', () => {
     const s = defaultAiSettings()
     s.providers.genspark = { ...s.providers.genspark, apiKey: 'sk-or-test' }

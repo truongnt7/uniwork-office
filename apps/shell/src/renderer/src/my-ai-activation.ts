@@ -7,8 +7,14 @@ import type { AiSettings } from '@genoffice/ai-provider/browser'
 import { uniAiOpenRouterKey } from '@genoffice/ai-provider/browser'
 
 /** True when the active provider can actually send a request. */
-export function aiSettingsReady(settings: AiSettings): boolean {
+export function aiSettingsReady(
+  settings: AiSettings,
+  opts?: { /** Managed trial / hub-only build injects key in main */ managedHub?: boolean },
+): boolean {
   const provider = settings.provider
+  if (opts?.managedHub && (provider === 'genspark' || provider === 'openrouter')) {
+    return true
+  }
   if (provider === 'codex') return true
   if (provider === 'genspark' || provider === 'openrouter') {
     return Boolean(uniAiOpenRouterKey(settings))
@@ -61,10 +67,15 @@ export function looksLikeRetryableAiError(error: string): boolean {
 
 export function softCreditsMessage(
   vi: boolean,
-  opts?: { trial?: boolean; remaining?: number },
+  opts?: { trial?: boolean; remaining?: number; hubOnly?: boolean },
 ): string {
   if (opts?.trial) {
     const rem = Math.max(0, Math.round(opts.remaining ?? 0))
+    if (opts.hubOnly) {
+      return vi
+        ? `Hết Credit dùng thử (còn ${rem.toLocaleString('vi-VN')}). Mua gói AI UniWork để tiếp tục.`
+        : `Trial AI credits used up (${rem.toLocaleString()} left). Purchase a UniWork AI plan to continue.`
+    }
     return vi
       ? `Hết Credit dùng thử (còn ${rem.toLocaleString('vi-VN')}). Mua gói AI hoặc gắn Token Hub key riêng trong Cài đặt.`
       : `Trial AI credits used up (${rem.toLocaleString()} left). Buy an AI plan or add your own Token Hub key in Settings.`

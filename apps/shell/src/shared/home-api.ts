@@ -44,6 +44,17 @@ export interface AttachmentImageResult {
   mime?: string
   error?: string
 }
+
+/** Local managed-trial Credit meter (see docs/pricing/TRIAL_AI.md). */
+export interface TrialAiStatus {
+  enabled: boolean
+  creditAllowance: number
+  creditUsed: number
+  creditRemaining: number
+  exhausted: boolean
+  managed: boolean
+}
+
 import type { UpdateChannel } from './update-api'
 import type { AiPanelPrefs } from '@genoffice/ui/ai-panel-prefs'
 import type { FileExcerpt } from './file-excerpt'
@@ -284,6 +295,10 @@ export interface HomeApi {
   testAiSettings(settings: AiSettings): Promise<AiChatResponse>
   /** OpenRouter Token Hub: GET /api/v1/key for the given (possibly unsaved) API key */
   probeOpenRouterKey(apiKey: string): Promise<OpenRouterKeyStatus>
+  /** Managed trial AI status (Credit budget); enabled only in trial builds */
+  getTrialAiStatus(): Promise<TrialAiStatus>
+  /** Record estimated Credit against the trial budget after an AI turn */
+  recordTrialCredits(credits: number): Promise<TrialAiStatus>
   /** one-shot non-streaming chat using saved (or provided) AI settings — Workbench helpers */
   aiChat(input: { system: string; user: string; settings?: AiSettings }): Promise<AiChatResponse>
   /** streaming chat (same IPC as editor AI panels) */

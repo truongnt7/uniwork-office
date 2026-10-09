@@ -13,6 +13,8 @@ import {
   countFragmentBlocks,
   DraftLanding,
   extractFragment,
+  isAiDraftActive,
+  shouldAutoKeepWriterPartial,
   type AiDocWriter,
 } from '../src/renderer/ai/doc-writer'
 import { executeTool } from '../src/renderer/ai/tools'
@@ -71,12 +73,22 @@ describe('buildDocWriterRequest', () => {
   })
 })
 
+describe('shouldAutoKeepWriterPartial', () => {
+  it('auto-keeps connection drops and still asks on Stop / size-cap', () => {
+    expect(shouldAutoKeepWriterPartial('error')).toBe(true)
+    expect(shouldAutoKeepWriterPartial('stopped')).toBe(false)
+    expect(shouldAutoKeepWriterPartial('max_tokens')).toBe(false)
+  })
+})
+
 describe('DraftLanding', () => {
   it('renders the growing fragment in place, swaps only changed blocks, and leaves no trace on finish', async () => {
     const editor = await createBlankEditor()
     const before = editor.state.doc
     const depth = undoDepth(editor.state)
+    expect(isAiDraftActive()).toBe(false)
     const draft = new DraftLanding(editor, NUM_IDS, { kind: 'whole' })
+    expect(isAiDraftActive()).toBe(true)
     draft.update('<h1>Title</h1>\n<p>first para')
     await tick()
     expect(texts(editor)).toEqual(['Title', 'first para', ''])
@@ -89,6 +101,7 @@ describe('DraftLanding', () => {
     // the draft is neither history nor a tracked change
     expect(undoDepth(editor.state)).toBe(depth)
     draft.finish()
+    expect(isAiDraftActive()).toBe(false)
     expect(editor.state.doc.eq(before)).toBe(true)
   })
 

@@ -8,6 +8,7 @@
 
 import {
   OPENROUTER_CHAT_MODELS,
+  type AiProviderId,
   type AiSettings,
 } from '@genoffice/ai-provider/browser'
 
@@ -47,6 +48,41 @@ const NATURAL_CHAT_MODEL_LABELS: Record<string, string> = {
 
 export function naturalChatModelLabel(modelId: string): string {
   return NATURAL_CHAT_MODEL_LABELS[modelId] ?? modelId
+}
+
+/** Map OpenRouter vendor-prefixed id → AI provider logo id. */
+export function naturalChatModelProviderId(modelId: string): AiProviderId {
+  const id = modelId.trim().toLowerCase()
+  if (!id || id === 'openrouter/auto' || id.startsWith('openrouter/')) return 'openrouter'
+  const vendor = id.split('/')[0] ?? ''
+  switch (vendor) {
+    case 'anthropic':
+      return 'anthropic'
+    case 'openai':
+      return 'openai'
+    case 'google':
+      return 'gemini'
+    case 'deepseek':
+      return 'deepseek'
+    case 'moonshotai':
+      return 'kimi'
+    case 'z-ai':
+    case 'zhipu':
+      return 'glm'
+    case 'qwen':
+      return 'qwen'
+    case 'x-ai':
+      return 'xai'
+    case 'minimax':
+      return 'minimax'
+    case 'mistralai':
+      return 'mistral'
+    case 'doubao':
+    case 'bytedance':
+      return 'doubao'
+    default:
+      return 'openrouter'
+  }
 }
 
 /** Empty / missing = use the model from Settings (AI Model pane). */

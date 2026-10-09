@@ -16,6 +16,7 @@ import {
   countFragmentBlocks,
   DOC_MAX_CHARS,
   extractFragment,
+  shouldAutoKeepWriterPartial,
   type DocWriteResult,
   type DocWriteSpec,
 } from './doc-writer'
@@ -693,7 +694,12 @@ export function AiPanel({
     if (outcome.status === 'complete') return { ok: true, html: outcome.text }
     if (outcome.status === 'empty') return { ok: false, error: outcome.error }
     if (epoch !== writerEpochRef.current) return { ok: false, error: 'the chat was reset' }
-    // the draft stays in the document while the user decides
+    // A dropped connection: keep what the user already watched stream in. Asking
+    // keep-or-discard after offline often ends with discard / tab close and total loss.
+    if (shouldAutoKeepWriterPartial(outcome.reason)) {
+      return { ok: true, html: outcome.text, truncated: true }
+    }
+    // Stop / size-cap: the draft stays in the document while the user decides
     const keep = await new Promise<boolean>((resolve) => {
       partialResolverRef.current = resolve
       setActivePartial({ blocks: countFragmentBlocks(outcome.text) })
@@ -852,6 +858,9 @@ export function AiPanel({
             })
             .catch(() => {})
           setBusy(false)
+          // Same as onDone: a failed run may still have landed tool edits into an
+          // untitled doc — trigger the pathless silent save.
+          window.dispatchEvent(new Event('ai-docs-run-done'))
         },
       },
     })

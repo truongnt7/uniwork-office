@@ -49,7 +49,7 @@ export function summarySystemPrompt(vi: boolean, contextSlice: string): string {
       '- sections: 2–5 mục có heading rõ (vd Định vị, Vấn đề, Giải pháp, Cấu trúc).',
       '- bullets ngắn, một ý/điểm.',
       '- nextActions: 2–4 việc có thể làm tiếp trên Workbench (ghi chú, task, email…).',
-      '- chart: chỉ khi có số liệu / tỉ lệ / số mục có thể đếm. Dạng {"type":"bar"|"donut","title":"...","items":[{"label":"...","value":number}]}. value > 0. Nếu không có số liệu → chart: null.',
+      '- chart: chỉ khi có số liệu / tỉ lệ / số mục có thể đếm. Dạng {"type":"bar"|"donut","title":"...","items":[{"label":"...","value":number}]}. value > 0; 2–6 mục; label ngắn. bar = so sánh số lượng; donut = tỉ lệ/phần trăm. Không có số liệu → chart: null.',
       '- Nếu không đọc được nội dung: title giải thích + 1 section + nextActions gợi ý thử file khác.',
       contextSlice ? `\nNgữ cảnh máy:\n${contextSlice}` : '',
     ]
@@ -64,7 +64,7 @@ export function summarySystemPrompt(vi: boolean, contextSlice: string): string {
     '- sections: 2–5 clear headings.',
     '- bullets: short, one idea each.',
     '- nextActions: 2–4 concrete follow-ups.',
-    '- chart: only when there are counts/ratios/measurable parts. Else null.',
+    '- chart: only when there are counts/ratios (2–6 short-label items). bar = compare amounts; donut = share/ratio. Else null.',
     '- If unreadable: explain in title + one section + nextActions.',
     contextSlice ? `\nOn-device context:\n${contextSlice}` : '',
   ]
@@ -301,6 +301,175 @@ export function summaryToPlainText(a: MyAiSummaryArtifact): string {
   return lines.join('\n').trim()
 }
 
+/**
+ * Build an Slides AI preset brief from a My AI summary/report so generate_deck
+ * can plan an outline (user still reviews before slides are created).
+ */
+export function summaryToSlideBrief(a: MyAiSummaryArtifact, vi: boolean): string {
+  const title = a.title.trim() || (vi ? 'Báo cáo' : 'Report')
+  const sectionCount = Math.max(1, a.sections.length)
+  const hasChart = Boolean(a.chart && a.chart.items.length >= 2)
+  const hasNext = a.nextActions.length > 0
+  // title + sections + optional chart/data + closing/next ≈ pages
+  const approxPages = Math.min(
+    12,
+    Math.max(4, 1 + sectionCount + (hasChart ? 1 : 0) + (hasNext ? 1 : 0)),
+  )
+
+  const structure = a.sections
+    .slice(0, 8)
+    .map((s, i) => {
+      const bullets = s.bullets
+        .slice(0, 6)
+        .map((b) => `   - ${b}`)
+        .join('\n')
+      return `${i + 1}. ${s.heading}\n${bullets}`
+    })
+    .join('\n')
+
+  const chartBlock =
+    hasChart && a.chart
+      ? [
+          '',
+          vi ? 'Số liệu (dùng cho 1 slide biểu đồ nếu phù hợp):' : 'Data (use on one chart slide if useful):',
+          `Loại: ${a.chart.type} · ${a.chart.title}`,
+          ...a.chart.items.slice(0, 8).map((it) => `- ${it.label}: ${it.value}`),
+        ].join('\n')
+      : ''
+
+  const nextBlock =
+    hasNext
+      ? [
+          '',
+          vi ? 'Kết / việc tiếp theo (slide cuối):' : 'Close / next steps (final slide):',
+          ...a.nextActions.slice(0, 6).map((n) => `- ${n}`),
+        ].join('\n')
+      : ''
+
+  if (vi) {
+    return [
+      `Tạo bộ slide thuyết trình từ báo cáo/tóm tắt My AI dưới đây.`,
+      `Dùng generate_deck với topic và khoảng ${approxPages} trang; để tôi xem/sửa dàn bài trước khi sinh slide.`,
+      `Giữ đúng nội dung và số liệu — không bịa thêm. Mỗi mục cấu trúc ≈ 1–2 slide, tiêu đề rõ, bullet ngắn.`,
+      `Phong cách: chuyên nghiệp, sạch, dễ trình bày.`,
+      '',
+      `Chủ đề: ${title}`,
+      a.kicker ? `Ngữ cảnh: ${a.kicker}` : '',
+      '',
+      'Cấu trúc gợi ý:',
+      structure || '- (tóm tắt ngắn)',
+      chartBlock,
+      nextBlock,
+      a.footnote ? `\nGhi chú: ${a.footnote}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n')
+  }
+
+  return [
+    `Create a presentation deck from the My AI report/summary below.`,
+    `Use generate_deck with the topic and about ${approxPages} pages; let me review/edit the outline before generating slides.`,
+    `Keep the content and numbers faithful — do not invent facts. Each structure section ≈ 1–2 slides, clear titles, short bullets.`,
+    `Style: professional, clean, presentation-ready.`,
+    '',
+    `Topic: ${title}`,
+    a.kicker ? `Context: ${a.kicker}` : '',
+    '',
+    'Suggested structure:',
+    structure || '- (short summary)',
+    chartBlock,
+    nextBlock,
+    a.footnote ? `\nNote: ${a.footnote}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+const EXPORT_SERIES = [
+  '#4C8DFF',
+  '#2BB673',
+  '#FF8A5B',
+  '#F5C542',
+  '#9B7EDE',
+  '#3ECFBE',
+  '#FF6B8A',
+] as const
+
+/** Inline SVG for Docs export — self-contained (no CSS vars). */
+function chartToExportSvg(chart: MyAiSummaryChart): string {
+  const items = chart.items.slice(0, 8)
+  if (items.length < 2) return ''
+  const esc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+
+  if (chart.type === 'donut') {
+    const total = items.reduce((s, i) => s + i.value, 0) || 1
+    const cx = 70
+    const cy = 70
+    const r = 48
+    const stroke = 18
+    const circ = 2 * Math.PI * r
+    const gap = Math.min(4, circ / (items.length * 8))
+    let offset = 0
+    const arcs = items
+      .map((it, i) => {
+        const raw = (it.value / total) * circ
+        const len = Math.max(0, raw - gap)
+        const color = EXPORT_SERIES[i % EXPORT_SERIES.length]!
+        const el = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-dasharray="${len} ${circ - len}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})"/>`
+        offset += raw
+        return el
+      })
+      .join('')
+    const legend = items
+      .map((it, i) => {
+        const color = EXPORT_SERIES[i % EXPORT_SERIES.length]!
+        const pct = Math.round((it.value / total) * 100)
+        return `<li style="margin:4px 0;list-style:none"><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${color};margin-right:6px;vertical-align:middle"></span>${esc(it.label)} — ${it.value} (${pct}%)</li>`
+      })
+      .join('')
+    return `<div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin:8px 0 12px">
+<svg width="140" height="140" viewBox="0 0 140 140" xmlns="http://www.w3.org/2000/svg">
+<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#E5E7EB" stroke-width="${stroke}"/>
+${arcs}
+<text x="${cx}" y="${cy + 5}" text-anchor="middle" font-size="16" font-weight="700" fill="#111">${total}</text>
+</svg>
+<ul style="margin:0;padding:0">${legend}</ul>
+</div>`
+  }
+
+  const max = Math.max(1, ...items.map((i) => i.value))
+  const w = 360
+  const h = 180
+  const padL = 16
+  const padR = 16
+  const padT = 24
+  const padB = 36
+  const plotW = w - padL - padR
+  const plotH = h - padT - padB
+  const slot = plotW / items.length
+  const barW = Math.max(16, Math.min(44, slot - 10))
+  const bars = items
+    .map((it, i) => {
+      const bh = Math.max(4, (it.value / max) * (plotH - 6))
+      const x = padL + i * slot + (slot - barW) / 2
+      const y = padT + plotH - bh
+      const color = EXPORT_SERIES[i % EXPORT_SERIES.length]!
+      const label =
+        it.label.length > 10 ? `${esc(it.label.slice(0, 9))}…` : esc(it.label)
+      return `<rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="6" fill="${color}"/>
+<text x="${x + barW / 2}" y="${y - 6}" text-anchor="middle" font-size="11" font-weight="650" fill="#111">${it.value}</text>
+<text x="${x + barW / 2}" y="${h - 12}" text-anchor="middle" font-size="10" fill="#64748B">${label}</text>`
+    })
+    .join('\n')
+  return `<div style="margin:8px 0 12px">
+<svg width="100%" style="max-width:420px" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg">
+<rect x="${padL}" y="${padT}" width="${plotW}" height="${plotH}" rx="8" fill="#F8FAFC"/>
+${bars}
+</svg>
+</div>`
+}
+
 export function summaryToHtml(a: MyAiSummaryArtifact, vi: boolean): string {
   const esc = (s: string) =>
     s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
@@ -321,6 +490,7 @@ export function summaryToHtml(a: MyAiSummaryArtifact, vi: boolean): string {
   }
   if (a.chart && a.chart.items.length) {
     parts.push(`<h2>${esc(a.chart.title)}</h2>`)
+    parts.push(chartToExportSvg(a.chart))
     parts.push('<ul>')
     for (const it of a.chart.items) {
       parts.push(`<li>${esc(it.label)}: ${it.value}</li>`)

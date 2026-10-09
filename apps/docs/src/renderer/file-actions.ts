@@ -70,6 +70,7 @@ import {
 } from './editor/ink'
 import { t, getLang } from './i18n/locale'
 import { isBlankDocument, parseHtmlFragment, replaceBlockRange } from './ai/protocol'
+import { isAiDraftActive } from './ai/doc-writer'
 import { carryDocSeen } from './ai/tools'
 import { isDocDirty, resetCrossDocEditState } from './doc-dirty'
 import { createSaveSerializer } from './save-until-persisted'
@@ -700,8 +701,11 @@ export async function buildDocBytes(ctx: FileActionContext): Promise<Uint8Array 
 export async function writeRecoveryCopy(ctx: FileActionContext): Promise<void> {
   const { doc, editor } = ctx
   if (!doc || !editor || ctx.saveInFlightRef.current || !isDocDirty(ctx)) return
+  // A pathless silent save-new reloads the editor from the written bytes; doing
+  // that mid write_document draft would wipe the live draft positions.
   if (!doc.filePath) {
     if (isBlankDocument(editor)) return
+    if (isAiDraftActive()) return
     if (editor.view.composing) return
     const active = document.activeElement as HTMLElement | null
     if (active?.closest('td[contenteditable], .doc-textbox')) return
@@ -846,6 +850,9 @@ async function saveOnce(
 ): Promise<boolean> {
   const { doc, editor } = ctx
   if (!doc || !editor) return false
+  // Autosave rewrites the editor from the written bytes when the round-trip
+  // differs; that would orphan a live write_document draft's positions.
+  if (auto && !saveAs && isAiDraftActive()) return false
   ctx.saveInFlightRef.current = true
   ctx.saveIncompleteRef.current = false
   try {
@@ -881,7 +888,9 @@ async function saveOnce(
       if (!result.ok) {
         if (result.error) {
           ctx.setStatus(t('appSaveFailed', { error: result.error }))
-          if (!auto) showToast(t('appSaveFailed', { error: result.error }), 'error')
+          // Autosave used to stay silent on failure — users thought content was
+          // safe until a crash/offline reload wiped an never-landed untitled doc.
+          showToast(t('appSaveFailed', { error: result.error }), 'error')
         }
         return false
       }
@@ -895,7 +904,7 @@ async function saveOnce(
         // deferred to a manual save) — stay dirty, no second dialog/error banner
         if (result.reason !== 'external-modified') {
           ctx.setStatus(t('appSaveFailed', { error: result.error ?? '' }))
-          if (!auto) showToast(t('appSaveFailed', { error: result.error ?? '' }), 'error')
+          showToast(t('appSaveFailed', { error: result.error ?? '' }), 'error')
         }
         return false
       }
@@ -1025,7 +1034,7 @@ async function saveOnce(
     return true
   } catch (err) {
     ctx.setStatus(t('appSaveFailed', { error: String(err) }))
-    if (!auto) showToast(t('appSaveFailed', { error: String(err) }), 'error')
+    showToast(t('appSaveFailed', { error: String(err) }), 'error')
     return false
   } finally {
     ctx.saveInFlightRef.current = false

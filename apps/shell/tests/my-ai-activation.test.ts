@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   aiSettingsReady,
   buyAiPlanLabel,
+  looksLikeCreditsExhausted,
   looksLikeMissingAiActivation,
+  looksLikeRetryableAiError,
+  retryAiLabel,
   softAiActivationMessage,
+  softCreditsMessage,
 } from '../src/renderer/src/my-ai-activation'
 import { defaultAiSettings } from '@genoffice/ai-provider'
 
@@ -37,5 +41,15 @@ describe('my-ai-activation', () => {
     expect(softAiActivationMessage(false)).toContain('not activated')
     expect(buyAiPlanLabel(true)).toBe('Mua gói AI')
     expect(buyAiPlanLabel(false)).toBe('Buy AI plan')
+  })
+
+  it('detects credits exhaustion and retryable errors', () => {
+    expect(looksLikeCreditsExhausted('AI credits exhausted')).toBe(true)
+    expect(looksLikeCreditsExhausted('Hết Credit dùng thử')).toBe(true)
+    expect(looksLikeRetryableAiError('Network error talking to AI')).toBe(true)
+    expect(looksLikeRetryableAiError('AI provider overloaded — try again shortly')).toBe(true)
+    expect(looksLikeRetryableAiError('AI credits exhausted')).toBe(false)
+    expect(softCreditsMessage(true, { trial: true, remaining: 0 })).toContain('dùng thử')
+    expect(retryAiLabel(true)).toBe('Thử lại')
   })
 })

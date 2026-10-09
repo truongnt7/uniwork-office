@@ -18,6 +18,7 @@ import {
   ipcMain,
   nativeImage,
   nativeTheme,
+  powerMonitor,
   session,
   shell,
   webContents,
@@ -2715,6 +2716,16 @@ function refreshTitleBarOverlay(): void {
   shellWindow.setTitleBarOverlay(tabStripOverlay(nativeTheme.shouldUseDarkColors))
 }
 
+/** Debounced WebContentsView compositor nudge after sleep/wake or window focus. */
+let compositorRefreshTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleCompositorRefresh(): void {
+  if (compositorRefreshTimer) clearTimeout(compositorRefreshTimer)
+  compositorRefreshTimer = setTimeout(() => {
+    compositorRefreshTimer = null
+    tabManager?.refreshCompositing()
+  }, 120)
+}
+
 function createShellWindow(): void {
   const win = new BrowserWindow({
     width: 1360,
@@ -2749,7 +2760,12 @@ function createShellWindow(): void {
   win.on('will-move', () => broadcastChromePressed())
   // A detached editor window claims the process-global menu/active-editor targets
   // while focused; take them back when the shell window regains focus
-  win.on('focus', () => tabManager?.refreshActiveTargets())
+  win.on('focus', () => {
+    tabManager?.refreshActiveTargets()
+    // Login after sleep often focuses the window with a still-blank compositor
+    scheduleCompositorRefresh()
+  })
+  win.on('show', () => scheduleCompositorRefresh())
 
   const manager = new TabManager(
     win,
@@ -5440,6 +5456,19 @@ app.whenReady().then(async () => {
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createShellWindow()
+    else scheduleCompositorRefresh()
+  })
+
+  // macOS sleep: persist dirty editors, then after wake force WebContentsView
+  // compositors to re-embed (otherwise Docs/Sheets tabs stay blank until reopen).
+  powerMonitor.on('suspend', () => {
+    tabManager?.requestPersistBeforeSleep()
+  })
+  powerMonitor.on('resume', () => {
+    scheduleCompositorRefresh()
+    // GPU stack often finishes later than the first resume tick
+    setTimeout(() => scheduleCompositorRefresh(), 800)
+    setTimeout(() => scheduleCompositorRefresh(), 2500)
   })
 })
 

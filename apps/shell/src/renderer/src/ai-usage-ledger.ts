@@ -156,7 +156,7 @@ export function recordAiTurnUsage(opts: {
   const promptChars = (opts.system?.length ?? 0) + (opts.user?.length ?? 0)
   const completionChars = opts.completion?.length ?? 0
   const est = buildAiUsageEstimate({ promptChars, completionChars })
-  return appendAiUsage({
+  const row = appendAiUsage({
     source: opts.source,
     summary: opts.summary,
     ok: opts.ok,
@@ -165,6 +165,17 @@ export function recordAiTurnUsage(opts: {
     model: opts.model,
     ...est,
   })
+  // Trial builds: debit the managed Credit allowance (main-process meter).
+  if (row.ok && !row.cancelled && row.estCredits > 0) {
+    void window.aiOffice?.recordTrialCredits?.(row.estCredits).then(() => {
+      try {
+        window.dispatchEvent(new Event('uniwork:credit-refresh'))
+      } catch {
+        /* ignore */
+      }
+    })
+  }
+  return row
 }
 
 export function listAiUsage(limit = 40): AiUsageEntry[] {

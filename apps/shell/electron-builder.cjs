@@ -50,6 +50,13 @@ const fontCdnUrl = normalizeHttpsBaseUrl(
   'GENOFFICE_FONT_CDN_URL',
   process.env.GENOFFICE_FONT_CDN_URL,
 )
+// Trial builds: inject a managed OpenRouter key so customers never paste one.
+// Prefer a key with an OpenRouter spend limit (~$50 ≈ 50_000 UniWork Credit).
+// See docs/pricing/TRIAL_AI.md — do not use the master unlimited account key.
+const trialOpenRouterKey = (process.env.UNIWORK_TRIAL_OPENROUTER_KEY || '').trim()
+const trialCreditsRaw = Number(process.env.UNIWORK_TRIAL_CREDITS || 50_000)
+const trialCredits =
+  Number.isFinite(trialCreditsRaw) && trialCreditsRaw > 0 ? Math.floor(trialCreditsRaw) : 50_000
 
 // GENOFFICE_MAC_X64=1 — opt into packaging the Intel (x64) dmg/zip alongside
 // arm64. Off by default: Intel packages must only ever ship signed with the
@@ -632,6 +639,12 @@ if (ga4MeasurementId && ga4ApiSecret) {
   }
 }
 if (fontCdnUrl) extraMetadata.genofficeFontCdn = { baseUrl: fontCdnUrl }
+if (trialOpenRouterKey) {
+  extraMetadata.uniworkTrialAi = {
+    apiKey: trialOpenRouterKey,
+    credits: trialCredits,
+  }
+}
 if (Object.keys(extraMetadata).length) config.extraMetadata = extraMetadata
 
 module.exports = config

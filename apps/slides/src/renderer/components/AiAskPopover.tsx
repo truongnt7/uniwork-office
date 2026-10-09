@@ -12,7 +12,6 @@ import {
   EDIT_INSTRUCTION_MAX,
   EDIT_QUEUE_MAX,
   NODE_NOUN_KEY,
-  truncate,
   type NodeDescriptor,
 } from '../ai/edit-queue'
 
@@ -48,7 +47,7 @@ interface Props {
   queueFull?: boolean
 }
 
-const WIDTH = 340
+const WIDTH = 420
 /** Gap between the anchor box and the popover */
 const GAP = 10
 /** Keep-away margin from the viewport edges */
@@ -271,7 +270,11 @@ export function AiAskPopover({
           ? t('aiAskTitle', { label: noun })
           : t('aiAskTitleMulti', { count: targets.length })}
       </div>
-      {preview && <div className="ai-ask-pop-sub">{truncate(preview, 60)}</div>}
+      {preview ? (
+        <div className="ai-ask-pop-sub" title={preview.length > 400 ? preview : undefined}>
+          {preview.length > 400 ? `${preview.slice(0, 400).trimEnd()}…` : preview}
+        </div>
+      ) : null}
       <input
         ref={inputRef}
         className="ai-ask-pop-input"

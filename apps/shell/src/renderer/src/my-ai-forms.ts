@@ -114,7 +114,10 @@ export type FormFillRoute =
 /** Route NL → fill a library form (uploaded preferred). */
 export function routeFormFill(practiceId: PracticeId, raw: string): FormFillRoute {
   const forms = readForms(practiceId)
-  if (forms.length === 0) return null
+  // Empty library still routes to fill_form so chat can ask / explain — not unknown.
+  if (forms.length === 0) {
+    return looksLikeFormFill(raw) ? { kind: 'pick', forms: [] } : null
+  }
 
   const withFile = listFormsWithFiles(practiceId)
   const pool = withFile.length > 0 ? withFile : forms

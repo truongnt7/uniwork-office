@@ -98,6 +98,12 @@ import {
 } from '@genoffice/ai-provider'
 import { listCodexModels, shutdownCodexAppServers } from '@genoffice/ai-provider/codex-app-server'
 import {
+  getTrialAiStatus,
+  recordTrialCredits,
+  trialAiGateError,
+  withTrialAiAuth,
+} from './trial-ai'
+import {
   ensureGenofficeLogin,
   generateImageTool,
   testSearchProvider,
@@ -2932,7 +2938,26 @@ export function registerAiIpc(): void {
   })
 
   ipcMain.handle('ai:openrouter-key-status', async (_event, apiKey: unknown) => {
-    return probeOpenRouterKey(typeof apiKey === 'string' ? apiKey : '')
+    const raw = typeof apiKey === 'string' ? apiKey.trim() : ''
+    if (raw) return probeOpenRouterKey(raw)
+    // Trial builds: no customer key — report local Credit budget instead of Hub.
+    const trial = getTrialAiStatus()
+    if (trial.enabled) {
+      return {
+        ok: true,
+        limit: trial.creditAllowance / 1000,
+        usage: trial.creditUsed / 1000,
+        limitRemaining: trial.creditRemaining / 1000,
+      }
+    }
+    return probeOpenRouterKey('')
+  })
+
+  ipcMain.handle('ai:trial-status', (): ReturnType<typeof getTrialAiStatus> => getTrialAiStatus())
+
+  ipcMain.handle('ai:trial-record-credits', (_event, credits: unknown) => {
+    const n = typeof credits === 'number' ? credits : Number(credits)
+    return recordTrialCredits(Number.isFinite(n) ? n : 0)
   })
 
   ipcMain.handle('ai:codex-models', async (_event, cliPath: unknown) => {
@@ -2944,9 +2969,22 @@ export function registerAiIpc(): void {
     const tools = request.tools ?? []
     const maxTokens = request.maxTokens ?? maxOutputTokensOf(settings)
     const provider = settings.provider
-    const config = withUniAiOpenRouterAuth(settings, provider, settings.providers?.[provider])
+    const config = withTrialAiAuth(
+      settings,
+      provider,
+      withUniAiOpenRouterAuth(settings, provider, settings.providers?.[provider]),
+    )
     const send = (chunk: AiStreamChunk) => {
       if (!event.sender.isDestroyed()) event.sender.send('ai:stream-chunk', chunk)
+    }
+    const customerKey =
+      settings.providers?.genspark?.apiKey?.trim() ||
+      settings.providers?.openrouter?.apiKey?.trim() ||
+      ''
+    const trialBlock = trialAiGateError()
+    if (trialBlock && !customerKey) {
+      send({ requestId, type: 'error', error: trialBlock, errorCode: 'credits' as const })
+      return
     }
     if (!config || (provider !== 'codex' && !config.apiKey)) {
       send({
@@ -3096,7 +3134,19 @@ export function registerAiIpc(): void {
   ipcMain.handle('ai:chat', async (_event, request: AiChatRequest) => {
     const { settings, system, user } = request
     const provider = settings.provider
-    const config = withUniAiOpenRouterAuth(settings, provider, settings.providers?.[provider])
+    const config = withTrialAiAuth(
+      settings,
+      provider,
+      withUniAiOpenRouterAuth(settings, provider, settings.providers?.[provider]),
+    )
+    const customerKey =
+      settings.providers?.genspark?.apiKey?.trim() ||
+      settings.providers?.openrouter?.apiKey?.trim() ||
+      ''
+    const trialBlock = trialAiGateError()
+    if (trialBlock && !customerKey) {
+      return { ok: false, error: trialBlock }
+    }
     if (!config || (provider !== 'codex' && !config.apiKey)) {
       return {
         ok: false,

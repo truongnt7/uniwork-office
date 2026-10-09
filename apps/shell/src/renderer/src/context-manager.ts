@@ -161,16 +161,56 @@ export interface MyAiRecentHint {
   mtimeMs: number
 }
 
+export interface MyAiActiveOfficeHint {
+  kind: string
+  title: string
+  path?: string
+  /** Short on-device excerpt of the open file (budget-capped). */
+  excerpt?: string
+}
+
 /**
  * Desk-wide snapshot for My AI chat turns (no AgentIntent required).
  * Local-only; budget-capped before any Hub call.
  */
 export function buildMyAiContextPack(
   practiceId: PracticeId,
-  opts?: { recents?: readonly MyAiRecentHint[]; vi?: boolean },
+  opts?: {
+    recents?: readonly MyAiRecentHint[]
+    vi?: boolean
+    /** Last Office editor tab (even if Home/My AI is focused) */
+    activeOffice?: MyAiActiveOfficeHint | null
+    /** Short user memory lines (preferences) */
+    memoryLines?: readonly string[]
+  },
 ): MyAiContextPack {
   const vi = opts?.vi !== false
   const chunks: ContextChunk[] = []
+
+  if (opts?.activeOffice?.title) {
+    const tab = opts.activeOffice
+    const head = vi
+      ? `Tab Office gần nhất: ${tab.kind} — ${tab.title}${tab.path ? ` (${tab.path})` : ''}`
+      : `Last Office tab: ${tab.kind} — ${tab.title}${tab.path ? ` (${tab.path})` : ''}`
+    const excerpt = tab.excerpt?.trim()
+    chunks.push({
+      id: 'active-office',
+      source: 'local:active-office',
+      text: excerpt
+        ? `${head}\n${vi ? 'Đoạn trích:' : 'Excerpt:'}\n${clip(excerpt, 700)}`
+        : head,
+    })
+  }
+
+  if (opts?.memoryLines && opts.memoryLines.length > 0) {
+    chunks.push({
+      id: 'memory',
+      source: 'local:memory',
+      text: vi
+        ? `Ghi nhớ trợ lý:\n${opts.memoryLines.slice(0, 8).join('\n')}`
+        : `Assistant memory:\n${opts.memoryLines.slice(0, 8).join('\n')}`,
+    })
+  }
 
   const openTasks = readTasks(practiceId).filter((t) => !t.done).slice(0, MAX_LIST)
   chunks.push({

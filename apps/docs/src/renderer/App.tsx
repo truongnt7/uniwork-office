@@ -66,6 +66,7 @@ import type { AiDocContent, AiSettings, OpenDocxResult } from '../shared/ipc'
 import { AI_PROVIDERS } from '../shared/ipc'
 import { ZoteroDocumentController } from './zotero/controller'
 import { AiPanel, AI_REVISION_AUTHOR } from './ai/AiPanel'
+import { isAiDraftActive } from './ai/doc-writer'
 import type { AiCommentsAccess, AiHeaderFooterAccess } from './ai/tools'
 import { applyHfText, hfEditText } from './editor/hf-text'
 import { textColorValue } from './editor/text-color'
@@ -4209,7 +4210,9 @@ export function App() {
     const offCheck = window.desktop.onCloseCheck?.(() => {
       window.desktop.reportCloseCheck({
         dirty: !!doc && (anyDirtyRef.current || dirtyRef.current),
-        autoSave: autoSave && !!doc?.filePath,
+        // Pathless docs still silent-save into the default folder (saveDocxNew);
+        // requiring filePath left AutoSave On useless for AI/untitled drafts.
+        autoSave,
         filePath: doc?.filePath ?? null,
       })
     })
@@ -4235,10 +4238,12 @@ export function App() {
   }, [doc, save, autoSave])
 
   // autosave: every 30s and on window blur, silently persist pending changes
+  // (including never-saved untitled / AI drafts via saveDocxNew)
   useEffect(() => {
-    if (tornDown || !autoSave || !doc || !doc.filePath) return
+    if (tornDown || !autoSave || !doc) return
     const tick = () => {
       if (!isDocDirty(fileCtxRef.current)) return
+      if (isAiDraftActive()) return
       if (editor?.view.composing) return // don't interrupt IME input
       const active = document.activeElement as HTMLElement | null
       if (active?.closest('td[contenteditable], .doc-textbox')) return // mid in-place edit
@@ -4252,20 +4257,95 @@ export function App() {
     }
   }, [tornDown, autoSave, doc, editor, save])
 
+  // Untitled dirty docs: first silent save after a short idle so a crash or tab
+  // reload before the 30s recovery tick cannot wipe the whole draft. Re-arms
+  // while an AI write_document draft is still streaming.
+  useEffect(() => {
+    if (tornDown || !doc || doc.filePath || !hasUnsavedChanges) return
+    let cancelled = false
+    let timer = 0
+    const tick = () => {
+      if (cancelled) return
+      const cur = fileCtxRef.current
+      if (!cur.doc || cur.doc.filePath || !isDocDirty(cur)) return
+      if (isAiDraftActive() || cur.editor?.view.composing) {
+        timer = window.setTimeout(tick, 2_000)
+        return
+      }
+      const active = document.activeElement as HTMLElement | null
+      if (active?.closest('td[contenteditable], .doc-textbox')) {
+        timer = window.setTimeout(tick, 2_000)
+        return
+      }
+      void save(false, true)
+    }
+    timer = window.setTimeout(tick, 8_000)
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [tornDown, doc, hasUnsavedChanges, save])
+
   // After an AI run finishes on a never-saved document, silently save it once: the
   // first save derives the file name from the first heading (see deriveAutoFileName
   // in file-actions), which also renames the shell tab — mirrors slides, where AI
-  // generation names and persists the draft deck.
+  // generation names and persists the draft deck. Also runs on AI errors so a
+  // dropped connection that still landed content is not left pathless.
   useEffect(() => {
     const handler = () => {
       const cur = fileCtxRef.current
       if (!cur.doc || cur.doc.filePath || !anyDirtyRef.current) return
+      if (isAiDraftActive()) return
       if (editor?.view.composing) return
       void save(false, true)
     }
     window.addEventListener('ai-docs-run-done', handler)
     return () => window.removeEventListener('ai-docs-run-done', handler)
   }, [editor, save])
+
+  // Before OS sleep: flush dirty content so a blank GPU compositor after wake
+  // never costs the user's draft (reopen from disk / Recent still works).
+  useEffect(() => {
+    const off = window.desktop.onPersistBeforeSleep?.(() => {
+      if (tornDown) return
+      const cur = fileCtxRef.current
+      if (!isDocDirty(cur)) return
+      if (isAiDraftActive()) {
+        void writeRecoveryCopyImpl(cur)
+        return
+      }
+      void save(false, true)
+    })
+    return () => off?.()
+  }, [tornDown, save])
+
+  // After sleep/wake the shell nudges WebContentsView compositing; also force
+  // a React/layout refresh so ProseMirror + pagination remeasure if paint stalled.
+  useEffect(() => {
+    const kick = () => {
+      if (tornDown) return
+      scheduleUiRefresh()
+      window.dispatchEvent(new Event('resize'))
+      requestAnimationFrame(() => {
+        try {
+          editor?.view?.updateState(editor.view.state)
+        } catch {
+          /* editor may be mid-destroy */
+        }
+      })
+    }
+    const off = window.desktop.onDisplayResume?.(kick)
+    const onVis = () => {
+      if (document.visibilityState === 'visible') kick()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('pageshow', kick)
+    return () => {
+      off?.()
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('pageshow', kick)
+    }
+  }, [tornDown, editor, scheduleUiRefresh])
 
   useEffect(() => {
     // editing shortcuts only fire when focus is in an editor surface (main

@@ -21,7 +21,6 @@ import { setInactiveSelectionShown } from '../editor/inactiveSelection'
 import {
   EDIT_INSTRUCTION_MAX,
   EDIT_QUEUE_MAX,
-  truncate,
   type EditQueueItem,
 } from '../ai/edit-queue'
 
@@ -46,10 +45,17 @@ interface Props {
 
 type OpenState = { mode: 'new' } | { mode: 'edit'; qid: string }
 
-const WIDTH = 340
+const WIDTH = 460
 const GAP = 8
 const EDGE = 8
-const EST_HEIGHT = 150
+const EST_HEIGHT = 220
+const EXCERPT_MAX = 1200
+
+function fitTextarea(el: HTMLTextAreaElement | null): void {
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${Math.min(168, Math.max(44, el.scrollHeight))}px`
+}
 
 type SelectionKind = 'image' | 'table' | 'code' | 'task' | 'text'
 
@@ -111,7 +117,8 @@ export function AiAskPopover({
   const [text, setText] = useState('')
   const [rect, setRect] = useState<AnchorRect | null>(null)
   const boxRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+  const [, setSizeTick] = useState(0)
 
   const openRef = useRef(open)
   openRef.current = open
@@ -198,7 +205,20 @@ export function AiAskPopover({
     if (open) {
       inputRef.current?.focus()
       inputRef.current?.select()
+      fitTextarea(inputRef.current)
     }
+  }, [open])
+
+  useEffect(() => {
+    if (open) fitTextarea(inputRef.current)
+  }, [open, text])
+
+  useLayoutEffect(() => {
+    if (!open || !boxRef.current) return
+    const el = boxRef.current
+    const ro = new ResizeObserver(() => setSizeTick((n) => n + 1))
+    ro.observe(el)
+    return () => ro.disconnect()
   }, [open])
 
   const close = useCallback(() => {
@@ -240,23 +260,28 @@ export function AiAskPopover({
   const canSubmit = text.trim().length > 0
   const editItem = open?.mode === 'edit' ? getItem(open.qid) : undefined
 
-  const excerpt = (() => {
+  const excerptRaw = (() => {
     if (!open) return ''
     if (open.mode === 'edit') {
       const range = queueAnchorRange(editor.state, open.qid)
       return range
-        ? editor.state.doc.textBetween(range.from, range.to, ' ', ' ')
+        ? editor.state.doc.textBetween(range.from, range.to, '\n', ' ')
         : (editItem?.capturedText ?? '')
     }
     const { from, to } = editor.state.selection
-    return editor.state.doc.textBetween(from, to, ' ', ' ')
+    return editor.state.doc.textBetween(from, to, '\n', ' ')
   })()
-    .replace(/\s+/g, ' ')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
     .trim()
+  const excerptOverflow = excerptRaw.length > EXCERPT_MAX
+  const excerpt = excerptOverflow ? `${excerptRaw.slice(0, EXCERPT_MAX).trimEnd()}…` : excerptRaw
 
   let box: ReactElement | null = null
   if (open && rect) {
     const height = boxRef.current?.offsetHeight ?? EST_HEIGHT
+    const popW = Math.min(WIDTH, Math.max(300, window.innerWidth - EDGE * 2))
     const below = rect.bottom + GAP
     const above = rect.top - GAP - height
     const top =
@@ -266,14 +291,14 @@ export function AiAskPopover({
           ? above
           : Math.max(EDGE, window.innerHeight - EDGE - height)
     const left = Math.min(
-      Math.max(EDGE, (rect.left + rect.right) / 2 - WIDTH / 2),
-      Math.max(EDGE, window.innerWidth - WIDTH - EDGE),
+      Math.max(EDGE, (rect.left + rect.right) / 2 - popW / 2),
+      Math.max(EDGE, window.innerWidth - popW - EDGE),
     )
     box = (
       <div
         ref={boxRef}
         className="ai-ask-pop"
-        style={{ left, top, width: WIDTH }}
+        style={{ left, top, width: popW }}
         role="dialog"
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
@@ -302,16 +327,24 @@ export function AiAskPopover({
         <div className="ai-ask-pop-title">
           {t(open.mode === 'edit' ? 'aiAskEditTitle' : 'aiAskTitle')}
         </div>
-        {excerpt && <div className="ai-ask-pop-sub">{truncate(excerpt, 60)}</div>}
-        <input
+        {excerpt ? (
+          <div className="ai-ask-pop-sub" title={excerptOverflow ? excerptRaw : undefined}>
+            {excerpt}
+          </div>
+        ) : null}
+        <textarea
           ref={inputRef}
           className="ai-ask-pop-input"
           value={text}
+          rows={2}
           maxLength={EDIT_INSTRUCTION_MAX}
           placeholder={t('aiAskPlaceholder')}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => {
+            setText(e.target.value)
+            fitTextarea(e.target)
+          }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault()
               if (!canSubmit) return
               if (open.mode === 'edit') {

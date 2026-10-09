@@ -423,6 +423,15 @@ const homeApi: HomeApi = {
   async probeOpenRouterKey(apiKey) {
     return (await ipcRenderer.invoke('ai:openrouter-key-status', apiKey)) as import('@genoffice/ai-provider').OpenRouterKeyStatus
   },
+  async getTrialAiStatus() {
+    return (await ipcRenderer.invoke('ai:trial-status')) as import('../shared/home-api').TrialAiStatus
+  },
+  async recordTrialCredits(credits) {
+    return (await ipcRenderer.invoke(
+      'ai:trial-record-credits',
+      credits,
+    )) as import('../shared/home-api').TrialAiStatus
+  },
   async aiChat(input) {
     const settings =
       input.settings ?? ((await ipcRenderer.invoke('ai:get-settings')) as AiSettings)

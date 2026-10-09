@@ -57,14 +57,29 @@ export function CreditWallet({ onOpenAiSettings }: Props): ReactElement {
     setRecent(listAiUsage(8))
   }, [])
 
+  const [trialLabel, setTrialLabel] = useState(false)
+
   const refresh = useCallback(async () => {
     refreshLedger()
-    if (!window.aiOffice.getAiSettings || !window.aiOffice.probeOpenRouterKey) {
-      setSnap(creditWalletFromOpenRouter(null, false))
-      return
-    }
     setBusy(true)
     try {
+      const trial = await window.aiOffice.getTrialAiStatus?.()
+      if (trial?.enabled) {
+        setTrialLabel(true)
+        setSnap({
+          ok: true,
+          missingKey: false,
+          remaining: trial.creditRemaining,
+          used: trial.creditUsed,
+          unlimited: false,
+        })
+        return
+      }
+      setTrialLabel(false)
+      if (!window.aiOffice.getAiSettings || !window.aiOffice.probeOpenRouterKey) {
+        setSnap(creditWalletFromOpenRouter(null, false))
+        return
+      }
       const settings = await window.aiOffice.getAiSettings()
       const key = hubKeyFromSettings(settings)
       if (!key) {
@@ -118,6 +133,9 @@ export function CreditWallet({ onOpenAiSettings }: Props): ReactElement {
   } else if (snap.unlimited || snap.remaining == null) {
     title = label('Ví Credit', 'Credit wallet')
     sub = label(`Đã dùng ${fmt(snap.used)}`, `Used ${fmt(snap.used)}`)
+  } else if (trialLabel) {
+    title = label(`Dùng thử · còn ${fmt(snap.remaining)}`, `Trial · ${fmt(snap.remaining)} left`)
+    sub = label(`Đã dùng ${fmt(snap.used)} Credit`, `Used ${fmt(snap.used)} Credits`)
   } else {
     title = label(`Còn ${fmt(snap.remaining)} Credit`, `${fmt(snap.remaining)} Credits left`)
     sub = label(`Đã dùng ${fmt(snap.used)}`, `Used ${fmt(snap.used)}`)

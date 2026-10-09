@@ -299,6 +299,10 @@ export interface DesktopApi {
   writeRecoveryCopy(path: string, data: ArrayBuffer): Promise<{ ok: boolean }>
   /** tab closed but webContents kept alive (shell freeze workaround) — stop background timers */
   onTeardown(handler: () => void): () => void
+  /** shell: OS is about to sleep — persist dirty content best-effort */
+  onPersistBeforeSleep(handler: () => void): () => void
+  /** shell: display/GPU resumed after sleep — force a content paint */
+  onDisplayResume(handler: () => void): () => void
   /** one trusted space keystroke into this webContents — the only thing that
    *  makes Blink respell existing text after the spellcheck attribute turns
    *  back on (r168); the caller pauses the PM DOM observer and removes the

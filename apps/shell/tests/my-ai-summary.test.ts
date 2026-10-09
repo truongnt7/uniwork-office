@@ -4,6 +4,7 @@ import {
   parseSummaryArtifact,
   summaryFromPlainText,
   summaryToPlainText,
+  summaryToSlideBrief,
 } from '../src/renderer/src/my-ai-summary'
 
 describe('My AI structured summary', () => {
@@ -63,5 +64,33 @@ describe('My AI structured summary', () => {
       }),
     )
     expect(a.chart).toBeNull()
+  })
+
+  it('builds a slide brief from a summary/report', () => {
+    const a = parseSummaryArtifact(
+      JSON.stringify({
+        title: 'Báo cáo Q3',
+        sections: [
+          { heading: 'Kết quả', bullets: ['Doanh thu tăng 12%'] },
+          { heading: 'Rủi ro', bullets: ['Chi phí marketing'] },
+        ],
+        nextActions: ['Họp tuần tới'],
+        chart: {
+          type: 'bar',
+          title: 'Doanh thu',
+          items: [
+            { label: 'Q2', value: 100 },
+            { label: 'Q3', value: 112 },
+          ],
+        },
+      }),
+    )
+    const brief = summaryToSlideBrief(a, true)
+    expect(brief).toContain('generate_deck')
+    expect(brief).toContain('Báo cáo Q3')
+    expect(brief).toContain('Kết quả')
+    expect(brief).toContain('Doanh thu tăng 12%')
+    expect(brief).toContain('Q3')
+    expect(brief).toContain('Họp tuần tới')
   })
 })

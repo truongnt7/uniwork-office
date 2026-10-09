@@ -39,3 +39,45 @@ export function softAiActivationMessage(vi: boolean): string {
 export function buyAiPlanLabel(vi: boolean): string {
   return vi ? 'Mua gói AI' : 'Buy AI plan'
 }
+
+/** Match transport / Hub “credits exhausted” and local trial soft-stop. */
+export function looksLikeCreditsExhausted(error: string): boolean {
+  const e = error.trim()
+  if (!e) return false
+  return /credits?\s*exhaust|hết\s*(credit|token)|credit.*(hết|insufficient)|insufficient\s*credit|quota|rate\s*limit.*credit/i.test(
+    e,
+  )
+}
+
+/** Transient network / provider blips that are safe to retry once. */
+export function looksLikeRetryableAiError(error: string): boolean {
+  const e = error.trim()
+  if (!e) return false
+  if (looksLikeMissingAiActivation(e) || looksLikeCreditsExhausted(e)) return false
+  return /network|timeout|timed\s*out|overloaded|ECONN|ENOTFOUND|503|502|429|try again|thử lại|tạm thời/i.test(
+    e,
+  )
+}
+
+export function softCreditsMessage(
+  vi: boolean,
+  opts?: { trial?: boolean; remaining?: number },
+): string {
+  if (opts?.trial) {
+    const rem = Math.max(0, Math.round(opts.remaining ?? 0))
+    return vi
+      ? `Hết Credit dùng thử (còn ${rem.toLocaleString('vi-VN')}). Mua gói AI hoặc gắn Token Hub key riêng trong Cài đặt.`
+      : `Trial AI credits used up (${rem.toLocaleString()} left). Buy an AI plan or add your own Token Hub key in Settings.`
+  }
+  return vi
+    ? 'Hết Credit / hạn mức AI. Kiểm tra Ví Credit hoặc gắn key trong Cài đặt → AI.'
+    : 'AI credits exhausted. Check the Credit wallet or add a key in Settings → AI.'
+}
+
+export function retryAiLabel(vi: boolean): string {
+  return vi ? 'Thử lại' : 'Retry'
+}
+
+export function openAiSettingsLabel(vi: boolean): string {
+  return vi ? 'Cài đặt AI' : 'AI settings'
+}

@@ -90,6 +90,24 @@ export type WritePosition = { kind: 'whole' } | { kind: 'after'; index: number }
 /** meta on every draft transaction: not an edit, not history, not a tracked change */
 export const DRAFT_META = 'aiDraft'
 
+/** open DraftLanding instances — saves that rewrite the editor must wait these out */
+let activeAiDrafts = 0
+
+/** true while a streaming write_document draft (or its keep/discard card) is live */
+export function isAiDraftActive(): boolean {
+  return activeAiDrafts > 0
+}
+
+/**
+ * A dropped connection keeps the partial the user already saw; Stop and the
+ * size-cap still ask keep-or-discard so an intentional cancel can discard.
+ */
+export function shouldAutoKeepWriterPartial(
+  reason: 'error' | 'stopped' | 'max_tokens',
+): boolean {
+  return reason === 'error'
+}
+
 /**
  * Live draft of a streaming fragment inside the document. Each tick re-parses
  * the fragment received so far (the HTML parser closes open tags, so a
@@ -118,6 +136,7 @@ export class DraftLanding {
     private readonly numIds: NumIds,
     position: WritePosition,
   ) {
+    activeAiDrafts++
     this.from =
       position.kind === 'after' && position.index >= 0
         ? blockRangePositions(editor, position.index, position.index).to
@@ -156,6 +175,7 @@ export class DraftLanding {
     this.timer = null
     this.flush()
     this.closed = true
+    activeAiDrafts = Math.max(0, activeAiDrafts - 1)
     this.editor.off('transaction', this.onTransaction)
     if (this.to > this.from && !this.editor.isDestroyed) {
       this.editor.view.dispatch(this.draftTr().delete(this.from, this.to))

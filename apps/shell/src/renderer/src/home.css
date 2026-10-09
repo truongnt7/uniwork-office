@@ -918,97 +918,177 @@ body.vib .home {
 }
 
 .myai-sum-chart {
-  padding: 10px 12px;
-  border-radius: 12px;
+  padding: 12px 14px 14px;
+  border-radius: 14px;
   border: 1px solid var(--border);
-  background: var(--surface);
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--accent) 6%, var(--surface)) 0%,
+      var(--surface) 42%
+    );
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.myai-sum-chart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .myai-sum-chart-title {
-  margin: 0 0 8px;
-  font-size: 12px;
+  margin: 0;
+  font-size: 13px;
   font-weight: 650;
-  color: var(--text-secondary);
+  color: var(--text);
+  letter-spacing: -0.01em;
 }
 
-.myai-sum-bars {
+.myai-sum-chart-badge {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--hover) 80%, transparent);
+  border: 1px solid var(--border);
+}
+
+.myai-sum-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 220px;
+}
+
+.myai-sum-gridline {
+  stroke: color-mix(in srgb, var(--border) 75%, transparent);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+.myai-sum-val {
+  fill: var(--text);
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.myai-sum-axis {
+  fill: var(--text-secondary);
+  font-size: 10px;
+}
+
+.myai-sum-legend,
+.myai-sum-donut-legend {
   list-style: none;
-  margin: 0;
+  margin: 10px 0 0;
   padding: 0;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.myai-sum-bar-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 14px;
   font-size: 12px;
   color: var(--text);
 }
 
-.myai-sum-bar-meta em {
+.myai-sum-legend li,
+.myai-sum-donut-legend li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.myai-sum-legend i,
+.myai-sum-donut-legend i {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 8%, transparent);
+}
+
+.myai-sum-legend span,
+.myai-sum-donut-legend span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 9.5rem;
+}
+
+.myai-sum-legend em,
+.myai-sum-donut-legend em {
+  margin-left: 2px;
   font-style: normal;
+  font-weight: 650;
   color: var(--text-secondary);
   font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
 }
 
-.myai-sum-bar-track {
-  height: 7px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--border) 70%, transparent);
-  overflow: hidden;
-}
-
-.myai-sum-bar-fill {
-  height: 100%;
-  border-radius: inherit;
-  min-width: 4px;
+.myai-sum-donut-legend em small {
+  font-size: 10px;
+  font-weight: 550;
+  color: var(--text-tertiary, var(--text-secondary));
 }
 
 .myai-sum-donut-row {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 18px;
   flex-wrap: wrap;
 }
 
 .myai-sum-donut {
-  width: 88px;
-  height: 88px;
+  width: 148px;
+  height: 148px;
   flex-shrink: 0;
+  filter: drop-shadow(0 6px 14px color-mix(in srgb, var(--accent) 12%, transparent));
+}
+
+.myai-sum-donut-hole {
+  fill: var(--surface);
+}
+
+.myai-sum-donut-label {
+  fill: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 550;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.myai-sum-donut-value {
+  fill: var(--text);
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .myai-sum-donut-legend {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
+  flex: 1;
+  min-width: 10rem;
   flex-direction: column;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--text);
+  flex-wrap: nowrap;
+  gap: 8px;
 }
 
 .myai-sum-donut-legend li {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.myai-sum-donut-legend i {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--hover) 40%, transparent);
 }
 
 .myai-sum-donut-legend em {
   margin-left: auto;
-  font-style: normal;
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
 }
 
 .myai-sum-next {
@@ -1073,6 +1153,18 @@ body.vib .home {
   color: var(--text);
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.myai-sum-action-primary {
+  color: var(--accent-contrast, #fff);
+  background: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 80%, var(--border));
+}
+
+.myai-sum-action-primary:hover:not(:disabled) {
+  color: var(--accent-contrast, #fff);
+  background: var(--accent-dark, var(--accent));
+  border-color: var(--accent-dark, var(--accent));
 }
 
 .myai-sum-action:disabled {
@@ -1387,25 +1479,66 @@ body.vib .home {
   flex-shrink: 0;
 }
 
-.new-chat-model-select {
-  max-width: 220px;
-  min-width: 0;
-  padding: 4px 8px;
+.new-chat-model-dd {
+  max-width: 240px;
+  min-width: 148px;
+}
+
+.new-chat-model-dd .gs-dd-btn {
+  height: 28px;
+  gap: 6px;
+  padding: 0 6px 0 8px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--bg-content, var(--surface-subtle));
+  font-size: 12px;
   color: var(--text);
-  font: inherit;
+}
+
+.new-chat-model-dd .gs-dd-btn:hover:not(:disabled),
+.new-chat-model-dd .gs-dd-btn:focus-visible {
+  background: var(--hover);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.new-chat-model-dd .gs-dd-btn:disabled {
+  opacity: 0.6;
+}
+
+.new-chat-model-dd .gs-dd-pop {
+  min-width: 220px;
+  max-height: 280px;
+  z-index: 120;
+  border-radius: 10px;
+  padding: 6px;
+}
+
+.new-chat-model-dd .gs-dd-item {
+  gap: 0;
+  padding: 7px 8px;
+  border-radius: 7px;
   font-size: 12px;
 }
 
-.new-chat-model-select:focus {
-  outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
-  outline-offset: 1px;
+.new-chat-model-dd .set-provider-logo {
+  flex-shrink: 0;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  color: var(--text);
 }
 
-.new-chat-model-select:disabled {
-  opacity: 0.6;
+.new-chat-model-dd .set-provider-logo svg {
+  width: 100%;
+  height: 100%;
+}
+
+.new-chat-model-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .new-chat-composer textarea {

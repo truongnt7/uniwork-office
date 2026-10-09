@@ -107,6 +107,16 @@ const api: DesktopApi = {
     ipcRenderer.on('docs:teardown', listener)
     return () => ipcRenderer.removeListener('docs:teardown', listener)
   },
+  onPersistBeforeSleep: (handler) => {
+    const listener = () => handler()
+    ipcRenderer.on('shell:persist-before-sleep', listener)
+    return () => ipcRenderer.removeListener('shell:persist-before-sleep', listener)
+  },
+  onDisplayResume: (handler) => {
+    const listener = () => handler()
+    ipcRenderer.on('shell:display-resume', listener)
+    return () => ipcRenderer.removeListener('shell:display-resume', listener)
+  },
   respellKick: () => ipcRenderer.invoke('docs:respell-kick'),
   saveDocxAs: (defaultName: string, data: ArrayBuffer, sourcePath?: string | null) =>
     ipcRenderer.invoke('docs:save-as', defaultName, data, sourcePath ?? null),

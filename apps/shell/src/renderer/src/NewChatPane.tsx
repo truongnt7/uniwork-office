@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import type { PracticeId, WorkbenchModuleId } from '@uniwork/practice-core'
-import { AiTypingIndicator, IconStop } from '@genoffice/ui'
+import { AiTypingIndicator, Dropdown, IconStop } from '@genoffice/ui'
+import { ProviderLogo } from './provider-logos'
 import { applyAgentIntent, undoAgentAddItem } from './agent-intent-apply'
 import { emitAgentIntentNavigate } from './agent-intent-bus'
 import { buildMyAiContextPack, type MyAiContextPack } from './context-manager'
@@ -28,6 +29,7 @@ import {
 import { clearMyAiHistory, loadMyAiHistory, saveMyAiHistory } from './my-ai-history'
 import {
   exportSummaryArtifact,
+  exportSummaryAsSlides,
   MyAiSummaryCard,
   shareSummaryArtifact,
 } from './MyAiSummaryCard'
@@ -72,12 +74,18 @@ import { streamMyAiReply } from './my-ai-stream'
 import {
   aiSettingsReady,
   buyAiPlanLabel,
+  looksLikeCreditsExhausted,
   looksLikeMissingAiActivation,
+  looksLikeRetryableAiError,
+  openAiSettingsLabel,
+  retryAiLabel,
   softAiActivationMessage,
+  softCreditsMessage,
 } from './my-ai-activation'
 import {
   NATURAL_CHAT_MODEL_OPTIONS,
   naturalChatModelLabel,
+  naturalChatModelProviderId,
   naturalChatSystemPrompt,
   naturalChatUserPayload,
   normalizeNaturalChatModel,
@@ -86,6 +94,12 @@ import {
   withNaturalChatModel,
   type MyAiNaturalChatPref,
 } from './my-ai-natural-chat'
+import {
+  classifyMyAiRoute,
+  shouldAttemptLlmClassify,
+  shouldSkipClassifyForLocalTopic,
+} from './my-ai-classify'
+import { maybeLearnMyAiMemory, memoryLinesForPrompt } from './my-ai-memory'
 import type { AiSettings } from '@genoffice/ai-provider/browser'
 import type { ActiveOfficeTab, RecentEntry } from '../../shared/home-api'
 import { FILE_EXCERPT_MAX_FILES, formatExcerptsForPrompt } from '../../shared/file-excerpt'
@@ -310,10 +324,14 @@ async function createOfficeFile(app: OfficeApp, brief?: string): Promise<string>
 
 function enrichBrief(brief: string, pack: MyAiContextPack, userText: string): string {
   const personal = pack.chunks.find((c) => c.id === 'personal')?.text
+  const memory = pack.chunks.find((c) => c.id === 'memory')?.text
   const wantCtx = wantsLocalContext(userText) || wantsLocalContext(brief)
   const parts: string[] = [brief]
   if (personal) {
     parts.push(`\n---\n${personal}`)
+  }
+  if (memory) {
+    parts.push(`\n---\n${memory}`)
   }
   if (wantCtx) {
     const ctx = pack.plainText.slice(0, 1_800)
@@ -365,6 +383,13 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
   const skipPersistRef = useRef(false)
   /** Blocks double Enter/Send before `busy` flips true. */
   const submitLockRef = useRef(false)
+  /** Last failed AI turn — “Retry” re-runs without retyping. */
+  const pendingRetryRef = useRef<{
+    system: string
+    user: string
+    images?: Awaited<ReturnType<typeof collectImageAttachments>>
+    modelOverride?: string
+  } | null>(null)
   const practiceChips = useMemo(() => practiceMyAiChips(practiceId), [practiceId])
   const [activeTab, setActiveTab] = useState<ActiveOfficeTab | null>(null)
   const [auditOpen, setAuditOpen] = useState(false)
@@ -376,6 +401,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
   const [naturalChatModel, setNaturalChatModel] = useState('')
   const naturalChatModelRef = useRef('')
   const [settingsModelLabel, setSettingsModelLabel] = useState('')
+  const [settingsProviderId, setSettingsProviderId] = useState('openrouter')
 
   const refreshActiveTab = () => {
     void window.aiOffice.activeOfficeTab?.().then((tab) => setActiveTab(tab))
@@ -414,6 +440,9 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       const p = s.provider
       const model = s.providers?.[p]?.model?.trim() || ''
       setSettingsModelLabel(model)
+      setSettingsProviderId(
+        model.includes('/') ? naturalChatModelProviderId(model) : p || 'openrouter',
+      )
     })
   }
 
@@ -571,6 +600,81 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     value: 'account',
   })
 
+  const aiSettingsChoice = (): ChatChoice => ({
+    id: 'open-ai-settings',
+    label: openAiSettingsLabel(vi),
+    kind: 'open_settings',
+    value: 'aiModel',
+  })
+
+  const retryAiChoice = (): ChatChoice => ({
+    id: 'retry-ai',
+    label: retryAiLabel(vi),
+    kind: 'confirm',
+    value: 'retry-ai',
+  })
+
+  const loadMyAiPack = async (): Promise<{
+    pack: MyAiContextPack
+    entries: RecentEntry[]
+  }> => {
+    const entries = await loadRecents()
+    const officeTab = await window.aiOffice.activeOfficeTab?.()
+    let excerpt: string | undefined
+    if (officeTab?.path) {
+      try {
+        const excerpts = (await window.aiOffice.fileExcerpts?.([officeTab.path])) ?? []
+        const ok = excerpts.find((e) => e.status === 'ok' && e.excerpt)
+        excerpt = ok?.excerpt?.trim().slice(0, 700)
+      } catch {
+        /* excerpt optional */
+      }
+    }
+    const pack = buildMyAiContextPack(practiceId, {
+      vi,
+      recents: entries.slice(0, 8).map((e) => ({
+        name: e.name,
+        ext: e.ext,
+        mtimeMs: e.mtimeMs,
+      })),
+      activeOffice: officeTab
+        ? {
+            kind: officeTab.kind,
+            title: officeTab.title,
+            ...(officeTab.path ? { path: officeTab.path } : {}),
+            ...(excerpt ? { excerpt } : {}),
+          }
+        : null,
+      memoryLines: memoryLinesForPrompt(practiceId),
+    })
+    return { pack, entries }
+  }
+
+  const createFollowUpChoices = (app: OfficeApp, brief?: string): ChatChoice[] => {
+    const name = officeAppLabel(app, vi)
+    const topic = (brief?.split('\n---\n')[0] ?? '').trim()
+    const choices: ChatChoice[] = [
+      {
+        id: 'continue-created',
+        label: label('Tiếp tục trên file này', 'Continue on this file'),
+        kind: 'prompt',
+        value: label('Tiếp tục trên file đang mở: ', 'Continue on the open file: '),
+      },
+    ]
+    if (topic.length >= 4) {
+      choices.push({
+        id: 'revise-brief',
+        label: label('Sửa brief…', 'Revise brief…'),
+        kind: 'prompt',
+        value:
+          app === 'docs'
+            ? label(`Soạn văn bản Word: ${topic} — `, `Draft a Word doc: ${topic} — `)
+            : label(`Tạo ${name}: ${topic} — `, `Create ${name}: ${topic} — `),
+      })
+    }
+    return choices
+  }
+
   const activationFailure = (
     msgId: string | undefined,
     showBubble: boolean,
@@ -595,6 +699,64 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     return { ok: false, error, messageId: msgId }
   }
 
+  const trustFailure = async (
+    msgId: string | undefined,
+    showBubble: boolean,
+    error: string,
+    retryOpts?: {
+      system: string
+      user: string
+      images?: Awaited<ReturnType<typeof collectImageAttachments>>
+      modelOverride?: string
+    },
+  ): Promise<{ ok: false; error: string; messageId?: string }> => {
+    if (looksLikeMissingAiActivation(error)) {
+      return activationFailure(msgId, showBubble)
+    }
+    let text = error
+    const choices: ChatChoice[] = []
+    if (looksLikeCreditsExhausted(error)) {
+      let trial: Awaited<ReturnType<NonNullable<typeof window.aiOffice.getTrialAiStatus>>> | null =
+        null
+      try {
+        trial = (await window.aiOffice.getTrialAiStatus?.()) ?? null
+      } catch {
+        trial = null
+      }
+      text = softCreditsMessage(
+        vi,
+        trial?.enabled
+          ? { trial: true, remaining: trial.creditRemaining }
+          : undefined,
+      )
+      choices.push(buyAiChoice(), aiSettingsChoice())
+    } else if (looksLikeRetryableAiError(error) && retryOpts) {
+      pendingRetryRef.current = retryOpts
+      choices.push(retryAiChoice(), aiSettingsChoice())
+      text = vi
+        ? `${error.trim() || 'Lỗi AI tạm thời.'}\n\nBạn có thể thử lại.`
+        : `${error.trim() || 'Temporary AI error.'}\n\nYou can retry.`
+    }
+    if (!showBubble) return { ok: false, error: text, messageId: msgId }
+    if (msgId) {
+      patchMessage(msgId, {
+        text,
+        streaming: false,
+        role: 'system',
+        ...(choices.length > 0
+          ? { choices, choicesResolved: false }
+          : {}),
+      })
+      return { ok: false, error: text, messageId: msgId }
+    }
+    const id = push({
+      role: 'system',
+      text,
+      ...(choices.length > 0 ? { choices } : {}),
+    })
+    return { ok: false, error: text, messageId: id }
+  }
+
   const runStreamedAi = async (opts: {
     system: string
     user: string
@@ -613,6 +775,12 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
 
     const provider = settings.provider
     const model = settings.providers?.[provider]?.model
+    const retryPayload = {
+      system: opts.system,
+      user: opts.user,
+      images: opts.images,
+      modelOverride: opts.modelOverride,
+    }
 
     if (!aiSettingsReady(settings)) {
       return activationFailure(opts.messageId, showBubble)
@@ -631,22 +799,22 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
         model,
         ok: Boolean(res.ok),
       })
-      if (!res.ok && looksLikeMissingAiActivation(res.error || '')) {
-        return activationFailure(opts.messageId, showBubble)
+      if (!res.ok) {
+        return trustFailure(opts.messageId, showBubble, res.error || 'AI failed', retryPayload)
       }
       if (!showBubble) return res
       const msgId =
         opts.messageId ??
         push({
-          role: res.ok ? 'assistant' : 'system',
-          text: res.content?.trim() || res.error || '',
+          role: 'assistant',
+          text: res.content?.trim() || '',
           streaming: false,
         })
       if (opts.messageId) {
         patchMessage(msgId, {
-          text: res.content?.trim() || res.error || '',
+          text: res.content?.trim() || '',
           streaming: false,
-          role: res.ok ? 'assistant' : 'system',
+          role: 'assistant',
         })
       }
       return { ...res, messageId: msgId }
@@ -681,8 +849,8 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
         ok: Boolean(result.ok),
         cancelled: result.cancelled,
       })
-      if (!result.ok && looksLikeMissingAiActivation(result.error || '')) {
-        return activationFailure(msgId, showBubble)
+      if (!result.ok && !result.cancelled) {
+        return trustFailure(msgId, showBubble, result.error || 'AI failed', retryPayload)
       }
       const text = result.content?.trim() || result.error || ''
       if (msgId) {
@@ -705,11 +873,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
         model,
         ok: false,
       })
-      if (looksLikeMissingAiActivation(error)) {
-        return activationFailure(msgId, showBubble)
-      }
-      if (msgId) patchMessage(msgId, { text: error, streaming: false, role: 'system' })
-      return { ok: false, error, messageId: msgId }
+      return trustFailure(msgId, showBubble, error, retryPayload)
     }
   }
 
@@ -872,6 +1036,43 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       return
     }
     if (choice.kind === 'confirm') {
+      if (choice.value === 'retry-ai' && pendingRetryRef.current) {
+        const retry = pendingRetryRef.current
+        pendingRetryRef.current = null
+        setBusy(true)
+        void runStreamedAi({
+          system: retry.system,
+          user: retry.user,
+          images: retry.images,
+          modelOverride: retry.modelOverride,
+          showBubble: true,
+        }).finally(() => setBusy(false))
+        return
+      }
+      if (choice.value === 'resume-plan' && pendingResumeRef.current) {
+        const resume = pendingResumeRef.current
+        pendingResumeRef.current = null
+        if (resume.steps.length === 0) return
+        const goalVi = resume.goalVi?.trim() || 'Hoàn thành phần còn lại'
+        const goalEn = resume.goalEn?.trim() || 'Finish the rest'
+        void runRoute(
+          {
+            kind: 'plan',
+            steps: resume.steps,
+            goalVi,
+            goalEn,
+            summaryVi: goalVi,
+            summaryEn: goalEn,
+          },
+          resume.userText,
+          {
+            consentGranted: resume.consentGranted,
+            skipUserPush: true,
+            resumeMode: true,
+          },
+        )
+        return
+      }
       const pending = pendingConsentRef.current
       if (pending?.kind === 'natural-chat-opt-in') {
         void window.aiOffice.setMyAiNaturalChatPref?.('on').then((p) => {
@@ -1133,6 +1334,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
       return {
         text: describeCreate(step.app, mode, brief, usedCtx),
         contextUsed: usedCtx,
+        choices: createFollowUpChoices(step.app, brief),
       }
     }
 
@@ -1431,6 +1633,20 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
           `Switched to “${tab.title}” (${tab.kind}) and queued AI in that tab.`,
         ),
         contextUsed: true,
+        choices: [
+          {
+            id: 'continue-again',
+            label: label('Tiếp tục chỉnh…', 'Continue editing…'),
+            kind: 'prompt' as const,
+            value: label('Tiếp tục trên file đang mở: ', 'Continue on the open file: '),
+          },
+          {
+            id: 'summarize-active',
+            label: label('Tóm tắt file này', 'Summarize this file'),
+            kind: 'prompt' as const,
+            value: label('Tóm tắt file đang mở', 'Summarize the open file'),
+          },
+        ],
       }
     }
 
@@ -1619,15 +1835,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
         return
       }
 
-      const entries = await loadRecents()
-      const pack = buildMyAiContextPack(practiceId, {
-        vi,
-        recents: entries.slice(0, 8).map((e) => ({
-          name: e.name,
-          ext: e.ext,
-          mtimeMs: e.mtimeMs,
-        })),
-      })
+      const { pack, entries } = await loadMyAiPack()
 
       if (route.kind === 'plan') {
         const stepOuts: StepOutcome[] = []
@@ -1651,7 +1859,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
           if (out.pausePlan) {
             paused = true
             const remaining = route.steps.slice(i + 1)
-            if (remaining.length > 0 && out.choices?.some((c) => c.kind === 'open_path')) {
+            if (remaining.length > 0) {
               pendingResumeRef.current = {
                 steps: remaining,
                 userText,
@@ -1672,6 +1880,10 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
         const lastOut = stepOuts[stepOuts.length - 1]
         const pickingFile =
           paused && Boolean(lastOut?.choices?.some((c) => c.kind === 'open_path'))
+        const canResume =
+          paused &&
+          Boolean(pendingResumeRef.current?.steps.length) &&
+          !pickingFile
         let headline: string
         let showDetail: boolean
         if (pickingFile) {
@@ -1701,6 +1913,21 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
           headline = describeRouteDone(route, vi, {
             completedSteps: route.steps.length,
           })
+          const checklist = route.steps.map((s, idx) => {
+            const out = stepOuts[idx]
+            const ok = out && !out.pausePlan
+            const mark = ok ? '✓' : '·'
+            const name =
+              s.kind === 'create_file' || s.kind === 'ask_create'
+                ? officeAppLabel(s.app, vi)
+                : s.kind === 'workbench'
+                  ? workbenchModuleLabel(
+                      s.intent.target.kind === 'module' ? s.intent.target.id : s.kind,
+                      vi,
+                    )
+                  : s.kind.replace(/_/g, ' ')
+            return `${mark} ${name}`
+          })
           const detailLines = stepOuts
             .map((o) => o.text.trim())
             .filter(Boolean)
@@ -1712,6 +1939,9 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
           )
           const text =
             headline +
+            (checklist.length > 0
+              ? `\n\n${label('Đã làm:', 'Done:')}\n${checklist.join('\n')}`
+              : '') +
             (showDetail && detailLines.length > 0
               ? `\n\n${label('Chi tiết:', 'Details:')}\n${detailLines.map((t) => `• ${t}`).join('\n')}`
               : '')
@@ -1724,11 +1954,20 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
           return
         }
 
+        const pausedChoices = mergePlanChoices(stepOuts) ?? []
+        if (canResume) {
+          pausedChoices.unshift({
+            id: 'resume-plan',
+            label: label('Làm tiếp các bước còn lại', 'Continue remaining steps'),
+            kind: 'confirm',
+            value: 'resume-plan',
+          })
+        }
         push({
           role: 'assistant',
           text: headline,
           contextUsed,
-          choices: mergePlanChoices(stepOuts),
+          choices: pausedChoices.length > 0 ? pausedChoices : undefined,
         })
         return
       }
@@ -2166,11 +2405,49 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
     turnAttachmentsRef.current = sentAtts
     setAttachments([])
     setInput('')
-    const route = routeMyAiText(text, {
+    maybeLearnMyAiMemory(practiceId, text)
+    const keywordRoute = routeMyAiText(text, {
       practiceId,
       hasAttachments: sentAtts.length > 0,
     })
-    void runRoute(route, text, { attachments: sentAtts }).finally(() => {
+    void (async () => {
+      let route = keywordRoute
+      try {
+        if (aiReady === true && shouldAttemptLlmClassify(keywordRoute)) {
+          const localPre = answerMyAiLocally(
+            text,
+            buildLocalAnswerSnapshot(
+              practiceId,
+              (await loadRecents()).slice(0, 8).map((e) => ({
+                name: e.name,
+                ext: e.ext,
+                mtimeMs: e.mtimeMs,
+              })),
+            ),
+            vi,
+          )
+          if (!shouldSkipClassifyForLocalTopic(localPre.topic)) {
+            setBusy(true)
+            const { pack } = await loadMyAiPack()
+            const classified = await classifyMyAiRoute({
+              userText: text,
+              contextPlain: pack.plainText,
+              vi,
+              hasAttachments: sentAtts.length > 0,
+            })
+            if (classified) {
+              // Prefer a concrete LLM route; keep keyword when LLM only says unknown.
+              if (!(classified.kind === 'unknown' && keywordRoute.kind !== 'unknown')) {
+                route = classified
+              }
+            }
+          }
+        }
+      } catch {
+        route = keywordRoute
+      }
+      await runRoute(route, text, { attachments: sentAtts })
+    })().finally(() => {
       submitLockRef.current = false
     })
   }
@@ -2363,6 +2640,7 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
                   <MyAiSummaryCard
                     summary={m.summary}
                     vi={vi}
+                    onSlides={() => exportSummaryAsSlides(m.summary!, vi)}
                     onExport={() => exportSummaryArtifact(m.summary!, vi)}
                     onShare={() => shareSummaryArtifact(m.summary!, vi)}
                   />
@@ -2495,29 +2773,52 @@ export function NewChatPane({ practiceId, ensureWorkbench }: Props): ReactElemen
             {naturalChatPref === 'on' && aiReady ? (
               <label className="new-chat-model-pick">
                 <span className="new-chat-model-pick-label">{label('Model', 'Model')}</span>
-                <select
-                  className="new-chat-model-select"
+                <Dropdown
+                  className="new-chat-model-dd"
                   disabled={busy}
                   value={naturalChatModel}
-                  aria-label={label('Model chat tự nhiên', 'Natural chat model')}
-                  onChange={(e) => {
-                    const next = normalizeNaturalChatModel(e.target.value)
+                  ariaLabel={label('Model chat tự nhiên', 'Natural chat model')}
+                  options={[
+                    {
+                      value: '',
+                      label: settingsModelLabel
+                        ? label(
+                            `Mặc định (${naturalChatModelLabel(settingsModelLabel) || settingsModelLabel})`,
+                            `Default (${naturalChatModelLabel(settingsModelLabel) || settingsModelLabel})`,
+                          )
+                        : label('Mặc định (Cài đặt)', 'Default (Settings)'),
+                      render: (
+                        <>
+                          <ProviderLogo id={settingsProviderId} />
+                          <span className="new-chat-model-name">
+                            {settingsModelLabel
+                              ? label(
+                                  `Mặc định · ${naturalChatModelLabel(settingsModelLabel) || settingsModelLabel}`,
+                                  `Default · ${naturalChatModelLabel(settingsModelLabel) || settingsModelLabel}`,
+                                )
+                              : label('Mặc định (Cài đặt)', 'Default (Settings)')}
+                          </span>
+                        </>
+                      ),
+                    },
+                    ...NATURAL_CHAT_MODEL_OPTIONS.map((m) => ({
+                      value: m,
+                      label: naturalChatModelLabel(m),
+                      render: (
+                        <>
+                          <ProviderLogo id={naturalChatModelProviderId(m)} />
+                          <span className="new-chat-model-name">{naturalChatModelLabel(m)}</span>
+                        </>
+                      ),
+                    })),
+                  ]}
+                  onPick={(v) => {
+                    const next = normalizeNaturalChatModel(v)
                     naturalChatModelRef.current = next
                     setNaturalChatModel(next)
                     void window.aiOffice.setMyAiNaturalChatModel?.(next)
                   }}
-                >
-                  <option value="">
-                    {settingsModelLabel
-                      ? label(`Mặc định (${settingsModelLabel})`, `Default (${settingsModelLabel})`)
-                      : label('Mặc định (Cài đặt)', 'Default (Settings)')}
-                  </option>
-                  {NATURAL_CHAT_MODEL_OPTIONS.map((m) => (
-                    <option key={m} value={m} title={m}>
-                      {naturalChatModelLabel(m)}
-                    </option>
-                  ))}
-                </select>
+                />
               </label>
             ) : null}
             <span>

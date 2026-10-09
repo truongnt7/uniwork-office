@@ -191,6 +191,60 @@ export class TabManager {
     if (active?.view) active.view.setBounds(this.contentBounds())
   }
 
+  /**
+   * macOS sleep/wake (and similar GPU resets) can leave WebContentsView
+   * compositors blank until a resize — a known Chromium/Electron failure mode,
+   * worse with backgroundThrottling:false. Nudge bounds + re-show the active
+   * view so the LocalSurfaceId re-embeds without reloading (and losing) the tab.
+   */
+  refreshCompositing(): void {
+    if (this.shellWindow.isDestroyed()) return
+    const bounds = this.contentBounds()
+    for (const tab of this.tabs) {
+      const view = tab.view
+      if (!view || view.webContents.isDestroyed()) continue
+      const visible = tab.id === this.activeId
+      view.setVisible(visible)
+      if (!visible) continue
+      view.setBounds({ ...bounds, width: Math.max(0, bounds.width - 1) })
+      view.setBounds(bounds)
+      try {
+        view.webContents.invalidate()
+      } catch {
+        /* invalidate is offscreen-oriented on some builds — bounds nudge is enough */
+      }
+      if (!view.webContents.isDestroyed()) {
+        view.webContents.send('shell:display-resume')
+      }
+    }
+    // Shell Home (no WebContentsView) still needs a paint after GPU reset
+    if (!this.shellWindow.webContents.isDestroyed()) {
+      try {
+        this.shellWindow.webContents.invalidate()
+      } catch {
+        /* same as above */
+      }
+    }
+  }
+
+  /** Best-effort persist before sleep so a blank compositor / crashed GPU does not lose edits. */
+  requestPersistBeforeSleep(): void {
+    for (const tab of this.tabs) {
+      const view = tab.view
+      if (!view || view.webContents.isDestroyed()) continue
+      if (
+        tab.kind === 'docs' ||
+        tab.kind === 'sheets' ||
+        tab.kind === 'slides' ||
+        tab.kind === 'markdown' ||
+        tab.kind === 'html' ||
+        tab.kind === 'pdf'
+      ) {
+        view.webContents.send('shell:persist-before-sleep')
+      }
+    }
+  }
+
   /** files open in any tab, for the open-documents registry */
   openFilePaths(): string[] {
     return this.tabs.flatMap((t) => (t.filePath ? [t.filePath] : []))

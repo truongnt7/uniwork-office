@@ -319,6 +319,7 @@ function AiModelPane({ t }: { t: TFunc }) {
   const [testResult, setTestResult] = useState<{ ok: boolean; error?: string } | null>(null)
   const [hubStatus, setHubStatus] = useState<string | null>(null)
   const [hubChecking, setHubChecking] = useState(false)
+  const [trialBanner, setTrialBanner] = useState<string | null>(null)
   /** free-typed value of the output-cap field; committed (and clamped) on blur */
   const [maxTokensDraft, setMaxTokensDraft] = useState<string | null>(null)
 
@@ -356,18 +357,36 @@ function AiModelPane({ t }: { t: TFunc }) {
       }
       const hubKey =
         s.providers.genspark?.apiKey?.trim() || s.providers.openrouter?.apiKey?.trim() || ''
+      void window.aiOffice.getTrialAiStatus?.().then((trial) => {
+        if (!alive || !trial?.enabled) {
+          if (alive) setTrialBanner(null)
+          return
+        }
+        const rem = Math.round(trial.creditRemaining).toLocaleString()
+        const all = Math.round(trial.creditAllowance).toLocaleString()
+        setTrialBanner(
+          lang === 'vi'
+            ? `AI dùng thử UniWork đã sẵn sàng — còn ${rem} / ${all} Credit. Không cần dán API key.`
+            : `UniWork trial AI is ready — ${rem} / ${all} Credits left. No API key to paste.`,
+        )
+      })
       if (
         (s.provider === 'openrouter' || s.provider === 'genspark') &&
-        hubKey &&
         window.aiOffice.probeOpenRouterKey
       ) {
         setHubChecking(true)
+        // Empty hubKey is OK: main process returns the managed trial Credit budget.
         void window.aiOffice
           .probeOpenRouterKey(hubKey)
           .then((r) => {
             if (!alive) return
             if (r.ok && r.summary) setHubStatus(r.summary)
-            else if (r.error) setHubStatus(r.error)
+            else if (r.ok && r.limitRemaining != null) {
+              const rem = Math.round((r.limitRemaining as number) * 1000).toLocaleString()
+              setHubStatus(
+                lang === 'vi' ? `Dùng thử · còn ≈ ${rem} Credit` : `Trial · ≈ ${rem} Credits left`,
+              )
+            } else if (r.error) setHubStatus(r.error)
           })
           .catch(() => undefined)
           .finally(() => {
@@ -523,6 +542,11 @@ function AiModelPane({ t }: { t: TFunc }) {
       <div className="set-field-desc set-ai-note">
         {isGenspark ? t('setAiGensparkHint') : isCodex ? t('setAiCodexHint') : t('setAiByokNote')}
       </div>
+      {trialBanner ? (
+        <div className="set-field-desc set-ai-note" role="status" style={{ fontWeight: 600 }}>
+          {trialBanner}
+        </div>
+      ) : null}
       <div className="set-field">
         <div className="set-field-text">
           <label className="set-field-label">{t('setAiModelId')}</label>

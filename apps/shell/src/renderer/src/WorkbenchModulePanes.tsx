@@ -16,6 +16,9 @@ import { EmailPane } from './EmailPane'
 import { NotesPane } from './NotesPane'
 import { PetsPane } from './PetsPane'
 import { TasksPane } from './TasksPane'
+import { ProjectsPane } from './ProjectsPane'
+import { CrmPane } from './CrmPane'
+import { FundPane } from './FundPane'
 import { ensureTeacherFormSeeds } from './teacher-form-seeds'
 import {
   WbDeleteBtn,
@@ -112,7 +115,13 @@ export function WorkbenchModulePane({
     return <p className="teacher-empty">{label('Module không tồn tại.', 'Unknown module.')}</p>
   }
 
-  const hideChrome = moduleId === 'desk' || moduleId === 'notes' || moduleId === 'email'
+  const hideChrome =
+    moduleId === 'desk' ||
+    moduleId === 'notes' ||
+    moduleId === 'email' ||
+    moduleId === 'project-mgmt' ||
+    moduleId === 'crm' ||
+    moduleId === 'fund'
 
   return (
     <section
@@ -143,6 +152,9 @@ export function WorkbenchModulePane({
         />
       )}
       {moduleId === 'tasks' && <TasksPane practiceId={practiceId} vi={vi} />}
+      {moduleId === 'project-mgmt' && <ProjectsPane practiceId={practiceId} vi={vi} />}
+      {moduleId === 'crm' && <CrmPane practiceId={practiceId} vi={vi} />}
+      {moduleId === 'fund' && <FundPane practiceId={practiceId} vi={vi} />}
       {moduleId === 'notes' && <NotesPane practiceId={practiceId} vi={vi} />}
       {moduleId === 'email' && <EmailPane practiceId={practiceId} vi={vi} />}
       {moduleId === 'assistant' && <AssistantPane vi={vi} packId={packId} />}

@@ -270,6 +270,8 @@ export function mapServerActivationError(code: string | undefined, fallback?: st
     case 'already_used':
     case 'device_mismatch':
       return 'This code is already used on another device.'
+    case 'seat_full':
+      return 'This code has reached its device limit.'
     case 'revoked':
     case 'expired':
       return 'This activation code is no longer valid.'

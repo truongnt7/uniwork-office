@@ -5027,6 +5027,300 @@ body.vib .home {
   text-align: right;
 }
 
+/* ---- Project management (local PM) ---- */
+.wb-pm {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  height: 100%;
+}
+
+.wb-pm-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 14px;
+  min-height: 0;
+  flex: 1;
+}
+
+@media (max-width: 900px) {
+  .wb-pm-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.wb-pm-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 12px;
+  min-height: 0;
+}
+
+.wb-pm-sidebar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+}
+
+.wb-pm-sidebar-head .btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.wb-pm-project-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wb-pm-project-item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wb-pm-project-item:hover {
+  background: var(--hover);
+}
+
+.wb-pm-project-item.active {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.wb-pm-project-item strong {
+  font-size: 13px;
+}
+
+.wb-pm-project-item small,
+.wb-pm-empty-side {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.wb-pm-conn-tab {
+  margin-top: auto;
+  border: 1px dashed var(--border);
+  background: transparent;
+  border-radius: 12px;
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.wb-pm-conn-tab:hover,
+.wb-pm-conn-tab.active {
+  color: var(--text);
+  border-style: solid;
+  background: var(--hover);
+}
+
+.wb-pm-main {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wb-pm-project-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wb-pm-project-title {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--text);
+}
+
+.wb-pm-project-meta {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.wb-pm-project-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.wb-pm-conn-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.wb-pm-conn-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.wb-pm-conn-row strong {
+  display: block;
+  color: var(--text);
+}
+
+.wb-pm-conn-row span {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.wb-pm-conn-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.wb-pm-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.wb-pm-field input,
+.wb-pm-field select,
+.wb-pm-field textarea {
+  border: 1px solid var(--border);
+  background: var(--bg-content, var(--surface));
+  color: var(--text);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.wb-pm-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.wb-pm-path-row {
+  display: flex;
+  gap: 8px;
+}
+
+.wb-pm-path-row input {
+  flex: 1;
+}
+
+.wb-pm-hint {
+  margin: 0 0 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.wb-pm-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: color-mix(in srgb, var(--text) 28%, transparent);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+
+.wb-pm-modal {
+  width: min(480px, 100%);
+  max-height: min(90vh, 720px);
+  overflow: auto;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow-btn);
+}
+
+.wb-pm-modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.wb-pm-modal-body {
+  padding: 16px;
+}
+
+.wb-pm-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.wb-pm-subpanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+}
+
+.wb-crm,
+.wb-fund {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  flex: 1;
+  padding: 4px 2px 12px;
+}
+
+.wb-crm-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
 .wb-tasks-donut {
   width: 100%;
   height: auto;

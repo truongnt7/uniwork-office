@@ -3,13 +3,16 @@ import type { PracticeId } from './types.js'
 /**
  * Optional Workbench modules (pinned via Tab +).
  * Pillars (knowledge / materials / skills / compose) are also opt-in via Tab +.
- * Core always-on modules: My Space / Tasks / Calendar / Forms.
- * "Projects" is intentionally omitted — it maps to the Knowledge pillar.
+ * Core always-on: My Space / Tasks / Project mgmt / Calendar / Forms.
+ * Knowledge pillar “Projects” (packs) is separate from `project-mgmt` (local PM board).
  */
 export type WorkbenchModuleId =
   | 'desk'
   | 'calendar'
   | 'tasks'
+  | 'project-mgmt'
+  | 'crm'
+  | 'fund'
   | 'notes'
   | 'email'
   | 'assistant'
@@ -66,6 +69,30 @@ export const WORKBENCH_MODULES: readonly WorkbenchModuleDef[] = [
     labelEn: 'Tasks',
     hintVi: 'Tự quản trị việc cá nhân — List, Kanban, Lịch, Dashboard',
     hintEn: 'Personal task board — list, kanban, calendar, dashboard',
+    available: true,
+  },
+  {
+    id: 'project-mgmt',
+    labelVi: 'Quản lý dự án',
+    labelEn: 'Projects',
+    hintVi: 'Dự án local — Kanban, nhật ký, tài liệu, chủ đầu tư, thanh toán',
+    hintEn: 'Local projects — kanban, diary, docs, investors, payments',
+    available: true,
+  },
+  {
+    id: 'crm',
+    labelVi: 'Quan hệ',
+    labelEn: 'CRM',
+    hintVi: 'Danh bạ CRM / đối tác trên máy — xuất Excel',
+    hintEn: 'Local CRM contacts — Excel export',
+    available: true,
+  },
+  {
+    id: 'fund',
+    labelVi: 'Quỹ',
+    labelEn: 'Fund',
+    hintVi: 'Ngân quỹ / ví local — thu chi, số dư, Excel',
+    hintEn: 'Local fund wallet — in/out, balance, Excel',
     available: true,
   },
   {
@@ -248,11 +275,15 @@ export const WORKBENCH_MODULES: readonly WorkbenchModuleDef[] = [
 
 /**
  * Always-on Workbench tabs (cannot be removed via Tab ×).
- * Order: My Space → Tasks → Calendar → Forms. Everything else is opt-in via +.
+ * Order: My Space → Tasks → Projects → CRM → Fund → Calendar → Forms.
+ * Everything else is opt-in via +.
  */
 export const CORE_PINNED_MODULES: readonly WorkbenchModuleId[] = [
   'desk',
   'tasks',
+  'project-mgmt',
+  'crm',
+  'fund',
   'calendar',
   'forms',
 ]
@@ -318,7 +349,18 @@ export const WORKBENCH_SPACE_GROUPS: readonly WorkbenchSpaceGroup[] = [
     id: 'core',
     labelVi: 'Chính',
     labelEn: 'Core',
-    moduleIds: ['desk', 'tasks', 'calendar', 'forms', 'notes', 'email', 'assistant'],
+    moduleIds: [
+      'desk',
+      'tasks',
+      'project-mgmt',
+      'crm',
+      'fund',
+      'calendar',
+      'forms',
+      'notes',
+      'email',
+      'assistant',
+    ],
   },
   {
     id: 'life',

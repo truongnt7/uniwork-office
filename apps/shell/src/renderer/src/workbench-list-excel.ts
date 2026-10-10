@@ -34,6 +34,19 @@ import type {
   WbTravelTrip,
 } from './workbench-pins'
 import { buildCsv, exportCsvAsXlsx, exportTableAsXlsx, normalizeExportBase } from './workbench-excel-io'
+import {
+  fundAccountBalance,
+  type WbCrmContact,
+  type WbFundAccount,
+  type WbFundTxn,
+} from './workbench-crm-fund'
+import type {
+  WbPmCard,
+  WbPmDiaryEntry,
+  WbPmDoc,
+  WbPmInvestor,
+  WbPmPayment,
+} from './workbench-projects'
 
 export async function exportCsvFile(
   csv: string,
@@ -439,6 +452,136 @@ export function exportFormsCsv(items: readonly WbFormItem[]): string {
   return buildCsv(
     ['STT', 'Tiêu đề', 'File', 'Ghi chú'],
     items.map((it, i) => [i + 1, it.title, it.fileName ?? '', it.note ?? '']),
+  )
+}
+
+export function exportCrmContactsCsv(items: readonly WbCrmContact[]): string {
+  return buildCsv(
+    ['STT', 'Tên', 'Tổ chức', 'Vai trò', 'SĐT', 'Email', 'Ghi chú'],
+    items.map((it, i) => [
+      i + 1,
+      it.name,
+      it.org ?? '',
+      it.role ?? '',
+      it.phone ?? '',
+      it.email ?? '',
+      it.note ?? '',
+    ]),
+  )
+}
+
+export function exportFundAccountsCsv(
+  accounts: readonly WbFundAccount[],
+  txns: readonly WbFundTxn[],
+): string {
+  return buildCsv(
+    ['STT', 'Tên', 'Tiền tệ', 'Số dư đầu', 'Số dư hiện tại', 'Ghi chú'],
+    accounts.map((a, i) => [
+      i + 1,
+      a.name,
+      a.currency,
+      a.openingBalance,
+      fundAccountBalance(a, txns),
+      a.note ?? '',
+    ]),
+  )
+}
+
+export function exportFundTxnsCsv(
+  txns: readonly WbFundTxn[],
+  accounts: readonly WbFundAccount[],
+): string {
+  const nameBy = new Map(accounts.map((a) => [a.id, a.name]))
+  return buildCsv(
+    ['STT', 'Tài khoản', 'Loại', 'Số tiền', 'Ngày', 'Hạng mục', 'Đối tác', 'Ghi chú'],
+    txns.map((t, i) => [
+      i + 1,
+      nameBy.get(t.accountId) ?? t.accountId,
+      t.type,
+      t.amount,
+      t.date,
+      t.category ?? '',
+      t.counterparty ?? '',
+      t.note ?? '',
+    ]),
+  )
+}
+
+export function exportPmInvestorsCsv(items: readonly WbPmInvestor[]): string {
+  return buildCsv(
+    ['STT', 'Tên', 'Tổ chức', 'SĐT', 'Email', '% sở hữu', 'Cam kết', 'Tiền tệ', 'Ghi chú'],
+    items.map((it, i) => [
+      i + 1,
+      it.name,
+      it.org ?? '',
+      it.phone ?? '',
+      it.email ?? '',
+      it.sharePercent ?? '',
+      it.committedAmount ?? '',
+      it.currency ?? 'VND',
+      it.note ?? '',
+    ]),
+  )
+}
+
+export function exportPmPaymentsCsv(items: readonly WbPmPayment[]): string {
+  return buildCsv(
+    ['STT', 'Tiêu đề', 'Số tiền', 'Tiền tệ', 'Hạn', 'Đã trả', 'Trạng thái', 'Đối tác', 'Ghi chú'],
+    items.map((it, i) => [
+      i + 1,
+      it.title,
+      it.amount,
+      it.currency ?? 'VND',
+      it.dueDate ?? '',
+      it.paidAt ?? '',
+      it.status,
+      it.counterparty ?? '',
+      it.note ?? '',
+    ]),
+  )
+}
+
+export function exportPmCardsCsv(items: readonly WbPmCard[]): string {
+  return buildCsv(
+    ['STT', 'Tiêu đề', 'Trạng thái', 'Ưu tiên', 'Hạn', 'Người làm', 'Ghi chú'],
+    items.map((it, i) => [
+      i + 1,
+      it.title,
+      it.status,
+      it.priority ?? '',
+      it.dueDate ?? '',
+      it.assignee ?? '',
+      it.description ?? '',
+    ]),
+  )
+}
+
+export function exportPmDiaryCsv(items: readonly WbPmDiaryEntry[]): string {
+  return buildCsv(
+    ['STT', 'Ngày', 'Thời tiết', 'Hạng mục / khu vực', 'Nội dung', 'Nhân lực', 'Tiến độ', 'Người ghi'],
+    items.map((it, i) => [
+      i + 1,
+      it.date,
+      it.weather ?? '',
+      it.workArea ?? '',
+      it.content,
+      it.workforce ?? '',
+      it.progress ?? '',
+      it.author ?? '',
+    ]),
+  )
+}
+
+export function exportPmDocsCsv(items: readonly WbPmDoc[]): string {
+  return buildCsv(
+    ['STT', 'Tiêu đề', 'Loại', 'File', 'Ghi chú'],
+    items.map((it, i) => [
+      i + 1,
+      it.title,
+      it.category ?? '',
+      it.fileName ?? it.filePath ?? '',
+      it.note ?? '',
+    ]),
   )
 }
 

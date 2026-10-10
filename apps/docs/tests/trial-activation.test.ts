@@ -25,6 +25,7 @@ describe('trial activation codes', () => {
     expect(mapServerActivationError('invalid')).toMatch(/not recognized/i)
     expect(mapServerActivationError('rate_limited')).toMatch(/too many/i)
     expect(mapServerActivationError('bad_device')).toMatch(/device/i)
+    expect(mapServerActivationError('seat_full')).toMatch(/device limit/i)
   })
 })
 

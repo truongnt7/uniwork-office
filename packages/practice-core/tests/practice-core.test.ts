@@ -85,6 +85,9 @@ describe('practice-core', () => {
         'desk',
         'calendar',
         'tasks',
+        'project-mgmt',
+        'crm',
+        'fund',
         'notes',
         'email',
         'assistant',
@@ -109,7 +112,7 @@ describe('practice-core', () => {
         'questions',
       ]),
     )
-    const core = ['desk', 'tasks', 'calendar', 'forms']
+    const core = ['desk', 'tasks', 'project-mgmt', 'crm', 'fund', 'calendar', 'forms']
     expect(defaultPinnedModules('principal')).toEqual(core)
     expect(defaultPinnedModules('legal')).toEqual(core)
     expect(defaultPinnedModules('teacher')).toEqual([
@@ -120,10 +123,15 @@ describe('practice-core', () => {
     ])
     expect(defaultPinnedModules('construction')).toEqual(core)
     expect(isCorePinnedModule('desk')).toBe(true)
+    expect(isCorePinnedModule('crm')).toBe(true)
+    expect(isCorePinnedModule('fund')).toBe(true)
     expect(isCorePinnedModule('clients')).toBe(false)
     expect(ensureCorePinnedModules(['desk', 'clients'])).toEqual([
       'desk',
       'tasks',
+      'project-mgmt',
+      'crm',
+      'fund',
       'calendar',
       'forms',
       'clients',

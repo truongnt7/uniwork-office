@@ -101,6 +101,41 @@ const BADGE: Record<IconId, { bg: string; glyph: ReactElement }> = {
       </>
     ),
   },
+  'project-mgmt': {
+    bg: '#0EA5E9',
+    glyph: (
+      <>
+        <rect x="5.5" y="6" width="5" height="12" rx="1.2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+        <rect x="13.5" y="6" width="5" height="7.5" rx="1.2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+        <path d="M7.2 9h1.6M7.2 12h1.6M15.2 9h1.6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      </>
+    ),
+  },
+  crm: {
+    bg: '#8B5CF6',
+    glyph: (
+      <>
+        <circle cx="9" cy="9" r="2.4" stroke="currentColor" strokeWidth="1.5" fill="none" />
+        <circle cx="15.5" cy="9.5" r="1.8" stroke="currentColor" strokeWidth="1.4" fill="none" />
+        <path
+          d="M5.5 17c.6-2.4 2.2-3.6 3.5-3.6S11.9 14.6 12.5 17M13.2 16.2c.4-1.5 1.4-2.3 2.3-2.3s1.8.7 2.2 2"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+        />
+      </>
+    ),
+  },
+  fund: {
+    bg: '#059669',
+    glyph: (
+      <>
+        <rect x="5.5" y="7" width="13" height="10" rx="2" stroke="currentColor" strokeWidth="1.5" fill="none" />
+        <circle cx="12" cy="12" r="2.2" stroke="currentColor" strokeWidth="1.4" fill="none" />
+        <path d="M8 9.2h1.6M14.4 14.8H16" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+      </>
+    ),
+  },
   notes: {
     bg: '#5B7CFA',
     glyph: (

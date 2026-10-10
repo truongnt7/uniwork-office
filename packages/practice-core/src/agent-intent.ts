@@ -95,6 +95,31 @@ const MODULE_KEYWORDS: readonly { id: WorkbenchModuleId; keys: readonly string[]
   { id: 'desk', keys: ['my space', 'không gian', 'myspace', 'desk', 'bàn cá nhân'] },
   { id: 'calendar', keys: ['lịch', 'calendar', 'hẹn', 'deadline', 'cuộc họp'] },
   { id: 'tasks', keys: ['công việc', 'tasks', 'todo', 'việc cần', 'to-do', 'task'] },
+  {
+    id: 'project-mgmt',
+    keys: [
+      'quản lý dự án',
+      'project management',
+      'kanban dự án',
+      'project-mgmt',
+      'pm board',
+      'chủ đầu tư',
+      'investors',
+      'thanh toán dự án',
+      'nhật ký thi công',
+      'site diary',
+      'tài liệu dự án',
+      'project documents',
+    ],
+  },
+  {
+    id: 'crm',
+    keys: ['quan hệ', 'crm', 'danh bạ', 'contacts', 'đối tác crm'],
+  },
+  {
+    id: 'fund',
+    keys: ['quỹ', 'fund', 'ví', 'wallet', 'ngân quỹ', 'thu chi quỹ'],
+  },
   { id: 'notes', keys: ['ghi chú', 'notes', 'note', 'nháp'] },
   { id: 'email', keys: ['email', 'e-mail', 'thư', 'mail', 'hộp thư', 'inbox'] },
   { id: 'assistant', keys: ['trợ lý', 'assistant', 'ai assistant'] },
@@ -301,6 +326,9 @@ export function parseAgentIntentTarget(
 export function moduleSupportsAddItem(id: WorkbenchModuleId): boolean {
   return (
     id === 'tasks' ||
+    id === 'project-mgmt' ||
+    id === 'crm' ||
+    id === 'fund' ||
     id === 'notes' ||
     id === 'email' ||
     id === 'calendar' ||

@@ -672,14 +672,15 @@ if (trialCodeHashes.length === 0) {
     /* keep empty */
   }
 }
-const trialActivationUrl = (process.env.UNIWORK_TRIAL_ACTIVATION_URL || '').trim().replace(/\/+$/, '')
+const DEFAULT_TRIAL_ACTIVATION_URL = 'https://uniwork-cloud-hub.lovable.app'
+const trialActivationUrl = (
+  process.env.UNIWORK_TRIAL_ACTIVATION_URL || DEFAULT_TRIAL_ACTIVATION_URL
+)
+  .trim()
+  .replace(/\/+$/, '')
 if (trialOpenRouterKey) {
-  // Production trial: activation server enforces 1 code = 1 device.
-  if (!trialActivationUrl) {
-    console.warn(
-      '[electron-builder] UNIWORK_TRIAL_ACTIVATION_URL is empty — customers cannot activate (server required).',
-    )
-  }
+  // Production trial: Cloud Hub enforces 1 code = 1 device.
+  console.log(`[electron-builder] trial activation URL: ${trialActivationUrl}`)
   const needActivate = trialCodeHashes.length > 0 || Boolean(trialActivationUrl)
   extraMetadata.uniworkTrialAi = {
     apiKey: trialOpenRouterKey,

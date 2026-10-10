@@ -51,10 +51,11 @@ const codesRaw = (
 const codeCount = codesRaw
   ? codesRaw.split(/[,\s]+/).map((c) => c.trim()).filter((c) => c.length >= 6).length
   : 0
+const DEFAULT_ACTIVATION_URL = 'https://uniwork-cloud-hub.lovable.app'
 const activationUrl = (
   process.env.UNIWORK_TRIAL_ACTIVATION_URL ||
   fileEnv.UNIWORK_TRIAL_ACTIVATION_URL ||
-  ''
+  DEFAULT_ACTIVATION_URL
 )
   .trim()
   .replace(/\/+$/, '')
@@ -100,6 +101,6 @@ const ready = Boolean(key) && asarOk && Boolean(activationUrl)
 console.log(
   ready
     ? '\nREADY for trial dist (key + activation server — 1 code = 1 device).'
-    : '\nNOT READY — set UNIWORK_TRIAL_OPENROUTER_KEY and UNIWORK_TRIAL_ACTIVATION_URL.\n  Then: node tools/trial-activation-server/seed.mjs && node tools/trial-activation-server/server.mjs',
+    : '\nNOT READY — set UNIWORK_TRIAL_OPENROUTER_KEY.\n  Activation URL defaults to Cloud Hub; seed codes: node tools/seed-cloud-hub-trial-codes.mjs',
 )
 process.exit(ready ? 0 : 1)

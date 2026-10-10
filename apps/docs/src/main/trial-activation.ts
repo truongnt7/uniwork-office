@@ -13,6 +13,8 @@ import { dirname, join } from 'node:path'
 import { app } from 'electron'
 
 const HASH_PREFIX = 'uniwork-trial-v1:'
+/** UniWork Cloud Hub (Lovable) — default when trial key is present and no URL override. */
+export const DEFAULT_TRIAL_ACTIVATION_URL = 'https://uniwork-cloud-hub.lovable.app'
 
 function trialKeyPresent(): boolean {
   if ((process.env.UNIWORK_TRIAL_OPENROUTER_KEY ?? '').trim()) return true
@@ -151,10 +153,16 @@ function allowedHashes(): string[] {
 
 /** Activation API base URL (server mode). Empty = local-hash mode. */
 export function getActivationServerUrl(): string {
-  const env = (process.env.UNIWORK_TRIAL_ACTIVATION_URL ?? '').trim().replace(/\/+$/, '')
+  const envRaw = (process.env.UNIWORK_TRIAL_ACTIVATION_URL ?? '').trim()
+  // Dev escape: UNIWORK_TRIAL_ACTIVATION_URL=off|local → no Cloud Hub (use local hashes).
+  if (/^(off|local|none)$/i.test(envRaw)) return ''
+  const env = envRaw.replace(/\/+$/, '')
   if (env) return env
   const meta = readPackagedMeta()?.activationUrl
-  return typeof meta === 'string' ? meta.trim().replace(/\/+$/, '') : ''
+  if (typeof meta === 'string' && meta.trim()) return meta.trim().replace(/\/+$/, '')
+  // Trial packages with a managed key talk to Cloud Hub by default (1 code = 1 device).
+  if (trialKeyPresent()) return DEFAULT_TRIAL_ACTIVATION_URL
+  return ''
 }
 
 export function isActivationServerMode(): boolean {
@@ -267,6 +275,8 @@ export function mapServerActivationError(code: string | undefined, fallback?: st
       return 'This activation code is no longer valid.'
     case 'rate_limited':
       return 'Too many attempts. Try again later.'
+    case 'bad_device':
+      return 'This install could not identify the device. Reinstall and try again.'
     default:
       return fallback?.trim() || 'Could not activate. Check your connection and try again.'
   }

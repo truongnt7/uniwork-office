@@ -23,6 +23,8 @@ describe('trial activation codes', () => {
   it('maps server already_used for one-code-one-device', () => {
     expect(mapServerActivationError('already_used')).toMatch(/another device/i)
     expect(mapServerActivationError('invalid')).toMatch(/not recognized/i)
+    expect(mapServerActivationError('rate_limited')).toMatch(/too many/i)
+    expect(mapServerActivationError('bad_device')).toMatch(/device/i)
   })
 })
 

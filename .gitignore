@@ -9,6 +9,12 @@ release/
 .env.*
 !.env.example
 electron-builder.env
+# Trial activation plaintext (hashes are in apps/shell/build/trial-activation-hashes.json)
+docs/pricing/trial-activation-codes*.xlsx
+docs/pricing/trial-activation-codes*.txt
+docs/pricing/trial-activation-codes*.csv
+# Live activation ledger (device bindings)
+tools/trial-activation-server/data/
 *.pem
 *.p12
 *.pfx

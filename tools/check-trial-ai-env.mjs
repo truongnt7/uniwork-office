@@ -43,6 +43,21 @@ const creditsRaw = Number(
 )
 const credits =
   Number.isFinite(creditsRaw) && creditsRaw > 0 ? Math.floor(creditsRaw) : 50_000
+const codesRaw = (
+  process.env.UNIWORK_TRIAL_ACTIVATION_CODES ||
+  fileEnv.UNIWORK_TRIAL_ACTIVATION_CODES ||
+  ''
+).trim()
+const codeCount = codesRaw
+  ? codesRaw.split(/[,\s]+/).map((c) => c.trim()).filter((c) => c.length >= 6).length
+  : 0
+const activationUrl = (
+  process.env.UNIWORK_TRIAL_ACTIVATION_URL ||
+  fileEnv.UNIWORK_TRIAL_ACTIVATION_URL ||
+  ''
+)
+  .trim()
+  .replace(/\/+$/, '')
 
 const asarFlag = process.argv.indexOf('--asar')
 const asarPath = asarFlag >= 0 ? resolve(process.argv[asarFlag + 1] || '') : ''
@@ -51,6 +66,12 @@ console.log('Trial AI env preflight')
 console.log(`  electron-builder.env: ${existsSync(envPath) ? 'present' : 'missing'}`)
 console.log(`  key: ${key ? `ok (${key.length} chars, ${key.startsWith('sk-or-') ? 'OpenRouter-shaped' : 'unexpected prefix'})` : 'MISSING'}`)
 console.log(`  credits: ${credits}`)
+console.log(
+  `  activation URL: ${activationUrl || 'MISSING (1-code-1-device NOT enforced — local hashes only)'}`,
+)
+console.log(
+  `  activation codes: ${codeCount > 0 ? `ok (${codeCount} codes — hashed at pack time)` : activationUrl ? 'optional when server holds the list' : 'MISSING'}`,
+)
 
 let asarOk = true
 if (asarPath) {
@@ -63,13 +84,22 @@ if (asarPath) {
     const pkg = JSON.parse(Asar.extractFile(asarPath, 'package.json').toString('utf8'))
     const t = pkg.uniworkTrialAi
     const has = Boolean(t?.apiKey)
+    const hashes = Array.isArray(t?.codeHashes) ? t.codeHashes.length : 0
     console.log(
-      `  asar trial meta: ${has ? `ok (credits=${t.credits ?? '?'}, keyChars=${String(t.apiKey).length})` : 'MISSING uniworkTrialAi'}`,
+      `  asar trial meta: ${has ? `ok (credits=${t.credits ?? '?'}, keyChars=${String(t.apiKey).length}, codeHashes=${hashes}, activationRequired=${Boolean(t.activationRequired)})` : 'MISSING uniworkTrialAi'}`,
     )
     asarOk = has
+    if (has && hashes === 0) {
+      console.log('  warning: packaged trial has no activation code hashes')
+    }
   }
 }
 
-const ready = Boolean(key) && asarOk
-console.log(ready ? '\nREADY for trial dist / verify.' : '\nNOT READY — set UNIWORK_TRIAL_OPENROUTER_KEY (dedicated trial key).')
+// Production trial: key + public activation server (1 code = 1 device).
+const ready = Boolean(key) && asarOk && Boolean(activationUrl)
+console.log(
+  ready
+    ? '\nREADY for trial dist (key + activation server — 1 code = 1 device).'
+    : '\nNOT READY — set UNIWORK_TRIAL_OPENROUTER_KEY and UNIWORK_TRIAL_ACTIVATION_URL.\n  Then: node tools/trial-activation-server/seed.mjs && node tools/trial-activation-server/server.mjs',
+)
 process.exit(ready ? 0 : 1)

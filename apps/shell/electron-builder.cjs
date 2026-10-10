@@ -639,10 +639,54 @@ if (ga4MeasurementId && ga4ApiSecret) {
   }
 }
 if (fontCdnUrl) extraMetadata.genofficeFontCdn = { baseUrl: fontCdnUrl }
+// Trial activation codes — SHA-256 hashes only in the package.
+// Prefer UNIWORK_TRIAL_ACTIVATION_CODES env; else bake apps/shell/build/trial-activation-hashes.json
+const crypto = require('node:crypto')
+const fs = require('node:fs')
+const path = require('node:path')
+const trialActivationCodesRaw = (process.env.UNIWORK_TRIAL_ACTIVATION_CODES || '').trim()
+let trialCodeHashes = trialActivationCodesRaw
+  ? [
+      ...new Set(
+        trialActivationCodesRaw
+          .split(/[,\s]+/)
+          .map((c) => c.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''))
+          .filter((c) => c.length >= 6)
+          .map((c) =>
+            crypto.createHash('sha256').update(`uniwork-trial-v1:${c}`).digest('hex'),
+          ),
+      ),
+    ]
+  : []
+if (trialCodeHashes.length === 0) {
+  const hashFile = path.join(__dirname, 'build', 'trial-activation-hashes.json')
+  try {
+    if (fs.existsSync(hashFile)) {
+      const parsed = JSON.parse(fs.readFileSync(hashFile, 'utf8'))
+      const list = Array.isArray(parsed?.hashes) ? parsed.hashes : []
+      trialCodeHashes = [
+        ...new Set(list.filter((h) => typeof h === 'string' && /^[a-f0-9]{64}$/i.test(h))),
+      ]
+    }
+  } catch {
+    /* keep empty */
+  }
+}
+const trialActivationUrl = (process.env.UNIWORK_TRIAL_ACTIVATION_URL || '').trim().replace(/\/+$/, '')
 if (trialOpenRouterKey) {
+  // Production trial: activation server enforces 1 code = 1 device.
+  if (!trialActivationUrl) {
+    console.warn(
+      '[electron-builder] UNIWORK_TRIAL_ACTIVATION_URL is empty — customers cannot activate (server required).',
+    )
+  }
+  const needActivate = trialCodeHashes.length > 0 || Boolean(trialActivationUrl)
   extraMetadata.uniworkTrialAi = {
     apiKey: trialOpenRouterKey,
     credits: trialCredits,
+    activationRequired: needActivate,
+    ...(trialCodeHashes.length > 0 ? { codeHashes: trialCodeHashes } : {}),
+    ...(trialActivationUrl ? { activationUrl: trialActivationUrl } : {}),
   }
 }
 // Margin builds: lock chat to UniAI + curated Token Hub models (no BYOK).

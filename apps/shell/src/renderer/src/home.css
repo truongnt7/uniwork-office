@@ -8454,3 +8454,88 @@ body.vib .home {
   font-size: 12px;
   color: var(--text-secondary);
 }
+
+.trial-activate {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 20px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.trial-activate-loading {
+  min-height: 100vh;
+  background: var(--surface);
+}
+
+.trial-activate-card {
+  width: min(420px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.trial-activate-kicker {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.trial-activate-card h1 {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 650;
+  color: var(--text-primary, var(--text));
+}
+
+.trial-activate-sub,
+.trial-activate-foot {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-secondary, var(--text-muted));
+}
+
+.trial-activate-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.trial-activate-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.trial-activate-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--border, var(--line));
+  border-radius: 8px;
+  background: var(--surface-raised, var(--surface));
+  color: var(--text);
+  font-size: 15px;
+  letter-spacing: 0.04em;
+}
+
+.trial-activate-input:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.trial-activate-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--danger, #c0392b);
+}
+
+.trial-activate-btn {
+  margin-top: 4px;
+  align-self: flex-start;
+}

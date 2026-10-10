@@ -8,6 +8,10 @@ import { dirname, join } from 'node:path'
 import { app } from 'electron'
 import type { AiProviderConfig, AiProviderId, AiSettings } from '@genoffice/ai-provider'
 import { isManagedAiHubOnly, managedAiModelAllowlist } from './managed-ai'
+import {
+  getTrialActivationStatus,
+  trialActivationGateError,
+} from './trial-activation'
 
 export const DEFAULT_TRIAL_CREDITS = 50_000
 
@@ -32,6 +36,10 @@ export interface TrialAiStatus {
   hubOnly: boolean
   /** Model ids customers may pick when hubOnly. */
   allowedModels: string[]
+  /** Must enter an activation code before using this trial install. */
+  activationRequired: boolean
+  /** Code already redeemed on this install. */
+  activated: boolean
 }
 
 interface TrialUsageFile {
@@ -128,6 +136,7 @@ export function recordTrialCredits(credits: number): TrialAiStatus {
 export function getTrialAiStatus(): TrialAiStatus {
   const hubOnly = isManagedAiHubOnly()
   const allowedModels = [...managedAiModelAllowlist()]
+  const activation = getTrialActivationStatus()
   const cfg = getTrialAiConfig()
   if (!cfg.enabled) {
     return {
@@ -139,6 +148,8 @@ export function getTrialAiStatus(): TrialAiStatus {
       managed: false,
       hubOnly,
       allowedModels,
+      activationRequired: activation.required,
+      activated: activation.activated,
     }
   }
   const creditUsed = getTrialCreditUsed()
@@ -152,6 +163,8 @@ export function getTrialAiStatus(): TrialAiStatus {
     managed: true,
     hubOnly,
     allowedModels,
+    activationRequired: activation.required,
+    activated: activation.activated,
   }
 }
 
@@ -169,11 +182,14 @@ export function withTrialAiAuth(
   if (config.apiKey?.trim()) return config
   const trial = getTrialAiConfig()
   if (!trial.enabled) return config
+  if (trialActivationGateError()) return config
   return { ...config, apiKey: trial.apiKey }
 }
 
-/** Block streaming when the local trial Credit budget is exhausted. */
+/** Block streaming when activation is missing or the trial Credit budget is exhausted. */
 export function trialAiGateError(): string | null {
+  const activationBlock = trialActivationGateError()
+  if (activationBlock) return activationBlock
   const status = getTrialAiStatus()
   if (!status.enabled) return null
   if (!status.exhausted) return null

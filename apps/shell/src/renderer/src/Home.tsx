@@ -24,6 +24,7 @@ import { useI18n } from './locale'
 import type { I18n, StringKey } from './locale'
 import { CreditWallet } from './CreditWallet'
 import { SettingsModal, type SettingsSectionId } from './SettingsModal'
+import { TrialActivationGate } from './TrialActivationGate'
 import { skillUpdateDue } from './IntegrationsPane'
 import { getPractice, isPracticeId, listPractices, type PracticeId } from '@uniwork/practice-core'
 import { AgentIntentBanner } from './AgentIntentBanner'
@@ -1168,6 +1169,20 @@ function DropToOpenOverlay(): ReactElement | null {
 export function Home() {
   const i18n = useI18n()
   const { t, lang } = i18n
+  /** null = checking; true = show activation gate; false = unlocked */
+  const [needsActivation, setNeedsActivation] = useState<boolean | null>(null)
+  useEffect(() => {
+    let alive = true
+    void window.aiOffice.getTrialActivationStatus?.().then((s) => {
+      if (!alive) return
+      setNeedsActivation(Boolean(s?.required && !s.activated))
+    }).catch(() => {
+      if (alive) setNeedsActivation(false)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
   // ── Paged list state (rows loaded for the current view + filter) ──
   const [entries, setEntries] = useState<RecentEntry[]>([])
   /** total count under the current view + filter (not just the loaded rows) */
@@ -2198,6 +2213,20 @@ export function Home() {
           )}
         </section>
       </main>
+    )
+  }
+
+  if (needsActivation === null) {
+    return <div className="home trial-activate-loading" aria-busy="true" />
+  }
+  if (needsActivation) {
+    return (
+      <TrialActivationGate
+        onActivated={() => {
+          setNeedsActivation(false)
+          window.dispatchEvent(new Event('uniwork:credit-refresh'))
+        }}
+      />
     )
   }
 

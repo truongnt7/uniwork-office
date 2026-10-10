@@ -103,6 +103,10 @@ import {
   managedAiGateError,
 } from './managed-ai'
 import {
+  getTrialActivationStatus,
+  redeemTrialActivationCode,
+} from './trial-activation'
+import {
   getTrialAiStatus,
   recordTrialCredits,
   trialAiGateError,
@@ -2965,6 +2969,13 @@ export function registerAiIpc(): void {
   ipcMain.handle('ai:trial-record-credits', (_event, credits: unknown) => {
     const n = typeof credits === 'number' ? credits : Number(credits)
     return recordTrialCredits(Number.isFinite(n) ? n : 0)
+  })
+
+  ipcMain.handle('ai:trial-activation-status', () => getTrialActivationStatus())
+
+  ipcMain.handle('ai:trial-activation-redeem', async (_event, code: unknown) => {
+    const raw = typeof code === 'string' ? code : ''
+    return redeemTrialActivationCode(raw)
   })
 
   ipcMain.handle('ai:codex-models', async (_event, cliPath: unknown) => {

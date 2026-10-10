@@ -57,7 +57,24 @@ export interface TrialAiStatus {
   hubOnly: boolean
   /** Curated model ids when hubOnly. */
   allowedModels: string[]
+  /** Trial install requires an activation code before use. */
+  activationRequired: boolean
+  /** Code redeemed on this install. */
+  activated: boolean
 }
+
+export interface TrialActivationStatus {
+  required: boolean
+  activated: boolean
+  activatedAt?: string
+  codeHint?: string
+  /** Server redeem enforces 1 code = 1 device */
+  serverEnforced?: boolean
+}
+
+export type TrialActivationRedeemResult =
+  | { ok: true; status: TrialActivationStatus }
+  | { ok: false; error: string }
 
 import type { UpdateChannel } from './update-api'
 import type { AiPanelPrefs } from '@genoffice/ui/ai-panel-prefs'
@@ -303,6 +320,10 @@ export interface HomeApi {
   getTrialAiStatus(): Promise<TrialAiStatus>
   /** Record estimated Credit against the trial budget after an AI turn */
   recordTrialCredits(credits: number): Promise<TrialAiStatus>
+  /** Whether this trial install still needs an activation code */
+  getTrialActivationStatus(): Promise<TrialActivationStatus>
+  /** Redeem a trial activation code for this install */
+  redeemTrialActivationCode(code: string): Promise<TrialActivationRedeemResult>
   /** one-shot non-streaming chat using saved (or provided) AI settings — Workbench helpers */
   aiChat(input: { system: string; user: string; settings?: AiSettings }): Promise<AiChatResponse>
   /** streaming chat (same IPC as editor AI panels) */

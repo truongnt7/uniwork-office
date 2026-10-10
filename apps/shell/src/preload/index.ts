@@ -432,6 +432,17 @@ const homeApi: HomeApi = {
       credits,
     )) as import('../shared/home-api').TrialAiStatus
   },
+  async getTrialActivationStatus() {
+    return (await ipcRenderer.invoke(
+      'ai:trial-activation-status',
+    )) as import('../shared/home-api').TrialActivationStatus
+  },
+  async redeemTrialActivationCode(code) {
+    return (await ipcRenderer.invoke(
+      'ai:trial-activation-redeem',
+      code,
+    )) as import('../shared/home-api').TrialActivationRedeemResult
+  },
   async aiChat(input) {
     const settings =
       input.settings ?? ((await ipcRenderer.invoke('ai:get-settings')) as AiSettings)

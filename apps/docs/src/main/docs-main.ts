@@ -105,6 +105,7 @@ import {
 import {
   getTrialActivationStatus,
   redeemTrialActivationCode,
+  startDeviceTrial,
 } from './trial-activation'
 import {
   getTrialAiStatus,
@@ -2977,6 +2978,8 @@ export function registerAiIpc(): void {
     const raw = typeof code === 'string' ? code : ''
     return redeemTrialActivationCode(raw)
   })
+
+  ipcMain.handle('ai:trial-start', async () => startDeviceTrial())
 
   ipcMain.handle('ai:codex-models', async (_event, cliPath: unknown) => {
     return listCodexModels(typeof cliPath === 'string' ? cliPath : undefined)

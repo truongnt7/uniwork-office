@@ -4,6 +4,8 @@ import {
   hashActivationCodes,
   mapServerActivationError,
   normalizeActivationCode,
+  trialExpiresAtFrom,
+  TRIAL_DURATION_DAYS,
 } from '../src/main/trial-activation'
 
 describe('trial activation codes', () => {
@@ -26,6 +28,14 @@ describe('trial activation codes', () => {
     expect(mapServerActivationError('rate_limited')).toMatch(/too many/i)
     expect(mapServerActivationError('bad_device')).toMatch(/device/i)
     expect(mapServerActivationError('seat_full')).toMatch(/device limit/i)
+    expect(mapServerActivationError('expired')).toMatch(/expired|7-day/i)
+  })
+
+  it('computes a 7-day expiry from activatedAt', () => {
+    expect(TRIAL_DURATION_DAYS).toBe(7)
+    const activatedAt = '2026-01-01T00:00:00.000Z'
+    const exp = trialExpiresAtFrom(activatedAt, 7)
+    expect(exp).toBe('2026-01-08T00:00:00.000Z')
   })
 })
 

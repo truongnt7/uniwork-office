@@ -13,6 +13,9 @@ electron-builder.env
 docs/pricing/trial-activation-codes*.xlsx
 docs/pricing/trial-activation-codes*.txt
 docs/pricing/trial-activation-codes*.csv
+docs/pricing/product-activation-codes*.xlsx
+docs/pricing/product-activation-codes*.csv
+docs/pricing/product-activation-codes*-hashes.json
 # Live activation ledger (device bindings)
 tools/trial-activation-server/data/
 *.pem

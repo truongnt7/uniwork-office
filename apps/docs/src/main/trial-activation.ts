@@ -15,6 +15,31 @@ import { app } from 'electron'
 const HASH_PREFIX = 'uniwork-trial-v1:'
 /** UniWork Cloud Hub (Lovable) — default when trial key is present and no URL override. */
 export const DEFAULT_TRIAL_ACTIVATION_URL = 'https://uniwork-cloud-hub.lovable.app'
+/** Trial window after first successful start/activation (must match Hub `TRIAL_DAYS`). */
+export const TRIAL_DURATION_DAYS = 7
+/** Default Credit when starting a self-serve trial (must match Hub trial plan). */
+export const DEFAULT_SELF_TRIAL_CREDITS = 10_000
+/** Marker stored in local activation file for self-serve trials. */
+export const SELF_TRIAL_CODE_HASH = 'self-serve-trial'
+
+function trialDurationDays(): number {
+  const raw = Number((process.env.UNIWORK_TRIAL_DAYS ?? '').trim())
+  if (Number.isFinite(raw) && raw > 0 && raw <= 365) return Math.floor(raw)
+  return TRIAL_DURATION_DAYS
+}
+
+/** ISO expiry from activation timestamp (+ trial days). */
+export function trialExpiresAtFrom(activatedAt: string, days = trialDurationDays()): string {
+  const from = Date.parse(activatedAt)
+  const base = Number.isFinite(from) ? from : Date.now()
+  return new Date(base + days * 86400000).toISOString()
+}
+
+function isPastExpiry(expiresAt: string | undefined): boolean {
+  if (!expiresAt) return false
+  const exp = Date.parse(expiresAt)
+  return Number.isFinite(exp) && Date.now() > exp
+}
 
 function trialKeyPresent(): boolean {
   if ((process.env.UNIWORK_TRIAL_OPENROUTER_KEY ?? '').trim()) return true
@@ -33,13 +58,21 @@ function trialKeyPresent(): boolean {
 export interface TrialActivationStatus {
   /** Trial build that requires a code before use */
   required: boolean
-  /** This install has redeemed a valid code */
+  /** This install has redeemed a valid code and is still within the trial window */
   activated: boolean
   activatedAt?: string
+  /** End of trial window (activatedAt + 7 days, or Hub `expiresAt`) */
+  expiresAt?: string
+  /** Redeemed before but past expiresAt — gate should lock entire app */
+  expired?: boolean
   /** Masked code hint for UI (last 4 of normalized code), if known */
   codeHint?: string
   /** true when redeem goes through UniWork server (1 code = 1 device) */
   serverEnforced?: boolean
+  /** Self-serve trial (no pre-issued code) vs license/code redeem */
+  kind?: 'trial' | 'license'
+  /** Credit allowance returned when starting a self-serve trial */
+  creditAllowance?: number
 }
 
 interface PackagedActivationMeta {
@@ -56,6 +89,8 @@ interface ActivationFile {
   codeHint: string
   deviceId: string
   activatedAt: string
+  /** End of trial; if missing, derived from activatedAt + TRIAL_DURATION_DAYS */
+  expiresAt?: string
   /** Server mode marker */
   viaServer?: boolean
 }
@@ -160,8 +195,13 @@ export function getActivationServerUrl(): string {
   if (env) return env
   const meta = readPackagedMeta()?.activationUrl
   if (typeof meta === 'string' && meta.trim()) return meta.trim().replace(/\/+$/, '')
-  // Trial packages with a managed key talk to Cloud Hub by default (1 code = 1 device).
+  // Single installer: packaged builds + managed-key builds talk to Cloud Hub by default.
   if (trialKeyPresent()) return DEFAULT_TRIAL_ACTIVATION_URL
+  try {
+    if (app.isPackaged) return DEFAULT_TRIAL_ACTIVATION_URL
+  } catch {
+    /* not in electron yet */
+  }
   return ''
 }
 
@@ -213,17 +253,21 @@ export function allowLocalActivation(): boolean {
 }
 
 /**
- * Trial installs require a code when the trial key is present and either a
- * server URL or local code hashes are configured.
- * Opt out: UNIWORK_TRIAL_SKIP_ACTIVATION=1.
+ * Single-installer license gate: require Hub license/trial when talking to
+ * Cloud Hub (packaged or managed key), or when local trial hashes are set.
+ * Opt out: UNIWORK_TRIAL_SKIP_ACTIVATION=1 or meta.activationRequired=false.
  */
 export function isTrialActivationRequired(): boolean {
   if ((process.env.UNIWORK_TRIAL_SKIP_ACTIVATION ?? '').trim() === '1') return false
-  if (!trialKeyPresent()) return false
   const meta = readPackagedMeta()
   if (meta?.activationRequired === false) return false
   if (isActivationServerMode()) return true
-  return allowedHashes().length > 0
+  if (trialKeyPresent() && allowedHashes().length > 0) return true
+  return false
+}
+
+function resolveExpiresAt(file: ActivationFile): string {
+  return file.expiresAt || trialExpiresAtFrom(file.activatedAt)
 }
 
 export function isTrialActivated(): boolean {
@@ -231,10 +275,12 @@ export function isTrialActivated(): boolean {
   const file = readActivationFile()
   if (!file) return false
   if (file.deviceId && file.deviceId !== getDeviceId()) return false
-  // Production path: only server-bound activations count (1 code = 1 device).
+  if (isPastExpiry(resolveExpiresAt(file))) return false
+  // Production path: only server-bound activations count (1 code / 1 self-trial = 1 device).
   if (isActivationServerMode() || !allowLocalActivation()) {
     return Boolean(file.viaServer && file.codeHash)
   }
+  if (file.codeHash === SELF_TRIAL_CODE_HASH) return Boolean(file.viaServer)
   const allow = new Set(allowedHashes().map((h) => h.toLowerCase()))
   return allow.has(file.codeHash.toLowerCase())
 }
@@ -247,13 +293,23 @@ export function getTrialActivationStatus(): TrialActivationStatus {
     return { required: false, activated: true, serverEnforced }
   }
   const file = readActivationFile()
+  const expiresAt = file ? resolveExpiresAt(file) : undefined
+  const expired = Boolean(file && isPastExpiry(expiresAt))
   const activated = isTrialActivated()
+  const kind: 'trial' | 'license' | undefined = file
+    ? file.codeHash === SELF_TRIAL_CODE_HASH || file.codeHint === 'SELF••••'
+      ? 'trial'
+      : 'license'
+    : undefined
   return {
     required: true,
     activated,
     serverEnforced,
-    ...(activated && file?.activatedAt ? { activatedAt: file.activatedAt } : {}),
-    ...(activated && file?.codeHint ? { codeHint: file.codeHint } : {}),
+    ...(expired ? { expired: true } : {}),
+    ...(file?.activatedAt ? { activatedAt: file.activatedAt } : {}),
+    ...(expiresAt ? { expiresAt } : {}),
+    ...(file?.codeHint ? { codeHint: file.codeHint } : {}),
+    ...(kind ? { kind } : {}),
   }
 }
 
@@ -273,8 +329,11 @@ export function mapServerActivationError(code: string | undefined, fallback?: st
     case 'seat_full':
       return 'This code has reached its device limit.'
     case 'revoked':
-    case 'expired':
       return 'This activation code is no longer valid.'
+    case 'expired':
+      return 'This trial has expired (7-day window). Enter a license to continue.'
+    case 'trial_used':
+      return 'This device already used its free trial. Enter a license to continue.'
     case 'rate_limited':
       return 'Too many attempts. Try again later.'
     case 'bad_device':
@@ -312,6 +371,7 @@ export async function redeemViaServer(
       error?: string
       message?: string
       activatedAt?: string
+      expiresAt?: string | null
     }
     if (!res.ok || body.ok !== true) {
       return {
@@ -320,12 +380,17 @@ export async function redeemViaServer(
       }
     }
     const activatedAt = body.activatedAt || new Date().toISOString()
+    const expiresAt =
+      typeof body.expiresAt === 'string' && body.expiresAt
+        ? body.expiresAt
+        : trialExpiresAtFrom(activatedAt)
     writeActivationFile({
       version: 1,
       codeHash,
       codeHint: codeHintFromNormalized(normalizedCode),
       deviceId,
       activatedAt,
+      expiresAt,
       viaServer: true,
     })
     return { ok: true, status: getTrialActivationStatus() }
@@ -341,12 +406,14 @@ function redeemLocally(normalizedCode: string, deviceId: string): RedeemActivati
   if (!allow.includes(codeHash.toLowerCase())) {
     return { ok: false, error: 'Activation code not recognized.' }
   }
+  const activatedAt = new Date().toISOString()
   writeActivationFile({
     version: 1,
     codeHash,
     codeHint: codeHintFromNormalized(normalizedCode),
     deviceId,
-    activatedAt: new Date().toISOString(),
+    activatedAt,
+    expiresAt: trialExpiresAtFrom(activatedAt),
     viaServer: false,
   })
   return { ok: true, status: getTrialActivationStatus() }
@@ -369,15 +436,85 @@ export async function redeemTrialActivationCode(raw: string): Promise<RedeemActi
     return {
       ok: false,
       error:
-        'Online activation required. Each code works on one device only. Set UNIWORK_TRIAL_ACTIVATION_URL (or ask UniWork for the trial server).',
+        'Online activation required. Each license works on one device only. Set UNIWORK_TRIAL_ACTIVATION_URL (or ask UniWork for the license server).',
     }
   }
   return redeemLocally(normalized, deviceId)
 }
 
-/** Block AI / app use until activated (trial builds with codes). */
+/**
+ * Start the free 7-day Office + AI trial for this device (no pre-issued code).
+ * Hub: POST /v1/trial/start — one trial per device; expiry locks the whole app.
+ */
+export async function startDeviceTrial(): Promise<RedeemActivationResult> {
+  if (!isTrialActivationRequired()) {
+    return { ok: true, status: getTrialActivationStatus() }
+  }
+  if (isTrialActivated()) {
+    return { ok: true, status: getTrialActivationStatus() }
+  }
+  const base = getActivationServerUrl()
+  if (!base) {
+    return {
+      ok: false,
+      error:
+        'Online trial start required. Connect to UniWork Cloud Hub (or set UNIWORK_TRIAL_ACTIVATION_URL).',
+    }
+  }
+  const deviceId = getDeviceId()
+  try {
+    const res = await fetch(`${base}/v1/trial/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ deviceId }),
+    })
+    const body = (await res.json().catch(() => ({}))) as {
+      ok?: boolean
+      error?: string
+      message?: string
+      activatedAt?: string
+      expiresAt?: string | null
+      creditAllowance?: number
+    }
+    if (!res.ok || body.ok !== true) {
+      return {
+        ok: false,
+        error: mapServerActivationError(body.error, body.message || `HTTP ${res.status}`),
+      }
+    }
+    const activatedAt = body.activatedAt || new Date().toISOString()
+    const expiresAt =
+      typeof body.expiresAt === 'string' && body.expiresAt
+        ? body.expiresAt
+        : trialExpiresAtFrom(activatedAt)
+    writeActivationFile({
+      version: 1,
+      codeHash: SELF_TRIAL_CODE_HASH,
+      codeHint: 'SELF••••',
+      deviceId,
+      activatedAt,
+      expiresAt,
+      viaServer: true,
+    })
+    const status = getTrialActivationStatus()
+    const creditAllowance =
+      typeof body.creditAllowance === 'number' && body.creditAllowance > 0
+        ? Math.floor(body.creditAllowance)
+        : DEFAULT_SELF_TRIAL_CREDITS
+    return { ok: true, status: { ...status, creditAllowance, kind: 'trial' } }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return { ok: false, error: `Network error: ${msg}` }
+  }
+}
+
+/** Block entire app (and AI) until licensed or inside an active trial. */
 export function trialActivationGateError(): string | null {
   if (!isTrialActivationRequired()) return null
   if (isTrialActivated()) return null
-  return 'Enter your UniWork trial activation code to use this install.'
+  const st = getTrialActivationStatus()
+  if (st.expired) {
+    return 'Your UniWork trial has ended. Enter a license to unlock Office and AI.'
+  }
+  return 'Enter a UniWork license or start the 7-day free trial to use this install.'
 }

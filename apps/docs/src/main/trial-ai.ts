@@ -1,7 +1,7 @@
 /**
  * Managed trial AI: build ships with the vendor OpenRouter key (main process
  * only). Customers never paste a key; usage is capped at a UniWork Credit
- * allowance (default 50_000). See docs/pricing/TRIAL_AI.md.
+ * allowance (default 10_000 for 7-day self-serve trial). See docs/pricing/TRIAL_AI.md.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -9,11 +9,12 @@ import { app } from 'electron'
 import type { AiProviderConfig, AiProviderId, AiSettings } from '@genoffice/ai-provider'
 import { isManagedAiHubOnly, managedAiModelAllowlist } from './managed-ai'
 import {
+  DEFAULT_SELF_TRIAL_CREDITS,
   getTrialActivationStatus,
   trialActivationGateError,
 } from './trial-activation'
 
-export const DEFAULT_TRIAL_CREDITS = 50_000
+export const DEFAULT_TRIAL_CREDITS = DEFAULT_SELF_TRIAL_CREDITS
 
 export interface TrialAiConfig {
   enabled: boolean

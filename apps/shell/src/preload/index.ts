@@ -443,6 +443,11 @@ const homeApi: HomeApi = {
       code,
     )) as import('../shared/home-api').TrialActivationRedeemResult
   },
+  async startDeviceTrial() {
+    return (await ipcRenderer.invoke(
+      'ai:trial-start',
+    )) as import('../shared/home-api').TrialActivationRedeemResult
+  },
   async aiChat(input) {
     const settings =
       input.settings ?? ((await ipcRenderer.invoke('ai:get-settings')) as AiSettings)

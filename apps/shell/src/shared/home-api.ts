@@ -67,9 +67,15 @@ export interface TrialActivationStatus {
   required: boolean
   activated: boolean
   activatedAt?: string
+  /** End of 7-day trial window */
+  expiresAt?: string
+  /** Was activated but past expiresAt — entire app stays locked */
+  expired?: boolean
   codeHint?: string
   /** Server redeem enforces 1 code = 1 device */
   serverEnforced?: boolean
+  kind?: 'trial' | 'license'
+  creditAllowance?: number
 }
 
 export type TrialActivationRedeemResult =
@@ -320,10 +326,12 @@ export interface HomeApi {
   getTrialAiStatus(): Promise<TrialAiStatus>
   /** Record estimated Credit against the trial budget after an AI turn */
   recordTrialCredits(credits: number): Promise<TrialAiStatus>
-  /** Whether this trial install still needs an activation code */
+  /** Whether this install still needs a license or an active trial */
   getTrialActivationStatus(): Promise<TrialActivationStatus>
-  /** Redeem a trial activation code for this install */
+  /** Redeem a license / activation code for this install */
   redeemTrialActivationCode(code: string): Promise<TrialActivationRedeemResult>
+  /** Start the free 7-day Office + AI trial (no code; one per device) */
+  startDeviceTrial(): Promise<TrialActivationRedeemResult>
   /** one-shot non-streaming chat using saved (or provided) AI settings — Workbench helpers */
   aiChat(input: { system: string; user: string; settings?: AiSettings }): Promise<AiChatResponse>
   /** streaming chat (same IPC as editor AI panels) */
